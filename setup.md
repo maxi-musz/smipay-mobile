@@ -17,6 +17,50 @@
 - Dark mode uses the `dark:` prefix — e.g. `className="bg-white dark:bg-gray-950"`.
 - Tailwind is set to `darkMode: "class"` so the theme is toggled programmatically, not tied to device settings.
 
+## UI Components (React Native Reusables)
+
+shadcn/ui equivalent for React Native. Copy-paste components, full control.
+
+**Installed dependencies:**
+- `class-variance-authority` — variant-based component styling
+- `clsx` + `tailwind-merge` — class merging via `cn()` helper (`src/lib/utils.ts`)
+- `tailwindcss-animate` — animation utilities
+- `@rn-primitives/portal` — portal for dropdowns, modals, tooltips
+
+**Configuration:**
+- `global.css` — HSL CSS variables for light/dark themes, mapped to SmiPay brand colors
+- `tailwind.config.js` — semantic tokens (`primary`, `secondary`, `accent`, `muted`, `card`, `destructive`, etc.) via CSS variables
+- `metro.config.js` — `inlineRem: 16` for consistent rem-based sizing
+- `PortalHost` — rendered as last child in root layout
+
+**Adding components:**
+
+```bash
+npx @react-native-reusables/cli@latest add button
+npx @react-native-reusables/cli@latest add input
+npx @react-native-reusables/cli@latest add card
+```
+
+**Using `cn()` for conditional classes:**
+
+```tsx
+import { cn } from "@/lib/utils";
+
+<View className={cn("rounded-lg p-4", isDark && "bg-card")} />
+```
+
+**Semantic color tokens (from CSS variables):**
+
+| Token | Light | Dark | SmiPay mapping |
+| --- | --- | --- | --- |
+| `primary` | Orange 500 | Orange 500 | Brand orange |
+| `accent` | Green 500 | Green 500 | Brand green |
+| `background` | White | Gray 950 | Page background |
+| `foreground` | Gray 950 | Gray 50 | Text color |
+| `destructive` | Red 600 | Red 500 | Error/delete actions |
+| `muted` | Gray 50 | Gray 800 | Subtle backgrounds |
+| `card` | White | Gray 900 | Card surfaces |
+
 ## Design System
 
 All tokens live in `src/constants/` and are the single source of truth.
@@ -65,14 +109,35 @@ const { theme } = useAppTheme();
 <View style={{ backgroundColor: theme.background }} />
 ```
 
+## Splash Screen
+
+Two-layer splash (like OPay):
+1. **Native splash** — white background + SmiPay icon. Shows while JS loads. Configured in `app.json`.
+2. **Custom splash overlay** (`src/components/splash-overlay.tsx`) — animated icon + "SmiPay" text + tagline. Fades out after ~2.2s.
+
+## Onboarding
+
+All onboarding files live in `src/onboarding/`.
+
+| File | Purpose |
+| --- | --- |
+| `constants.ts` | Slide content, icons, storage key |
+| `onboarding-screen.tsx` | Full-screen pager UI |
+| `use-onboarding-status.ts` | AsyncStorage persistence hook |
+| `index.ts` | Barrel export |
+
+- **3 slides:** Welcome, Utility Services (airtime/data/electricity/cable TV), Education Payments (JAMB/WAEC/NECO).
+- **Shown once per device** — persisted via `AsyncStorage` (`@smipay/onboarding_completed`).
+- **Skip** and **Next / Get Started** CTAs. Horizontal pager with dot indicators.
+- **Dev only:** "Clear app data" button on home screen (with confirmation) to reset onboarding.
+
 ## Assets
 
 | Path | File |
 | --- | --- |
 | `assets/images/smipay-logo.png` | Full logo with text |
 | `assets/images/icon.png` | App icon (S with smile) |
-| `assets/images/icon.png` | Store listing icon (replace with final) |
-| `assets/images/splash-icon.png` | Splash screen image (replace with final) |
+| `assets/images/splash-icon.png` | Splash screen image |
 | `assets/images/favicon.png` | Web favicon |
 
 ## Running

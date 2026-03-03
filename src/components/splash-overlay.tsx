@@ -42,6 +42,7 @@ export function SplashOverlay({ onFinish }: SplashOverlayProps) {
         }
       }),
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run-once mount animation
   }, []);
 
   const containerStyle = useAnimatedStyle(() => ({

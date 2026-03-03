@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
+import { PortalHost } from "@rn-primitives/portal";
 import { useColorScheme } from "nativewind";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -40,6 +41,7 @@ function InnerLayout() {
         }}
       />
       {showSplash && <SplashOverlay onFinish={handleSplashFinish} />}
+      <PortalHost />
     </>
   );
 }

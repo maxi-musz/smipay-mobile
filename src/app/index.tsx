@@ -1,11 +1,25 @@
-import { Image } from "react-native";
-import { Pressable, Text, View } from "react-native";
+import { Alert, Image, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { OnboardingScreen, useOnboardingStatus } from "@/onboarding";
 import { useAppTheme } from "@/hooks/use-app-theme";
 
 export default function HomeScreen() {
+  const { hasCompleted, isLoading, completeOnboarding, clearOnboarding } =
+    useOnboardingStatus();
   const { isDark, mode, toggle } = useAppTheme();
+
+  if (isLoading) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-white dark:bg-gray-950">
+        <Text className="text-gray-500 dark:text-gray-400">Loading...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (!hasCompleted) {
+    return <OnboardingScreen onComplete={completeOnboarding} />;
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-gray-950">
@@ -33,7 +47,7 @@ export default function HomeScreen() {
 
           <Pressable
             onPress={toggle}
-            className="mt-4 rounded-xl bg-orange-500 px-8 py-3 active:bg-orange-600"
+            className="mt-4 rounded-xl bg-orange-500 px-8 py-3 active:bg-oracity-90"
           >
             <Text className="text-base font-semibold text-white">
               Switch to {isDark ? "Light" : "Dark"}
@@ -48,6 +62,26 @@ export default function HomeScreen() {
           <Swatch label="Error" className="bg-red-500" />
           <Swatch label="Warning" className="bg-yellow-500" />
         </View>
+
+        {__DEV__ && (
+          <Pressable
+            onPress={() =>
+              Alert.alert(
+                "Clear app data",
+                "This will reset onboarding. You'll see the welcome screens again.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Clear", style: "destructive", onPress: clearOnboarding },
+                ]
+              )
+            }
+            className="mt-8 py-2 active:opacity-70"
+          >
+            <Text className="text-xs text-gray-400 dark:text-gray-500">
+              Clear app data
+            </Text>
+          </Pressable>
+        )}
       </View>
     </SafeAreaView>
   );
