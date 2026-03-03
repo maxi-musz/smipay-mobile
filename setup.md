@@ -237,12 +237,87 @@ All shared types live in `src/types/`.
 
 | File | Contents |
 | --- | --- |
-| `user.ts` | `User`, `AuthTokens` |
+| `user.ts` | `User` (matches backend snake_case), `AuthTokens` |
+| `api.ts` | `ApiResponse<T>`, `ApiError`, `AuthResponse`, `RegisterPayload`, `SignInPayload`, `ResetPasswordPayload` |
 | `store.ts` | `AsyncState<T>`, `createAsyncState()` — generic wrapper for loading/error/data patterns |
 | `index.ts` | Barrel export |
+
+## API Client (`src/lib/api.ts`)
+
+Pre-configured Axios instance with two interceptors:
+
+1. **Request interceptor** — automatically attaches:
+   - Device metadata headers (`x-device-id`, `x-device-model`, etc.) from `src/lib/device.ts`
+   - Location headers (`x-latitude`, `x-longitude`) if permission was granted (from `src/lib/location.ts`)
+   - `Authorization: Bearer <token>` if the user is authenticated
+2. **Response interceptor** — normalizes errors into `ApiClientError` with human-readable messages.
+
+**Base URL** is set via the `EXPO_PUBLIC_API_URL` env variable. Create a `.env` file:
+
+```
+EXPO_PUBLIC_API_URL=https://your-api.com/api/v1
+```
+
+### Device metadata (`src/lib/device.ts`)
+
+| What | How | Compliance note |
+| --- | --- | --- |
+| Device ID | App-generated UUID v4 stored in SecureStore | Not a hardware ID — fully compliant with Apple ATT and Google Play policies |
+| Device model/name | `expo-device` | Standard system API, no permissions needed |
+| OS name/version | `Platform` API | Standard |
+| App version | `expo-application` | Standard |
+
+### Location (`src/lib/location.ts`)
+
+| Function | What it does |
+| --- | --- |
+| `getLocation()` | Returns cached coords if permission was already granted. **Never triggers a permission dialog.** |
+| `requestLocationPermission()` | Requests foreground-only permission. Call explicitly from UI context (e.g. after first sign-in). |
+
+**Compliance approach:**
+- Foreground only — no background tracking.
+- Balanced accuracy (~100m) — not precise.
+- Permission requested contextually, not on cold start.
+- If denied, app works normally; backend falls back to IP geolocation.
+- See `DATA_COLLECTION_DISCLOSURE.md` for store form guidance and privacy policy text.
+
+## Auth API (`src/api/auth.ts`)
+
+Thin functions wrapping each backend auth endpoint:
+
+| Function | Endpoint |
+| --- | --- |
+| `requestEmailVerification(email)` | `POST /new-auth/request-email-verification` |
+| `verifyEmailForRegistration(email, otp)` | `POST /new-auth/verify-email-for-registration` |
+| `register(payload)` | `POST /new-auth/register` |
+| `signIn(payload)` | `POST /new-auth/signin` |
+| `forgotPassword(email)` | `POST /new-auth/forgot-password` |
+| `verifyPasswordResetOtp(email, otp)` | `POST /new-auth/verify-password-reset-otp` |
+| `resetPassword(payload)` | `POST /new-auth/reset-password` |
+| `logout()` | `POST /new-auth/logout` |
+| `completeOnboarding()` | `POST /new-auth/complete-onboarding` |
+
+## Authentication Screens
+
+All auth screens live in `src/app/(auth)/`.
+
+| Screen | Route | Flow |
+| --- | --- | --- |
+| Sign In | `/(auth)/sign-in` | Email + password → auto-navigate to dashboard |
+| Sign Up | `/(auth)/sign-up` | 3-step: email verification → OTP → full profile form → auto sign-in |
+| Forgot Password | `/(auth)/forgot-password` | 3-step: email → OTP → new password → redirect to sign-in |
+
+### Routing logic (`src/app/index.tsx`)
+
+1. Show pre-auth onboarding if not completed (persisted locally via AsyncStorage)
+2. If not authenticated → `<Redirect>` to `/(auth)/sign-in`
+3. If authenticated → show dashboard (placeholder for now)
 
 ## What to do next
 
 - Replace placeholder `icon.png`, `splash-icon.png`, and `favicon.png` with SmiPay branded versions.
 - Load custom fonts via `expo-font` and update `src/constants/typography.ts` + `tailwind.config.js`.
 - Add async-storage persistence to theme preference if needed.
+- Build the dashboard / tab navigation for authenticated users.
+- Call `requestLocationPermission()` after first sign-in with a pre-permission explainer.
+- Implement token refresh logic in the API interceptor.

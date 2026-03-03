@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
@@ -53,9 +54,12 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             style={{ width: 100, height: 32 }}
             resizeMode="contain"
           />
-          <Button variant="ghost" size="sm" onPress={onComplete}>
-            <Text className="text-muted-foreground">Skip</Text>
-          </Button>
+          <View className="flex-row items-center gap-1">
+            <ThemeToggle />
+            <Button variant="ghost" size="sm" onPress={onComplete}>
+              <Text className="text-muted-foreground">Skip</Text>
+            </Button>
+          </View>
         </View>
 
         <FlatList

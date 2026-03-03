@@ -75,14 +75,14 @@ export const lightTheme: Theme = {
 };
 
 export const darkTheme: Theme = {
-  background: colors.gray[950],
-  backgroundSecondary: colors.gray[900],
-  backgroundTertiary: colors.gray[800],
+  background: colors.gray[900],
+  backgroundSecondary: colors.gray[800],
+  backgroundTertiary: colors.gray[700],
 
   text: colors.gray[50],
   textSecondary: colors.gray[400],
-  textTertiary: colors.gray[600],
-  textInverse: colors.gray[950],
+  textTertiary: colors.gray[500],
+  textInverse: colors.gray[900],
 
   primary: colors.orange[400],
   primaryLight: colors.orange[950],
@@ -92,11 +92,11 @@ export const darkTheme: Theme = {
   secondaryLight: colors.green[950],
   secondaryDark: colors.green[300],
 
-  border: colors.gray[800],
-  borderStrong: colors.gray[700],
+  border: colors.gray[700],
+  borderStrong: colors.gray[600],
 
-  card: colors.gray[900],
-  cardElevated: colors.gray[800],
+  card: colors.gray[800],
+  cardElevated: colors.gray[700],
 
   success: "#22C55E",
   error: "#EF4444",

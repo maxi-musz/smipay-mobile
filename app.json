@@ -36,7 +36,14 @@
         }
       ],
       "expo-font",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysPermission": false,
+          "locationWhenInUsePermission": "SmiPay uses your approximate location to help protect your account from unauthorized access and detect suspicious activity."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
