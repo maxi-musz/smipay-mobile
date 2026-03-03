@@ -16,7 +16,7 @@ import {
   requestEmailVerification,
   verifyEmailForRegistration,
   register,
-} from "@/api/auth";
+} from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
