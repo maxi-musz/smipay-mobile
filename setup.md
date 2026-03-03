@@ -70,7 +70,7 @@ const { theme } = useAppTheme();
 | Path | File |
 | --- | --- |
 | `assets/images/smipay-logo.png` | Full logo with text |
-| `assets/images/smipay-icon.jpg` | App icon (S with smile) |
+| `assets/images/icon.png` | App icon (S with smile) |
 | `assets/images/icon.png` | Store listing icon (replace with final) |
 | `assets/images/splash-icon.png` | Splash screen image (replace with final) |
 | `assets/images/favicon.png` | Web favicon |

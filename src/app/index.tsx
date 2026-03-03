@@ -11,7 +11,7 @@ export default function HomeScreen() {
     <SafeAreaView className="flex-1 bg-white dark:bg-gray-950">
       <View className="flex-1 items-center justify-center px-6">
         <Image
-          source={require("@/assets/images/smipay-icon.jpg")}
+          source={require("@/assets/images/icon.png")}
           className="mb-6 h-24 w-24 rounded-2xl"
           resizeMode="contain"
         />

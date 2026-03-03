@@ -61,7 +61,7 @@ export function SplashOverlay({ onFinish }: SplashOverlayProps) {
       <View style={styles.content}>
         <Animated.View style={[styles.iconWrapper, iconStyle]}>
           <Image
-            source={require("@/assets/images/smipay-icon.jpg")}
+            source={require("@/assets/images/icon.png")}
             style={styles.icon}
             resizeMode="contain"
           />
