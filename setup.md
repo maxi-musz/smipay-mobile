@@ -148,6 +148,99 @@ npm run ios        # iOS simulator
 npm run android    # Android emulator
 ```
 
+## Storage Strategy
+
+The app uses a **two-tier storage** approach appropriate for a fintech app:
+
+| Layer | Technology | Use case | Encrypted? |
+| --- | --- | --- | --- |
+| **Sensitive** | `expo-secure-store` (Keychain / Keystore) | Auth tokens, PINs, secrets | Yes (hardware-level) |
+| **Non-sensitive** | `@react-native-async-storage/async-storage` | Onboarding status, theme pref, cached UI state | No |
+
+### Secure storage (`src/lib/secure-storage.ts`)
+
+Thin wrapper around `expo-secure-store` with key prefixing (`smipay.*`) and JSON serialization.
+
+```ts
+import { secureStorage, SECURE_KEYS } from "@/lib/secure-storage";
+
+await secureStorage.set(SECURE_KEYS.ACCESS_TOKEN, "jwt...");
+const token = await secureStorage.get<string>(SECURE_KEYS.ACCESS_TOKEN);
+await secureStorage.remove(SECURE_KEYS.ACCESS_TOKEN);
+```
+
+Add new key names to `SECURE_KEYS` in `secure-storage.ts` as needed.
+
+## State Management (Zustand)
+
+All global state lives in `src/store/`. Each store is a standalone zustand store — no providers required.
+
+| File | Purpose |
+| --- | --- |
+| `middleware.ts` | `createPersistConfig()` — AsyncStorage persist adapter for **non-sensitive** state. Keys prefixed with `@smipay/`. |
+| `create-selectors.ts` | `createSelectors()` — wraps any store with auto-generated `.use.*` selectors for zero-boilerplate access. |
+| `auth.store.ts` | User & auth state. User profile persisted to AsyncStorage; tokens stored in SecureStore separately. |
+| `app.store.ts` | App-wide state: hydration flag, global loading overlay, notification badge count. Not persisted. |
+| `index.ts` | Barrel export for all stores and utilities. |
+
+### Auth store token flow
+
+Tokens are **never** written to AsyncStorage. The auth store handles them like this:
+
+- **`login(user, tokens)`** — writes tokens to SecureStore, sets user in zustand (persisted to AsyncStorage).
+- **`logout()`** — clears tokens from SecureStore, resets zustand state.
+- **`hydrateTokens()`** — reads tokens from SecureStore back into zustand memory on app launch.
+- **`setTokens(tokens)`** — overwrites tokens in SecureStore (e.g. after a refresh).
+
+### Usage
+
+**Option A — selector function (standard):**
+
+```tsx
+import { useAuthStore } from "@/store";
+
+const user = useAuthStore((s) => s.user);
+const logout = useAuthStore((s) => s.logout);
+```
+
+**Option B — auto-selectors (preferred, less boilerplate):**
+
+```tsx
+import { useAuthStore } from "@/store";
+
+const user = useAuthStore.use.user();
+const logout = useAuthStore.use.logout();
+```
+
+Both approaches only re-render when the selected value changes.
+
+**Outside React (in utils, interceptors, etc.):**
+
+```ts
+import { useAuthStore } from "@/store";
+
+const token = useAuthStore.getState().tokens?.accessToken;
+useAuthStore.getState().logout();
+```
+
+### Adding a new store
+
+1. Create `src/store/<name>.store.ts`.
+2. Define `State`, `Actions`, and `Store = State & Actions` interfaces.
+3. Use `create<Store>()()` with `persist()` middleware if the store should survive app restarts. **Never persist sensitive data with the AsyncStorage adapter** — use `secureStorage` directly.
+4. Wrap with `createSelectors()` for auto-generated `.use.*` hooks.
+5. Export from `src/store/index.ts`.
+
+### Types
+
+All shared types live in `src/types/`.
+
+| File | Contents |
+| --- | --- |
+| `user.ts` | `User`, `AuthTokens` |
+| `store.ts` | `AsyncState<T>`, `createAsyncState()` — generic wrapper for loading/error/data patterns |
+| `index.ts` | Barrel export |
+
 ## What to do next
 
 - Replace placeholder `icon.png`, `splash-icon.png`, and `favicon.png` with SmiPay branded versions.
