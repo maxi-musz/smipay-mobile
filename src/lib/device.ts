@@ -1,3 +1,4 @@
+import * as Crypto from "expo-crypto";
 import * as Device from "expo-device";
 import * as Application from "expo-application";
 import { Platform } from "react-native";
@@ -18,7 +19,7 @@ export async function getDeviceId(): Promise<string> {
   const existing = await secureStorage.get<string>(DEVICE_ID_KEY);
   if (existing) return existing;
 
-  const id = crypto.randomUUID();
+  const id = Crypto.randomUUID();
   await secureStorage.set(DEVICE_ID_KEY, id);
   return id;
 }

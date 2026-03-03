@@ -9,6 +9,7 @@ import { useColorScheme } from "nativewind";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { SplashOverlay } from "@/components/splash-overlay";
+import { ToastContainer } from "@/components/ui/toast";
 import { ThemeProvider } from "@/context/theme-context";
 import { useAppTheme } from "@/hooks/use-app-theme";
 
@@ -41,6 +42,7 @@ function InnerLayout() {
         }}
       />
       {showSplash && <SplashOverlay onFinish={handleSplashFinish} />}
+      <ToastContainer />
       <PortalHost />
     </>
   );

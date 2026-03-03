@@ -1,6 +1,5 @@
 import React, { useRef, useState } from "react";
 import {
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -19,11 +18,16 @@ import {
 } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
-import { ApiClientError } from "@/lib/api";
+import { handleApiError } from "@/lib/errors";
+import { useToastStore } from "@/components/ui/toast";
 import { useAuthStore } from "@/store";
 
 type Step = "email" | "otp" | "profile";
+
+const STEPS: Step[] = ["email", "otp", "profile"];
+const EMAIL_RE = /\S+@\S+\.\S+/;
 
 export default function SignUpScreen() {
   const login = useAuthStore.use.login();
@@ -31,14 +35,10 @@ export default function SignUpScreen() {
   const [step, setStep] = useState<Step>("email");
   const [loading, setLoading] = useState(false);
 
-  // Step 1 — email
   const [email, setEmail] = useState("");
-
-  // Step 2 — OTP
   const [otp, setOtp] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
 
-  // Step 3 — profile
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -53,34 +53,28 @@ export default function SignUpScreen() {
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
 
-  // ------------------------------------------------------------------
-  // Step 1 — Request email verification
-  // ------------------------------------------------------------------
-  async function handleVerifyEmail() {
-    if (!email.trim()) {
-      setErrors({ email: "Email is required" });
-      return;
-    }
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      setErrors({ email: "Enter a valid email" });
-      return;
-    }
-
-    setErrors({});
-    setLoading(true);
-    try {
-      await requestEmailVerification(email.trim().toLowerCase());
-      setStep("otp");
-      startResendCooldown();
-    } catch (e) {
-      Alert.alert(
-        "Verification Failed",
-        e instanceof ApiClientError ? e.message : "Please try again.",
-      );
-    } finally {
-      setLoading(false);
-    }
+  function clearError(key: string) {
+    if (errors[key])
+      setErrors((p) => {
+        const n = { ...p };
+        delete n[key];
+        return n;
+      });
   }
+
+  const canSubmitEmail = EMAIL_RE.test(email.trim()) && !loading;
+  const canSubmitOtp = otp.length === 4 && !loading;
+  const canSubmitProfile =
+    firstName.trim().length > 0 &&
+    lastName.trim().length > 0 &&
+    phone.trim().length > 0 &&
+    password.length >= 6 &&
+    confirmPassword.length > 0 &&
+    password === confirmPassword &&
+    agreedToTerms &&
+    !loading;
+
+  // ── Handlers ──────────────────────────────────────────────────────
 
   function startResendCooldown() {
     setResendCooldown(60);
@@ -95,26 +89,47 @@ export default function SignUpScreen() {
     }, 1000);
   }
 
+  async function handleVerifyEmail() {
+    if (!email.trim()) {
+      setErrors({ email: "Email is required" });
+      return;
+    }
+    if (!EMAIL_RE.test(email)) {
+      setErrors({ email: "Enter a valid email" });
+      return;
+    }
+
+    setErrors({});
+    setLoading(true);
+    try {
+      await requestEmailVerification(email.trim().toLowerCase());
+      setStep("otp");
+      startResendCooldown();
+    } catch (e) {
+      handleApiError(e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleResendOtp() {
     if (resendCooldown > 0) return;
     setLoading(true);
     try {
       await requestEmailVerification(email.trim().toLowerCase());
       startResendCooldown();
-      Alert.alert("Code Sent", "A new verification code has been sent.");
+      useToastStore.getState().show({
+        variant: "success",
+        title: "Code Sent",
+        message: "A new verification code has been sent.",
+      });
     } catch (e) {
-      Alert.alert(
-        "Resend Failed",
-        e instanceof ApiClientError ? e.message : "Please try again.",
-      );
+      handleApiError(e);
     } finally {
       setLoading(false);
     }
   }
 
-  // ------------------------------------------------------------------
-  // Step 2 — Verify OTP
-  // ------------------------------------------------------------------
   async function handleVerifyOtp() {
     if (otp.length !== 4) {
       setErrors({ otp: "Enter the 4-digit code" });
@@ -127,24 +142,19 @@ export default function SignUpScreen() {
       await verifyEmailForRegistration(email.trim().toLowerCase(), otp);
       setStep("profile");
     } catch (e) {
-      Alert.alert(
-        "Invalid Code",
-        e instanceof ApiClientError ? e.message : "Please try again.",
-      );
+      handleApiError(e);
     } finally {
       setLoading(false);
     }
   }
 
-  // ------------------------------------------------------------------
-  // Step 3 — Register
-  // ------------------------------------------------------------------
   function validateProfile() {
     const next: Record<string, string> = {};
     if (!firstName.trim()) next.firstName = "First name is required";
     if (!lastName.trim()) next.lastName = "Last name is required";
     if (!phone.trim()) next.phone = "Phone number is required";
-    if (password.length < 6) next.password = "Password must be at least 6 characters";
+    if (password.length < 6)
+      next.password = "Password must be at least 6 characters";
     if (password !== confirmPassword)
       next.confirmPassword = "Passwords do not match";
     if (!agreedToTerms) next.terms = "You must accept the terms";
@@ -167,28 +177,80 @@ export default function SignUpScreen() {
         country: "Nigeria",
       });
 
-      await login(
-        res.data.user,
-        {
-          accessToken: res.data.access_token,
-          refreshToken: res.data.refresh_token,
-        },
-      );
+      await login(res.data.user, {
+        accessToken: res.data.access_token,
+        refreshToken: res.data.refresh_token,
+      });
 
-      router.replace("/");
+      router.replace("/(app)/dashboard");
     } catch (e) {
-      Alert.alert(
-        "Registration Failed",
-        e instanceof ApiClientError ? e.message : "Please try again.",
-      );
+      handleApiError(e);
     } finally {
       setLoading(false);
     }
   }
 
-  // ------------------------------------------------------------------
-  // Render
-  // ------------------------------------------------------------------
+  // ── Step indicator ────────────────────────────────────────────────
+
+  const stepLabels = ["Email", "Verify", "Profile"];
+  const currentIdx = STEPS.indexOf(step);
+
+  function StepIndicator() {
+    return (
+      <View className="flex-row items-center justify-center gap-3">
+        {STEPS.map((s, i) => {
+          const isActive = i === currentIdx;
+          const isDone = i < currentIdx;
+          return (
+            <View key={s} className="flex-row items-center gap-3">
+              {i > 0 && (
+                <View
+                  className={`h-px w-6 ${isDone ? "bg-primary" : "bg-muted"}`}
+                />
+              )}
+              <View className="items-center gap-1">
+                <View
+                  className={`h-7 w-7 items-center justify-center rounded-full ${
+                    isActive
+                      ? "bg-primary"
+                      : isDone
+                        ? "bg-primary/20"
+                        : "bg-muted"
+                  }`}
+                >
+                  <Text
+                    className={`text-xs font-semibold ${
+                      isActive
+                        ? "text-primary-foreground"
+                        : isDone
+                          ? "text-primary"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    {isDone ? "✓" : i + 1}
+                  </Text>
+                </View>
+                <Text
+                  className={`text-[10px] ${
+                    isActive
+                      ? "font-medium text-primary"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {stepLabels[i]}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
+  // ── Render ────────────────────────────────────────────────────────
+
+  const showLogo = step === "email";
+
   return (
     <SafeAreaView className="flex-1 bg-background">
       <KeyboardAvoidingView
@@ -196,105 +258,111 @@ export default function SignUpScreen() {
         className="flex-1"
       >
         <ScrollView
-          contentContainerClassName="flex-grow justify-center px-6 py-12"
+          contentContainerClassName="flex-grow px-6 pb-8"
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
-          <View className="items-center">
-            <Image
-              source={require("@/assets/images/icon.png")}
-              className="mb-4 h-20 w-20 rounded-2xl"
-              resizeMode="contain"
-            />
-            <Text variant="h3" className="text-primary">SmiPay</Text>
-            <Text className="mt-1 text-muted-foreground">
-              {step === "email" && "Create your account"}
-              {step === "otp" && "Verify your email"}
-              {step === "profile" && "Complete your profile"}
+          {/* ── Header ── */}
+          <View className={`items-center ${showLogo ? "mt-12" : "mt-6"}`}>
+            {showLogo && (
+              <Image
+                source={require("@/assets/images/icon.png")}
+                className="mb-3 h-16 w-16 rounded-2xl"
+                resizeMode="contain"
+              />
+            )}
+            <Text
+              variant={showLogo ? "h3" : "h4"}
+              className={showLogo ? "text-primary" : "text-foreground"}
+            >
+              {step === "email" && "Create Account"}
+              {step === "otp" && "Verify Email"}
+              {step === "profile" && "Complete Profile"}
+            </Text>
+            <Text className="mt-1 text-sm text-muted-foreground">
+              {step === "email" && "Enter your email to get started"}
+              {step === "otp" && `Code sent to ${email}`}
+              {step === "profile" && "Just a few more details"}
             </Text>
           </View>
 
-          {/* Step indicator */}
-          <View className="mt-6 flex-row items-center justify-center gap-2">
-            {(["email", "otp", "profile"] as const).map((s, i) => (
-              <View
-                key={s}
-                className={`h-1.5 rounded-full ${
-                  s === step
-                    ? "w-8 bg-primary"
-                    : i < ["email", "otp", "profile"].indexOf(step)
-                      ? "w-8 bg-primary/40"
-                      : "w-8 bg-muted"
-                }`}
-              />
-            ))}
+          {/* ── Step indicator ── */}
+          <View className="mt-5">
+            <StepIndicator />
           </View>
 
-          {/* ---- Step 1: Email ---- */}
+          {/* ── Step 1: Email ── */}
           {step === "email" && (
-            <View className="mt-10 gap-4">
+            <View className="mt-8 gap-5">
               <Input
-                label="Email"
+                label="Email Address"
                 placeholder="you@example.com"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(v) => {
+                  setEmail(v);
+                  clearError("email");
+                }}
                 error={errors.email}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
                 returnKeyType="done"
-                onSubmitEditing={handleVerifyEmail}
+                onSubmitEditing={canSubmitEmail ? handleVerifyEmail : undefined}
               />
 
               <Button
-                className="mt-4 h-14 rounded-2xl"
+                className="h-14 rounded-2xl"
                 onPress={handleVerifyEmail}
-                disabled={loading}
+                disabled={!canSubmitEmail}
               >
-                <Text className="text-base font-semibold">
-                  {loading ? "Sending code..." : "Verify Email"}
-                </Text>
+                {loading ? (
+                  <Spinner color="#fff" />
+                ) : (
+                  <Text className="text-base font-semibold">Continue</Text>
+                )}
               </Button>
 
-              <View className="mt-4 flex-row items-center justify-center gap-1">
-                <Text className="text-muted-foreground">
+              <View className="flex-row items-center justify-center gap-1">
+                <Text className="text-sm text-muted-foreground">
                   Already have an account?
                 </Text>
                 <Link href="/(auth)/sign-in" asChild>
-                  <Text className="font-semibold text-primary">Sign in</Text>
+                  <Text className="text-sm font-semibold text-primary">
+                    Sign in
+                  </Text>
                 </Link>
               </View>
             </View>
           )}
 
-          {/* ---- Step 2: OTP ---- */}
+          {/* ── Step 2: OTP ── */}
           {step === "otp" && (
-            <View className="mt-10 gap-4">
-              <Text className="text-center text-sm text-muted-foreground">
-                We sent a 4-digit code to{" "}
-                <Text className="font-medium text-foreground">{email}</Text>
-              </Text>
-
+            <View className="mt-8 gap-5">
               <Input
                 label="Verification Code"
                 placeholder="0000"
                 value={otp}
-                onChangeText={(t) => setOtp(t.replace(/\D/g, "").slice(0, 4))}
+                onChangeText={(t) => {
+                  setOtp(t.replace(/\D/g, "").slice(0, 4));
+                  clearError("otp");
+                }}
                 error={errors.otp}
                 keyboardType="number-pad"
                 maxLength={4}
                 returnKeyType="done"
-                onSubmitEditing={handleVerifyOtp}
+                onSubmitEditing={canSubmitOtp ? handleVerifyOtp : undefined}
               />
 
               <Button
-                className="mt-4 h-14 rounded-2xl"
+                className="h-14 rounded-2xl"
                 onPress={handleVerifyOtp}
-                disabled={loading}
+                disabled={!canSubmitOtp}
               >
-                <Text className="text-base font-semibold">
-                  {loading ? "Verifying..." : "Verify"}
-                </Text>
+                {loading ? (
+                  <Spinner color="#fff" />
+                ) : (
+                  <Text className="text-base font-semibold">Verify</Text>
+                )}
               </Button>
 
               <Pressable
@@ -310,40 +378,55 @@ export default function SignUpScreen() {
             </View>
           )}
 
-          {/* ---- Step 3: Profile ---- */}
+          {/* ── Step 3: Profile ── */}
           {step === "profile" && (
-            <View className="mt-10 gap-4">
-              <Input
-                label="First Name"
-                placeholder="Jane"
-                value={firstName}
-                onChangeText={setFirstName}
-                error={errors.firstName}
-                autoComplete="given-name"
-                autoCapitalize="words"
-                returnKeyType="next"
-                onSubmitEditing={() => lastNameRef.current?.focus()}
-              />
-
-              <Input
-                ref={lastNameRef}
-                label="Last Name"
-                placeholder="Doe"
-                value={lastName}
-                onChangeText={setLastName}
-                error={errors.lastName}
-                autoComplete="family-name"
-                autoCapitalize="words"
-                returnKeyType="next"
-                onSubmitEditing={() => phoneRef.current?.focus()}
-              />
+            <View className="mt-6 gap-5">
+              {/* Name — side by side */}
+              <View className="flex-row gap-3">
+                <View className="flex-1">
+                  <Input
+                    label="First Name"
+                    placeholder="Jane"
+                    value={firstName}
+                    onChangeText={(v) => {
+                      setFirstName(v);
+                      clearError("firstName");
+                    }}
+                    error={errors.firstName}
+                    autoComplete="given-name"
+                    autoCapitalize="words"
+                    returnKeyType="next"
+                    onSubmitEditing={() => lastNameRef.current?.focus()}
+                  />
+                </View>
+                <View className="flex-1">
+                  <Input
+                    ref={lastNameRef}
+                    label="Last Name"
+                    placeholder="Doe"
+                    value={lastName}
+                    onChangeText={(v) => {
+                      setLastName(v);
+                      clearError("lastName");
+                    }}
+                    error={errors.lastName}
+                    autoComplete="family-name"
+                    autoCapitalize="words"
+                    returnKeyType="next"
+                    onSubmitEditing={() => phoneRef.current?.focus()}
+                  />
+                </View>
+              </View>
 
               <Input
                 ref={phoneRef}
                 label="Phone Number"
                 placeholder="08012345678"
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(v) => {
+                  setPhone(v);
+                  clearError("phone");
+                }}
                 error={errors.phone}
                 keyboardType="phone-pad"
                 autoComplete="tel"
@@ -351,12 +434,24 @@ export default function SignUpScreen() {
                 onSubmitEditing={() => passwordRef.current?.focus()}
               />
 
+              {/* Divider */}
+              <View className="flex-row items-center gap-3">
+                <View className="h-px flex-1 bg-border" />
+                <Text className="text-xs text-muted-foreground">
+                  Set a password
+                </Text>
+                <View className="h-px flex-1 bg-border" />
+              </View>
+
               <Input
                 ref={passwordRef}
                 label="Password"
                 placeholder="Min. 6 characters"
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(v) => {
+                  setPassword(v);
+                  clearError("password");
+                }}
                 error={errors.password}
                 secureTextEntry
                 toggleable
@@ -369,18 +464,24 @@ export default function SignUpScreen() {
                 label="Confirm Password"
                 placeholder="Re-enter your password"
                 value={confirmPassword}
-                onChangeText={setConfirmPassword}
+                onChangeText={(v) => {
+                  setConfirmPassword(v);
+                  clearError("confirmPassword");
+                }}
                 error={errors.confirmPassword}
                 secureTextEntry
                 toggleable
                 returnKeyType="done"
-                onSubmitEditing={handleRegister}
+                onSubmitEditing={canSubmitProfile ? handleRegister : undefined}
               />
 
               {/* Terms */}
               <Pressable
                 className="flex-row items-start gap-3"
-                onPress={() => setAgreedToTerms((v) => !v)}
+                onPress={() => {
+                  setAgreedToTerms((v) => !v);
+                  clearError("terms");
+                }}
               >
                 <View
                   className={`mt-0.5 h-5 w-5 items-center justify-center rounded border ${
@@ -393,10 +494,13 @@ export default function SignUpScreen() {
                     <Text className="text-xs text-primary-foreground">✓</Text>
                   )}
                 </View>
-                <Text className="flex-1 text-sm text-muted-foreground">
+                <Text className="flex-1 text-xs text-muted-foreground">
                   I agree to the{" "}
-                  <Text className="text-primary">Terms of Service</Text> and{" "}
-                  <Text className="text-primary">Privacy Policy</Text>
+                  <Text className="text-xs text-primary">
+                    Terms of Service
+                  </Text>{" "}
+                  and{" "}
+                  <Text className="text-xs text-primary">Privacy Policy</Text>
                 </Text>
               </Pressable>
               {errors.terms && (
@@ -404,13 +508,17 @@ export default function SignUpScreen() {
               )}
 
               <Button
-                className="mt-4 h-14 rounded-2xl"
+                className="mt-1 h-14 rounded-2xl"
                 onPress={handleRegister}
-                disabled={loading}
+                disabled={!canSubmitProfile}
               >
-                <Text className="text-base font-semibold">
-                  {loading ? "Creating account..." : "Create Account"}
-                </Text>
+                {loading ? (
+                  <Spinner color="#fff" />
+                ) : (
+                  <Text className="text-base font-semibold">
+                    Create Account
+                  </Text>
+                )}
               </Button>
             </View>
           )}

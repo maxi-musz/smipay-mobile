@@ -1,6 +1,5 @@
 import React, { useRef, useState } from "react";
 import {
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -19,10 +18,15 @@ import {
 } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
-import { ApiClientError } from "@/lib/api";
+import { handleApiError } from "@/lib/errors";
+import { useToastStore } from "@/components/ui/toast";
 
 type Step = "email" | "otp" | "reset";
+
+const EMAIL_RE = /\S+@\S+\.\S+/;
+const MIN_PASSWORD = 4;
 
 export default function ForgotPasswordScreen() {
   const [step, setStep] = useState<Step>("email");
@@ -38,14 +42,24 @@ export default function ForgotPasswordScreen() {
 
   const confirmRef = useRef<TextInput>(null);
 
+  function clearError(key: string) {
+    if (errors[key]) setErrors((p) => { const n = { ...p }; delete n[key]; return n; });
+  }
+
+  // ---- Computed disabled states ----
+  const canSubmitEmail = EMAIL_RE.test(email.trim()) && !loading;
+  const canSubmitOtp = otp.length === 4 && !loading;
+  const canSubmitReset =
+    newPassword.length >= MIN_PASSWORD &&
+    confirmPassword.length > 0 &&
+    newPassword === confirmPassword &&
+    !loading;
+
   function startResendCooldown() {
     setResendCooldown(60);
     const id = setInterval(() => {
       setResendCooldown((v) => {
-        if (v <= 1) {
-          clearInterval(id);
-          return 0;
-        }
+        if (v <= 1) { clearInterval(id); return 0; }
         return v - 1;
       });
     }, 1000);
@@ -55,14 +69,8 @@ export default function ForgotPasswordScreen() {
   // Step 1 — Request reset OTP
   // ------------------------------------------------------------------
   async function handleRequestOtp() {
-    if (!email.trim()) {
-      setErrors({ email: "Email is required" });
-      return;
-    }
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      setErrors({ email: "Enter a valid email" });
-      return;
-    }
+    if (!email.trim()) { setErrors({ email: "Email is required" }); return; }
+    if (!EMAIL_RE.test(email)) { setErrors({ email: "Enter a valid email" }); return; }
 
     setErrors({});
     setLoading(true);
@@ -71,10 +79,7 @@ export default function ForgotPasswordScreen() {
       setStep("otp");
       startResendCooldown();
     } catch (e) {
-      Alert.alert(
-        "Request Failed",
-        e instanceof ApiClientError ? e.message : "Please try again.",
-      );
+      handleApiError(e);
     } finally {
       setLoading(false);
     }
@@ -86,12 +91,13 @@ export default function ForgotPasswordScreen() {
     try {
       await forgotPassword(email.trim().toLowerCase());
       startResendCooldown();
-      Alert.alert("Code Sent", "A new reset code has been sent.");
+      useToastStore.getState().show({
+        variant: "success",
+        title: "Code Sent",
+        message: "A new reset code has been sent.",
+      });
     } catch (e) {
-      Alert.alert(
-        "Resend Failed",
-        e instanceof ApiClientError ? e.message : "Please try again.",
-      );
+      handleApiError(e);
     } finally {
       setLoading(false);
     }
@@ -101,10 +107,7 @@ export default function ForgotPasswordScreen() {
   // Step 2 — Verify OTP
   // ------------------------------------------------------------------
   async function handleVerifyOtp() {
-    if (otp.length !== 4) {
-      setErrors({ otp: "Enter the 4-digit code" });
-      return;
-    }
+    if (otp.length !== 4) { setErrors({ otp: "Enter the 4-digit code" }); return; }
 
     setErrors({});
     setLoading(true);
@@ -112,10 +115,7 @@ export default function ForgotPasswordScreen() {
       await verifyPasswordResetOtp(email.trim().toLowerCase(), otp);
       setStep("reset");
     } catch (e) {
-      Alert.alert(
-        "Invalid Code",
-        e instanceof ApiClientError ? e.message : "Please try again.",
-      );
+      handleApiError(e);
     } finally {
       setLoading(false);
     }
@@ -126,12 +126,9 @@ export default function ForgotPasswordScreen() {
   // ------------------------------------------------------------------
   async function handleResetPassword() {
     const next: Record<string, string> = {};
-    if (newPassword.length < 4) next.newPassword = "Password must be at least 4 characters";
+    if (newPassword.length < MIN_PASSWORD) next.newPassword = `Password must be at least ${MIN_PASSWORD} characters`;
     if (newPassword !== confirmPassword) next.confirmPassword = "Passwords do not match";
-    if (Object.keys(next).length > 0) {
-      setErrors(next);
-      return;
-    }
+    if (Object.keys(next).length > 0) { setErrors(next); return; }
 
     setErrors({});
     setLoading(true);
@@ -141,16 +138,14 @@ export default function ForgotPasswordScreen() {
         otp,
         new_password: newPassword,
       });
-      Alert.alert(
-        "Password Reset",
-        "Your password has been reset. Please sign in with your new password.",
-        [{ text: "Sign In", onPress: () => router.replace("/(auth)/sign-in") }],
-      );
+      useToastStore.getState().show({
+        variant: "success",
+        title: "Password Reset",
+        message: "Your password has been reset successfully.",
+      });
+      router.replace("/(auth)/sign-in");
     } catch (e) {
-      Alert.alert(
-        "Reset Failed",
-        e instanceof ApiClientError ? e.message : "Please try again.",
-      );
+      handleApiError(e);
     } finally {
       setLoading(false);
     }
@@ -217,23 +212,25 @@ export default function ForgotPasswordScreen() {
                 label="Email"
                 placeholder="you@example.com"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(v) => { setEmail(v); clearError("email"); }}
                 error={errors.email}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
                 returnKeyType="done"
-                onSubmitEditing={handleRequestOtp}
+                onSubmitEditing={canSubmitEmail ? handleRequestOtp : undefined}
               />
 
               <Button
                 className="mt-4 h-14 rounded-2xl"
                 onPress={handleRequestOtp}
-                disabled={loading}
+                disabled={!canSubmitEmail}
               >
-                <Text className="text-base font-semibold">
-                  {loading ? "Sending..." : "Send Reset Code"}
-                </Text>
+                {loading ? (
+                  <Spinner color="#fff" />
+                ) : (
+                  <Text className="text-base font-semibold">Send Reset Code</Text>
+                )}
               </Button>
 
               <Pressable onPress={() => router.back()}>
@@ -251,22 +248,24 @@ export default function ForgotPasswordScreen() {
                 label="Reset Code"
                 placeholder="0000"
                 value={otp}
-                onChangeText={(t) => setOtp(t.replace(/\D/g, "").slice(0, 4))}
+                onChangeText={(t) => { setOtp(t.replace(/\D/g, "").slice(0, 4)); clearError("otp"); }}
                 error={errors.otp}
                 keyboardType="number-pad"
                 maxLength={4}
                 returnKeyType="done"
-                onSubmitEditing={handleVerifyOtp}
+                onSubmitEditing={canSubmitOtp ? handleVerifyOtp : undefined}
               />
 
               <Button
                 className="mt-4 h-14 rounded-2xl"
                 onPress={handleVerifyOtp}
-                disabled={loading}
+                disabled={!canSubmitOtp}
               >
-                <Text className="text-base font-semibold">
-                  {loading ? "Verifying..." : "Verify Code"}
-                </Text>
+                {loading ? (
+                  <Spinner color="#fff" />
+                ) : (
+                  <Text className="text-base font-semibold">Verify Code</Text>
+                )}
               </Button>
 
               <Pressable
@@ -287,9 +286,9 @@ export default function ForgotPasswordScreen() {
             <View className="mt-10 gap-4">
               <Input
                 label="New Password"
-                placeholder="Min. 4 characters"
+                placeholder={`Min. ${MIN_PASSWORD} characters`}
                 value={newPassword}
-                onChangeText={setNewPassword}
+                onChangeText={(v) => { setNewPassword(v); clearError("newPassword"); }}
                 error={errors.newPassword}
                 secureTextEntry
                 toggleable
@@ -302,22 +301,24 @@ export default function ForgotPasswordScreen() {
                 label="Confirm Password"
                 placeholder="Re-enter new password"
                 value={confirmPassword}
-                onChangeText={setConfirmPassword}
+                onChangeText={(v) => { setConfirmPassword(v); clearError("confirmPassword"); }}
                 error={errors.confirmPassword}
                 secureTextEntry
                 toggleable
                 returnKeyType="done"
-                onSubmitEditing={handleResetPassword}
+                onSubmitEditing={canSubmitReset ? handleResetPassword : undefined}
               />
 
               <Button
                 className="mt-4 h-14 rounded-2xl"
                 onPress={handleResetPassword}
-                disabled={loading}
+                disabled={!canSubmitReset}
               >
-                <Text className="text-base font-semibold">
-                  {loading ? "Resetting..." : "Reset Password"}
-                </Text>
+                {loading ? (
+                  <Spinner color="#fff" />
+                ) : (
+                  <Text className="text-base font-semibold">Reset Password</Text>
+                )}
               </Button>
             </View>
           )}
