@@ -5,13 +5,13 @@ import {
   Image,
   NativeSyntheticEvent,
   NativeScrollEvent,
-  Pressable,
-  Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
 
@@ -44,32 +44,20 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     }
   };
 
-  const handleSkip = () => {
-    onComplete();
-  };
-
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-gray-950" edges={["top", "bottom"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <View className="flex-1">
-        {/* Header: Logo + Skip */}
         <View className="flex-row items-center justify-between px-6 pt-2">
           <Image
             source={require("@/assets/images/smipay-logo.png")}
             style={{ width: 100, height: 32 }}
             resizeMode="contain"
           />
-          <Pressable
-            onPress={handleSkip}
-            hitSlop={12}
-            className="rounded-lg px-3 py-2 active:bg-gray-100 dark:active:bg-gray-800"
-          >
-            <Text className="text-base font-semibold text-gray-500 dark:text-gray-400">
-              Skip
-            </Text>
-          </Pressable>
+          <Button variant="ghost" size="sm" onPress={onComplete}>
+            <Text className="text-muted-foreground">Skip</Text>
+          </Button>
         </View>
 
-        {/* Slides */}
         <FlatList
           ref={flatListRef}
           data={ONBOARDING_SLIDES}
@@ -83,7 +71,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           renderItem={({ item }) => <SlideCard slide={item} />}
         />
 
-        {/* Footer: Dots + CTA */}
         <View className="px-6 pb-10">
           <View className="mb-8 flex-row justify-center gap-2">
             {ONBOARDING_SLIDES.map((_, i) => (
@@ -101,17 +88,13 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             ))}
           </View>
 
-          <Pressable
-            onPress={handleNext}
-            className="rounded-2xl py-4 active:opacity-90"
-            style={{ backgroundColor: colors.orange[500] }}
-          >
-            <Text className="text-center text-base font-bold text-white">
+          <Button size="lg" className="rounded-2xl" onPress={handleNext}>
+            <Text>
               {currentIndex === ONBOARDING_SLIDES.length - 1
                 ? "Get Started"
                 : "Next"}
             </Text>
-          </Pressable>
+          </Button>
         </View>
       </View>
     </SafeAreaView>
@@ -147,11 +130,11 @@ function SlideCard({ slide }: { slide: OnboardingSlide }) {
         </View>
       )}
 
-      <Text className="text-center text-2xl font-bold text-gray-900 dark:text-gray-50">
+      <Text variant="h3" className="text-center">
         {slide.title}
       </Text>
 
-      <Text className="mt-5 text-center text-base leading-7 text-gray-600 dark:text-gray-400">
+      <Text className="mt-5 text-center leading-7 text-muted-foreground">
         {slide.description}
       </Text>
 
