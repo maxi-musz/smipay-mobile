@@ -53,7 +53,7 @@ api.interceptors.request.use(async (config) => {
 // ── Token refresh mutex ──────────────────────────────────────────
 
 let isRefreshing = false;
-let refreshSubscribers: Array<(token: string) => void> = [];
+let refreshSubscribers: ((token: string) => void)[] = [];
 
 function onRefreshed(token: string) {
   refreshSubscribers.forEach((cb) => cb(token));

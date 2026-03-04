@@ -12,3 +12,7 @@ export {
 } from "./services/auth";
 
 export { fetchHomepageDetails } from "./services/user";
+export {
+  fetchTransactionHistory,
+  fetchTransactionById,
+} from "./services/history";

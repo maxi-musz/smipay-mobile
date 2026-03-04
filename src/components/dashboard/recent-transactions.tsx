@@ -1,10 +1,11 @@
-import { Pressable, View } from "react-native";
+import { Image, Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { colors } from "@/constants/colors";
+import { getProviderLogo } from "@/lib/provider-logo";
 import type { TransactionItem } from "@/types";
 
 type TransactionStatus = "successful" | "pending" | "failed" | "cancelled";
@@ -107,29 +108,22 @@ function TransactionRow({
   const amountColor =
     transaction.credit_debit === "credit" ? colors.green[500] : colors.error;
 
-  const iconBg = isDark ? "rgba(255,255,255,0.08)" : colors.gray[100];
-  const iconColor = isDark ? colors.gray[400] : colors.gray[500];
+  const localLogo = getProviderLogo(transaction.description);
+  const isCredit = transaction.credit_debit === "credit";
 
   return (
     <Pressable
+      onPress={() => router.push(`/(app)/history/${transaction.id}`)}
       className={`flex-row items-center px-4 py-3.5 active:opacity-80 ${
         !isLast ? "border-b border-border" : ""
       }`}
     >
-      <View
-        className="mr-3 h-10 w-10 items-center justify-center rounded-full"
-        style={{ backgroundColor: iconBg }}
-      >
-        <Ionicons
-          name={
-            transaction.credit_debit === "credit"
-              ? "arrow-down-outline"
-              : "arrow-up-outline"
-          }
-          size={18}
-          color={iconColor}
-        />
-      </View>
+      <TxIcon
+        localLogo={localLogo}
+        remoteIcon={transaction.icon}
+        isCredit={isCredit}
+        isDark={isDark}
+      />
 
       <View className="flex-1">
         <Text className="text-[15px] font-medium text-foreground">
@@ -161,5 +155,63 @@ function TransactionRow({
         </View>
       </View>
     </Pressable>
+  );
+}
+
+function TxIcon({
+  localLogo,
+  remoteIcon,
+  isCredit,
+  isDark,
+}: {
+  localLogo: ReturnType<typeof getProviderLogo>;
+  remoteIcon: string | null;
+  isCredit: boolean;
+  isDark: boolean;
+}) {
+  if (localLogo) {
+    return (
+      <Image
+        source={localLogo}
+        className="mr-3 h-10 w-10 rounded-full"
+        resizeMode="cover"
+      />
+    );
+  }
+
+  if (remoteIcon) {
+    return (
+      <Image
+        source={{ uri: remoteIcon }}
+        className="mr-3 h-10 w-10 rounded-full"
+        resizeMode="cover"
+      />
+    );
+  }
+
+  if (isCredit) {
+    return (
+      <View
+        className="mr-3 h-10 w-10 items-center justify-center rounded-full"
+        style={{ backgroundColor: isDark ? "#052E16" : "#DCFCE7" }}
+      >
+        <Ionicons name="arrow-down" size={18} color={colors.green[500]} />
+      </View>
+    );
+  }
+
+  return (
+    <View
+      className="mr-3 h-10 w-10 items-center justify-center rounded-full"
+      style={{
+        backgroundColor: isDark ? "rgba(255,255,255,0.08)" : colors.gray[100],
+      }}
+    >
+      <Ionicons
+        name="arrow-up"
+        size={18}
+        color={isDark ? colors.gray[400] : colors.gray[500]}
+      />
+    </View>
   );
 }

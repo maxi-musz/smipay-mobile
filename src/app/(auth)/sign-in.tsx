@@ -150,7 +150,7 @@ export default function SignInScreen() {
 
           <View className="mt-6 flex-row items-center justify-center gap-1">
             <Text className="text-muted-foreground">
-              Don't have an account?
+              Do not have an account?
             </Text>
             <Link href="/(auth)/sign-up" asChild>
               <Text className="font-semibold text-primary">Create one</Text>

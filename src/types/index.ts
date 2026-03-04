@@ -22,3 +22,12 @@ export type {
   CurrentTier,
   RewardBanner,
 } from "./homepage";
+export type {
+  HistoryCategories,
+  HistoryPagination,
+  HistoryStatus,
+  HistoryDirection,
+  HistoryTransaction,
+  HistoryListData,
+  SingleTransaction,
+} from "./history";

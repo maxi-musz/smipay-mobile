@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -10,24 +10,34 @@ import {
   ServicesGrid,
   TransferSection,
 } from "@/components/dashboard";
+import { FullPageLoader } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
-import { useHomepageStore } from "@/store";
+import { useAuthStore, useHomepageStore } from "@/store";
 import { colors } from "@/constants/colors";
 
 export default function HomeScreen() {
+  const isLocked = useAuthStore.use.isLocked();
   const data = useHomepageStore.use.data();
   const isLoading = useHomepageStore.use.isLoading();
   const error = useHomepageStore.use.error();
   const fetchHomepage = useHomepageStore.use.fetchHomepage();
 
+  // Fetch on mount.
   useEffect(() => {
     fetchHomepage();
-  }, []);
+  }, [fetchHomepage]);
+
+  // After unlock, if we're showing an error (e.g. Unauthorized from before unlock), refetch so dashboard loads with new token.
+  useEffect(() => {
+    if (!isLocked && error && !data) {
+      fetchHomepage();
+    }
+  }, [isLocked, error, data, fetchHomepage]);
 
   if (isLoading && !data) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-background" edges={["top"]}>
-        <ActivityIndicator size="large" color={colors.orange[500]} />
+      <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+        <FullPageLoader message="Loading..." />
       </SafeAreaView>
     );
   }
