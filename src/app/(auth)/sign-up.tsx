@@ -1,6 +1,7 @@
 import React, { useRef, useState } from "react";
 import {
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -31,6 +32,7 @@ const EMAIL_RE = /\S+@\S+\.\S+/;
 
 export default function SignUpScreen() {
   const login = useAuthStore.use.login();
+  const storeCredentials = useAuthStore.use.storeCredentials();
 
   const [step, setStep] = useState<Step>("email");
   const [loading, setLoading] = useState(false);
@@ -43,7 +45,6 @@ export default function SignUpScreen() {
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -51,7 +52,6 @@ export default function SignUpScreen() {
   const lastNameRef = useRef<TextInput>(null);
   const phoneRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
-  const confirmRef = useRef<TextInput>(null);
 
   function clearError(key: string) {
     if (errors[key])
@@ -69,8 +69,6 @@ export default function SignUpScreen() {
     lastName.trim().length > 0 &&
     phone.trim().length > 0 &&
     password.length >= 6 &&
-    confirmPassword.length > 0 &&
-    password === confirmPassword &&
     agreedToTerms &&
     !loading;
 
@@ -99,6 +97,7 @@ export default function SignUpScreen() {
       return;
     }
 
+    Keyboard.dismiss();
     setErrors({});
     setLoading(true);
     try {
@@ -136,9 +135,11 @@ export default function SignUpScreen() {
       return;
     }
 
+    Keyboard.dismiss();
     setErrors({});
     setLoading(true);
     try {
+      if (__DEV__) console.log("[OTP] Verifying:", { email: email.trim().toLowerCase(), otp });
       await verifyEmailForRegistration(email.trim().toLowerCase(), otp);
       setStep("profile");
     } catch (e) {
@@ -155,8 +156,6 @@ export default function SignUpScreen() {
     if (!phone.trim()) next.phone = "Phone number is required";
     if (password.length < 6)
       next.password = "Password must be at least 6 characters";
-    if (password !== confirmPassword)
-      next.confirmPassword = "Passwords do not match";
     if (!agreedToTerms) next.terms = "You must accept the terms";
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -165,6 +164,7 @@ export default function SignUpScreen() {
   async function handleRegister() {
     if (!validateProfile()) return;
 
+    Keyboard.dismiss();
     setLoading(true);
     try {
       const res = await register({
@@ -177,12 +177,14 @@ export default function SignUpScreen() {
         country: "Nigeria",
       });
 
+      const trimmedEmail = email.trim().toLowerCase();
       await login(res.data.user, {
         accessToken: res.data.access_token,
         refreshToken: res.data.refresh_token,
       });
+      await storeCredentials(trimmedEmail, password);
 
-      router.replace("/(app)/dashboard");
+      router.replace("/(app)/(tabs)");
     } catch (e) {
       handleApiError(e);
     } finally {
@@ -249,8 +251,6 @@ export default function SignUpScreen() {
 
   // ── Render ────────────────────────────────────────────────────────
 
-  const showLogo = step === "email";
-
   return (
     <SafeAreaView className="flex-1 bg-background">
       <KeyboardAvoidingView
@@ -258,23 +258,18 @@ export default function SignUpScreen() {
         className="flex-1"
       >
         <ScrollView
-          contentContainerClassName="flex-grow px-6 pb-8"
+          contentContainerClassName={`flex-grow px-6 pb-8 ${step !== "profile" ? "justify-center" : ""}`}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {/* ── Header ── */}
-          <View className={`items-center ${showLogo ? "mt-12" : "mt-6"}`}>
-            {showLogo && (
-              <Image
-                source={require("@/assets/images/icon.png")}
-                className="mb-3 h-16 w-16 rounded-2xl"
-                resizeMode="contain"
-              />
-            )}
-            <Text
-              variant={showLogo ? "h3" : "h4"}
-              className={showLogo ? "text-primary" : "text-foreground"}
-            >
+          <View className={`items-center ${step === "profile" ? "mt-4" : ""}`}>
+            <Image
+              source={require("@/assets/images/icon.png")}
+              className="mb-3 h-14 w-14 rounded-2xl"
+              resizeMode="contain"
+            />
+            <Text variant="h4" className="text-foreground">
               {step === "email" && "Create Account"}
               {step === "otp" && "Verify Email"}
               {step === "profile" && "Complete Profile"}
@@ -453,22 +448,6 @@ export default function SignUpScreen() {
                   clearError("password");
                 }}
                 error={errors.password}
-                secureTextEntry
-                toggleable
-                returnKeyType="next"
-                onSubmitEditing={() => confirmRef.current?.focus()}
-              />
-
-              <Input
-                ref={confirmRef}
-                label="Confirm Password"
-                placeholder="Re-enter your password"
-                value={confirmPassword}
-                onChangeText={(v) => {
-                  setConfirmPassword(v);
-                  clearError("confirmPassword");
-                }}
-                error={errors.confirmPassword}
                 secureTextEntry
                 toggleable
                 returnKeyType="done"

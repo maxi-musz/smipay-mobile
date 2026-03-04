@@ -6,6 +6,8 @@ import type { ThemeMode } from "@/constants/theme";
 import { createSelectors } from "./create-selectors";
 import { createPersistConfig } from "./middleware";
 
+export type LockTimeout = "immediate" | "60min" | "none";
+
 interface AppState {
   /** Whether all persisted stores have finished rehydrating. */
   isHydrated: boolean;
@@ -15,6 +17,8 @@ interface AppState {
   notificationCount: number;
   /** User's preferred theme mode, persisted across restarts. */
   themeMode: ThemeMode;
+  /** App lock setting — when to lock after backgrounding. */
+  lockTimeout: LockTimeout;
 }
 
 interface AppActions {
@@ -22,6 +26,7 @@ interface AppActions {
   setGlobalLoading: (value: boolean) => void;
   setNotificationCount: (count: number) => void;
   setThemeMode: (mode: ThemeMode) => void;
+  setLockTimeout: (timeout: LockTimeout) => void;
   reset: () => void;
 }
 
@@ -32,6 +37,7 @@ const initialState: AppState = {
   isGlobalLoading: false,
   notificationCount: 0,
   themeMode: "system",
+  lockTimeout: "immediate",
 };
 
 const _useAppStore = create<AppStore>()(
@@ -47,10 +53,15 @@ const _useAppStore = create<AppStore>()(
 
       setThemeMode: (themeMode) => set({ themeMode }),
 
+      setLockTimeout: (lockTimeout) => set({ lockTimeout }),
+
       reset: () => set(initialState),
     }),
     createPersistConfig("app", {
-      partialize: (state) => ({ themeMode: state.themeMode }),
+      partialize: (state) => ({
+        themeMode: state.themeMode,
+        lockTimeout: state.lockTimeout,
+      }),
     }),
   ),
 );

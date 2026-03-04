@@ -1,5 +1,3 @@
-import { router } from "expo-router";
-
 import { useAuthStore } from "@/store/auth.store";
 import { ApiClientError } from "@/lib/api";
 import { useToastStore } from "@/components/ui/toast/toast-store";
@@ -11,7 +9,7 @@ interface ClassifiedError {
   message: string;
   variant: ErrorVariant;
   statusCode?: number;
-  /** Whether this error was already handled automatically (e.g. 401 logout). */
+  /** Whether this error was already handled automatically (e.g. 401 lock). */
   handled: boolean;
 }
 
@@ -32,15 +30,10 @@ function isNetworkError(error: unknown): boolean {
   return NETWORK_PATTERNS.some((p) => msg.includes(p));
 }
 
-/**
- * Safe messages that never leak implementation details.
- * The backend's messages (400, 409) are already user-friendly per the API spec,
- * so we pass those through. For everything else, we substitute.
- */
 const SAFE_MESSAGES: Record<number, { title: string; message: string }> = {
   401: {
     title: "Session Expired",
-    message: "Please sign in again to continue.",
+    message: "Please enter your password to continue.",
   },
   403: {
     title: "Access Denied",
@@ -72,11 +65,7 @@ const SAFE_MESSAGES: Record<number, { title: string; message: string }> = {
   },
 };
 
-/**
- * Classifies any error into a user-safe, display-ready object.
- */
 export function classifyError(error: unknown): ClassifiedError {
-  // Network / connectivity errors
   if (isNetworkError(error)) {
     return {
       title: "Connection Error",
@@ -86,11 +75,9 @@ export function classifyError(error: unknown): ClassifiedError {
     };
   }
 
-  // API errors with status codes
   if (error instanceof ApiClientError && error.statusCode) {
     const code = error.statusCode;
 
-    // 401 — force logout (handled automatically)
     if (code === 401) {
       return {
         ...SAFE_MESSAGES[401],
@@ -100,7 +87,6 @@ export function classifyError(error: unknown): ClassifiedError {
       };
     }
 
-    // 400, 409 — backend messages are user-friendly, pass through
     if (code === 400 || code === 409) {
       return {
         title: code === 409 ? "Already Exists" : "Invalid Request",
@@ -111,7 +97,6 @@ export function classifyError(error: unknown): ClassifiedError {
       };
     }
 
-    // Known safe fallbacks for other codes
     const safe = SAFE_MESSAGES[code];
     if (safe) {
       return {
@@ -122,7 +107,6 @@ export function classifyError(error: unknown): ClassifiedError {
       };
     }
 
-    // Unknown HTTP error — never show raw message
     return {
       title: "Something Went Wrong",
       message: "An unexpected error occurred. Please try again.",
@@ -132,7 +116,6 @@ export function classifyError(error: unknown): ClassifiedError {
     };
   }
 
-  // Completely unknown error — never expose internals
   return {
     title: "Something Went Wrong",
     message: "An unexpected error occurred. Please try again.",
@@ -142,21 +125,17 @@ export function classifyError(error: unknown): ClassifiedError {
 }
 
 /**
- * One-liner to handle any error from an API call or anywhere else.
+ * Handles any error from an API call.
  *
  * - Classifies the error into a user-safe message.
  * - Shows a toast automatically.
- * - Handles 401 (force logout + redirect to sign-in).
- *
- * Returns the classified error so callers can inspect it if needed.
+ * - On 401 (after refresh failed): locks the app instead of hard logout.
  */
 export function handleApiError(error: unknown): ClassifiedError {
   const classified = classifyError(error);
 
-  // 401 → force logout
   if (classified.statusCode === 401) {
-    useAuthStore.getState().logout();
-    router.replace("/(auth)/sign-in");
+    useAuthStore.getState().lock();
     useToastStore.getState().show({
       variant: "error",
       title: classified.title,
@@ -165,7 +144,6 @@ export function handleApiError(error: unknown): ClassifiedError {
     return classified;
   }
 
-  // Show toast for everything else
   useToastStore.getState().show({
     variant: classified.variant,
     title: classified.title,

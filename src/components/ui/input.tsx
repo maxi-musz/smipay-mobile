@@ -1,5 +1,6 @@
 import React, { forwardRef, useState } from "react";
 import { Platform, Pressable, TextInput, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
@@ -30,7 +31,7 @@ const Input = forwardRef<TextInput, InputProps>(function Input(
   return (
     <View className={cn("gap-1.5", containerClassName)}>
       {label && (
-        <Text className="text-sm font-medium text-foreground">{label}</Text>
+        <Text className="text-[15px] font-medium text-foreground">{label}</Text>
       )}
 
       <View
@@ -42,7 +43,7 @@ const Input = forwardRef<TextInput, InputProps>(function Input(
         <TextInput
           ref={ref}
           className={cn(
-            "h-12 flex-1 text-base text-foreground",
+            "h-14 flex-1 text-[17px] text-foreground",
             Platform.select({ web: "outline-none" }),
             className,
           )}
@@ -60,15 +61,17 @@ const Input = forwardRef<TextInput, InputProps>(function Input(
             accessibilityRole="button"
             accessibilityLabel={hidden ? "Show password" : "Hide password"}
           >
-            <Text className="text-sm text-muted-foreground">
-              {hidden ? "Show" : "Hide"}
-            </Text>
+            <Ionicons
+              name={hidden ? "eye-off-outline" : "eye-outline"}
+              size={20}
+              color="#9CA3AF"
+            />
           </Pressable>
         )}
       </View>
 
       {error && (
-        <Text className="text-xs text-destructive">{error}</Text>
+        <Text className="text-sm text-destructive">{error}</Text>
       )}
     </View>
   );

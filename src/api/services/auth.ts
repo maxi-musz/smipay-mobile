@@ -49,6 +49,14 @@ export async function logout() {
   return data;
 }
 
+export async function refreshToken(refresh_token: string) {
+  const { data } = await api.post<ApiResponse<AuthResponse>>(
+    `${AUTH}/refresh`,
+    { refresh_token },
+  );
+  return data;
+}
+
 export async function completeOnboarding() {
   const { data } = await api.post<ApiResponse>(`${AUTH}/complete-onboarding`);
   return data;

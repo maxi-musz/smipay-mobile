@@ -10,6 +10,8 @@ interface AuthState {
   user: User | null;
   tokens: AuthTokens | null;
   isAuthenticated: boolean;
+  /** True when the app is locked due to inactivity. */
+  isLocked: boolean;
 }
 
 interface AuthActions {
@@ -20,6 +22,12 @@ interface AuthActions {
   updateUser: (partial: Partial<User>) => void;
   /** Rehydrate tokens from SecureStore into memory on app launch. */
   hydrateTokens: () => Promise<void>;
+  /** Store email + password in SecureStore for lock screen re-auth. */
+  storeCredentials: (email: string, password: string) => Promise<void>;
+  /** Lock the app (show lock screen overlay). */
+  lock: () => void;
+  /** Unlock the app after successful re-auth. */
+  unlock: () => void;
 }
 
 type AuthStore = AuthState & AuthActions;
@@ -28,6 +36,7 @@ const initialState: AuthState = {
   user: null,
   tokens: null,
   isAuthenticated: false,
+  isLocked: false,
 };
 
 async function writeTokens(tokens: AuthTokens) {
@@ -37,10 +46,12 @@ async function writeTokens(tokens: AuthTokens) {
   ]);
 }
 
-async function clearTokens() {
+async function clearAllSecureData() {
   await secureStorage.clear([
     SECURE_KEYS.ACCESS_TOKEN,
     SECURE_KEYS.REFRESH_TOKEN,
+    SECURE_KEYS.USER_EMAIL,
+    SECURE_KEYS.USER_PASSWORD,
   ]);
 }
 
@@ -58,11 +69,11 @@ const _useAuthStore = create<AuthStore>()(
 
       login: async (user, tokens) => {
         await writeTokens(tokens);
-        set({ user, tokens, isAuthenticated: true });
+        set({ user, tokens, isAuthenticated: true, isLocked: false });
       },
 
       logout: async () => {
-        await clearTokens();
+        await clearAllSecureData();
         set(initialState);
       },
 
@@ -81,10 +92,19 @@ const _useAuthStore = create<AuthStore>()(
           set({ tokens: { accessToken, refreshToken } });
         }
       },
+
+      storeCredentials: async (email, password) => {
+        await Promise.all([
+          secureStorage.set(SECURE_KEYS.USER_EMAIL, email),
+          secureStorage.set(SECURE_KEYS.USER_PASSWORD, password),
+        ]);
+      },
+
+      lock: () => set({ isLocked: true }),
+
+      unlock: () => set({ isLocked: false }),
     }),
     createPersistConfig<AuthStore>("auth", {
-      // Only persist non-sensitive state to AsyncStorage.
-      // Tokens are stored separately in SecureStore.
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,

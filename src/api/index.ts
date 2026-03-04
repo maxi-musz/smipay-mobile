@@ -6,6 +6,7 @@ export {
   forgotPassword,
   verifyPasswordResetOtp,
   resetPassword,
+  refreshToken,
   logout,
   completeOnboarding,
 } from "./services/auth";

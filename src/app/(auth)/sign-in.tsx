@@ -1,12 +1,16 @@
 import React, { useRef, useState } from "react";
 import {
+  Alert,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   TextInput,
   View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Link, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -16,12 +20,14 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
 import { handleApiError } from "@/lib/errors";
+import { secureStorage, SECURE_KEYS } from "@/lib/secure-storage";
 import { useAuthStore } from "@/store";
 
 const EMAIL_RE = /\S+@\S+\.\S+/;
 
 export default function SignInScreen() {
   const login = useAuthStore.use.login();
+  const storeCredentials = useAuthStore.use.storeCredentials();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -54,9 +60,11 @@ export default function SignInScreen() {
 
   async function handleSignIn() {
     if (!validate()) return;
+    Keyboard.dismiss();
     setLoading(true);
     try {
-      const res = await signIn({ email: email.trim().toLowerCase(), password });
+      const trimmedEmail = email.trim().toLowerCase();
+      const res = await signIn({ email: trimmedEmail, password });
       await login(
         res.data.user,
         {
@@ -64,7 +72,8 @@ export default function SignInScreen() {
           refreshToken: res.data.refresh_token,
         },
       );
-      router.replace("/(app)/dashboard");
+      await storeCredentials(trimmedEmail, password);
+      router.replace("/(app)/(tabs)");
     } catch (e) {
       handleApiError(e);
     } finally {
@@ -85,7 +94,7 @@ export default function SignInScreen() {
           <View className="items-center">
             <Image
               source={require("@/assets/images/icon.png")}
-              className="mb-4 h-20 w-20 rounded-2xl"
+              className="mb-3 h-14 w-14 rounded-2xl"
               resizeMode="contain"
             />
             <Text variant="h3" className="text-primary">SmiPay</Text>
@@ -147,6 +156,40 @@ export default function SignInScreen() {
               <Text className="font-semibold text-primary">Create one</Text>
             </Link>
           </View>
+
+          {__DEV__ && (
+            <Pressable
+              className="mt-10 self-center"
+              onPress={() =>
+                Alert.alert(
+                  "Clear App Data",
+                  "This will reset onboarding, auth, theme, and all local data. Continue?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Clear",
+                      style: "destructive",
+                      onPress: async () => {
+                        await AsyncStorage.clear();
+                        await secureStorage.clear([
+                          SECURE_KEYS.ACCESS_TOKEN,
+                          SECURE_KEYS.REFRESH_TOKEN,
+                          SECURE_KEYS.USER_EMAIL,
+                          SECURE_KEYS.USER_PASSWORD,
+                        ]);
+                        useAuthStore.getState().logout();
+                        router.replace("/");
+                      },
+                    },
+                  ],
+                )
+              }
+            >
+              <Text className="text-xs text-red-400">
+                [DEV] Clear app data
+              </Text>
+            </Pressable>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

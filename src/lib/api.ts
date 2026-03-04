@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 import { useAuthStore } from "@/store/auth.store";
 import { getDeviceMetadata } from "./device";
@@ -17,6 +17,8 @@ export const api = axios.create({
   timeout: 30_000,
   headers: { "Content-Type": "application/json" },
 });
+
+// ── Request interceptor ──────────────────────────────────────────
 
 api.interceptors.request.use(async (config) => {
   if (__DEV__) {
@@ -48,6 +50,25 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// ── Token refresh mutex ──────────────────────────────────────────
+
+let isRefreshing = false;
+let refreshSubscribers: Array<(token: string) => void> = [];
+
+function onRefreshed(token: string) {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+}
+
+function addRefreshSubscriber(cb: (token: string) => void) {
+  refreshSubscribers.push(cb);
+}
+
+const REFRESH_URL = "/new-auth/refresh";
+const SIGNIN_URL = "/new-auth/signin";
+
+// ── Response interceptor with refresh ────────────────────────────
+
 api.interceptors.response.use(
   (response) => {
     if (__DEV__) {
@@ -57,22 +78,84 @@ api.interceptors.response.use(
     }
     return response;
   },
-  (error) => {
+  async (error: AxiosError) => {
     if (__DEV__) {
-      const status = axios.isAxiosError(error)
-        ? error.response?.status ?? "NETWORK"
-        : "UNKNOWN";
+      const status = error.response?.status ?? "NETWORK";
       const method = error?.config?.method?.toUpperCase() ?? "?";
       const url = error?.config?.url ?? "?";
       console.log(`← ${status} ${method} ${url}`);
     }
 
+    const originalRequest = error.config as InternalAxiosRequestConfig & {
+      _retry?: boolean;
+    };
+
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      originalRequest.url !== REFRESH_URL &&
+      originalRequest.url !== SIGNIN_URL
+    ) {
+      const refreshTokenValue = useAuthStore.getState().tokens?.refreshToken;
+
+      if (refreshTokenValue) {
+        if (isRefreshing) {
+          return new Promise((resolve) => {
+            addRefreshSubscriber((newToken) => {
+              originalRequest.headers.Authorization = `Bearer ${newToken}`;
+              originalRequest._retry = true;
+              resolve(api(originalRequest));
+            });
+          });
+        }
+
+        isRefreshing = true;
+        originalRequest._retry = true;
+
+        try {
+          const { data } = await axios.post(
+            `${API_BASE_URL}${REFRESH_URL}`,
+            { refresh_token: refreshTokenValue },
+            { headers: { "Content-Type": "application/json" } },
+          );
+
+          const newTokens = {
+            accessToken: data.data.access_token,
+            refreshToken: data.data.refresh_token,
+          };
+
+          await useAuthStore.getState().setTokens(newTokens);
+
+          if (data.data.user) {
+            useAuthStore.getState().setUser(data.data.user);
+          }
+
+          onRefreshed(newTokens.accessToken);
+          originalRequest.headers.Authorization = `Bearer ${newTokens.accessToken}`;
+
+          return api(originalRequest);
+        } catch {
+          refreshSubscribers = [];
+          useAuthStore.getState().lock();
+          return Promise.reject(
+            new ApiClientError("Session expired. Please sign in again.", 401),
+          );
+        } finally {
+          isRefreshing = false;
+        }
+      }
+
+      useAuthStore.getState().lock();
+    }
+
     if (axios.isAxiosError(error)) {
       const status = error.response?.status;
-      const data = error.response?.data;
+      const responseData = error.response?.data as
+        | { message?: string }
+        | undefined;
 
       const message =
-        data?.message ?? error.message ?? "Something went wrong";
+        responseData?.message ?? error.message ?? "Something went wrong";
 
       return Promise.reject(new ApiClientError(message, status));
     }

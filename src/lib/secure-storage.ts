@@ -40,4 +40,6 @@ export const secureStorage = {
 export const SECURE_KEYS = {
   ACCESS_TOKEN: "access_token",
   REFRESH_TOKEN: "refresh_token",
+  USER_EMAIL: "user_email",
+  USER_PASSWORD: "user_password",
 } as const;

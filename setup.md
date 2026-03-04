@@ -55,11 +55,11 @@ import { cn } from "@/lib/utils";
 | --- | --- | --- | --- |
 | `primary` | Orange 500 | Orange 500 | Brand orange |
 | `accent` | Green 500 | Green 500 | Brand green |
-| `background` | White | Gray 950 | Page background |
+| `background` | White | Gray 900 | Page background |
 | `foreground` | Gray 950 | Gray 50 | Text color |
 | `destructive` | Red 600 | Red 500 | Error/delete actions |
 | `muted` | Gray 50 | Gray 800 | Subtle backgrounds |
-| `card` | White | Gray 900 | Card surfaces |
+| `card` | White | Gray 850 | Card surfaces |
 
 ## Design System
 
@@ -86,27 +86,17 @@ Both have full 50–950 shade scales available in Tailwind and TypeScript.
 
 | File | Purpose |
 | --- | --- |
-| `src/context/theme-context.tsx` | React context that holds current mode (light / dark / system) and provides `toggle()` |
+| `src/context/theme-context.tsx` | React context that reads/writes `themeMode` from Zustand app store. Provides `toggle()`, `setMode()`, `isDark`. |
 | `src/hooks/use-app-theme.ts` | Hook to consume theme — returns `{ theme, mode, isDark, setMode, toggle }` |
+| `src/components/theme-toggle.tsx` | Reusable sun/moon icon button. Used in onboarding, auth layout, and dashboard. |
 | `src/app/_layout.tsx` | Wraps the app in `<ThemeProvider>` and syncs NativeWind's color scheme |
+
+**Theme is persisted.** The `themeMode` is stored in `app.store` via Zustand `persist` middleware (AsyncStorage). Survives app restarts.
 
 ### Usage
 
 ```tsx
 const { isDark, toggle } = useAppTheme();
-```
-
-In any component's className:
-
-```tsx
-<View className="bg-white dark:bg-gray-950" />
-```
-
-For imperative style (when you need the actual hex value):
-
-```tsx
-const { theme } = useAppTheme();
-<View style={{ backgroundColor: theme.background }} />
 ```
 
 ## Splash Screen
@@ -122,14 +112,13 @@ All onboarding files live in `src/onboarding/`.
 | File | Purpose |
 | --- | --- |
 | `constants.ts` | Slide content, icons, storage key |
-| `onboarding-screen.tsx` | Full-screen pager UI |
+| `onboarding-screen.tsx` | Full-screen pager UI with theme toggle in header |
 | `use-onboarding-status.ts` | AsyncStorage persistence hook |
 | `index.ts` | Barrel export |
 
 - **3 slides:** Welcome, Utility Services (airtime/data/electricity/cable TV), Education Payments (JAMB/WAEC/NECO).
 - **Shown once per device** — persisted via `AsyncStorage` (`@smipay/onboarding_completed`).
 - **Skip** and **Next / Get Started** CTAs. Horizontal pager with dot indicators.
-- **Dev only:** "Clear app data" button on home screen (with confirmation) to reset onboarding.
 
 ## Assets
 
@@ -148,14 +137,27 @@ npm run ios        # iOS simulator
 npm run android    # Android emulator
 ```
 
+## Environment Variables
+
+Create a `.env` file in the project root:
+
+```
+EXPO_PUBLIC_API_BASE_URL=http://localhost:1500
+EXPO_PUBLIC_API_VERSION=/api/v1
+```
+
+The API client constructs its base URL as `${EXPO_PUBLIC_API_BASE_URL}${EXPO_PUBLIC_API_VERSION}`.
+
+**Note:** `localhost` only works from the iOS Simulator (shares host network). For physical devices, use your machine's LAN IP (e.g. `http://192.168.x.x:1500`).
+
 ## Storage Strategy
 
-The app uses a **two-tier storage** approach appropriate for a fintech app:
+Two-tier storage appropriate for a fintech app:
 
 | Layer | Technology | Use case | Encrypted? |
 | --- | --- | --- | --- |
-| **Sensitive** | `expo-secure-store` (Keychain / Keystore) | Auth tokens, PINs, secrets | Yes (hardware-level) |
-| **Non-sensitive** | `@react-native-async-storage/async-storage` | Onboarding status, theme pref, cached UI state | No |
+| **Sensitive** | `expo-secure-store` (Keychain / Keystore) | Auth tokens, device ID, PINs, secrets | Yes (hardware-level) |
+| **Non-sensitive** | `@react-native-async-storage/async-storage` | Onboarding status, theme pref, user profile cache | No |
 
 ### Secure storage (`src/lib/secure-storage.ts`)
 
@@ -169,8 +171,6 @@ const token = await secureStorage.get<string>(SECURE_KEYS.ACCESS_TOKEN);
 await secureStorage.remove(SECURE_KEYS.ACCESS_TOKEN);
 ```
 
-Add new key names to `SECURE_KEYS` in `secure-storage.ts` as needed.
-
 ## State Management (Zustand)
 
 All global state lives in `src/store/`. Each store is a standalone zustand store — no providers required.
@@ -180,7 +180,7 @@ All global state lives in `src/store/`. Each store is a standalone zustand store
 | `middleware.ts` | `createPersistConfig()` — AsyncStorage persist adapter for **non-sensitive** state. Keys prefixed with `@smipay/`. |
 | `create-selectors.ts` | `createSelectors()` — wraps any store with auto-generated `.use.*` selectors for zero-boilerplate access. |
 | `auth.store.ts` | User & auth state. User profile persisted to AsyncStorage; tokens stored in SecureStore separately. |
-| `app.store.ts` | App-wide state: hydration flag, global loading overlay, notification badge count. Not persisted. |
+| `app.store.ts` | App-wide state: hydration flag, global loading, notification count, **theme mode** (persisted). |
 | `index.ts` | Barrel export for all stores and utilities. |
 
 ### Auth store token flow
@@ -192,35 +192,23 @@ Tokens are **never** written to AsyncStorage. The auth store handles them like t
 - **`hydrateTokens()`** — reads tokens from SecureStore back into zustand memory on app launch.
 - **`setTokens(tokens)`** — overwrites tokens in SecureStore (e.g. after a refresh).
 
+### App store
+
+Persisted fields (AsyncStorage): `themeMode` only.
+
+Non-persisted (in-memory): `isHydrated`, `isGlobalLoading`, `notificationCount`.
+
 ### Usage
 
-**Option A — selector function (standard):**
-
 ```tsx
 import { useAuthStore } from "@/store";
 
-const user = useAuthStore((s) => s.user);
-const logout = useAuthStore((s) => s.logout);
-```
-
-**Option B — auto-selectors (preferred, less boilerplate):**
-
-```tsx
-import { useAuthStore } from "@/store";
-
+// Auto-selectors (preferred):
 const user = useAuthStore.use.user();
 const logout = useAuthStore.use.logout();
-```
 
-Both approaches only re-render when the selected value changes.
-
-**Outside React (in utils, interceptors, etc.):**
-
-```ts
-import { useAuthStore } from "@/store";
-
+// Outside React:
 const token = useAuthStore.getState().tokens?.accessToken;
-useAuthStore.getState().logout();
 ```
 
 ### Adding a new store
@@ -246,23 +234,22 @@ All shared types live in `src/types/`.
 
 Pre-configured Axios instance with two interceptors:
 
-1. **Request interceptor** — automatically attaches:
-   - Device metadata headers (`x-device-id`, `x-device-model`, etc.) from `src/lib/device.ts`
-   - Location headers (`x-latitude`, `x-longitude`) if permission was granted (from `src/lib/location.ts`)
-   - `Authorization: Bearer <token>` if the user is authenticated
-2. **Response interceptor** — normalizes errors into `ApiClientError` with human-readable messages.
+1. **Request interceptor:**
+   - Logs `→ METHOD url` in dev
+   - Attaches device metadata headers (wrapped in try/catch — non-blocking)
+   - Attaches location headers if permission granted (wrapped in try/catch — non-blocking)
+   - Attaches `Authorization: Bearer <token>` if authenticated
+2. **Response interceptor:**
+   - Logs `← STATUS METHOD url` in dev
+   - Normalizes errors into `ApiClientError(message, statusCode)`
 
-**Base URL** is set via the `EXPO_PUBLIC_API_URL` env variable. Create a `.env` file:
-
-```
-EXPO_PUBLIC_API_URL=https://your-api.com/api/v1
-```
+On startup, logs `[API] Base URL: ...` so you can confirm the resolved URL.
 
 ### Device metadata (`src/lib/device.ts`)
 
 | What | How | Compliance note |
 | --- | --- | --- |
-| Device ID | App-generated UUID v4 stored in SecureStore | Not a hardware ID — fully compliant with Apple ATT and Google Play policies |
+| Device ID | App-generated UUID via `expo-crypto` stored in SecureStore | Not a hardware ID — fully compliant with Apple ATT and Google Play policies |
 | Device model/name | `expo-device` | Standard system API, no permissions needed |
 | OS name/version | `Platform` API | Standard |
 | App version | `expo-application` | Standard |
@@ -281,7 +268,65 @@ EXPO_PUBLIC_API_URL=https://your-api.com/api/v1
 - If denied, app works normally; backend falls back to IP geolocation.
 - See `DATA_COLLECTION_DISCLOSURE.md` for store form guidance and privacy policy text.
 
-## Auth API (`src/api/auth.ts`)
+## Error Handling (`src/lib/errors/`)
+
+Centralized system that ensures users never see raw error messages.
+
+| File | Purpose |
+| --- | --- |
+| `error-handler.ts` | `classifyError()` — maps any error to a safe `{ title, message, variant }`. `handleApiError()` — classifies + shows toast + handles 401 logout. |
+| `index.ts` | Barrel export |
+
+**Error classification logic:**
+- Network errors (pattern matching on message) → "Check your internet connection"
+- 400, 409 → backend message passed through (they're user-friendly per API spec)
+- 401 → auto-logout + redirect to sign-in + toast
+- 403, 404, 408, 429, 5xx → safe substitute messages
+- Unknown → "An unexpected error occurred"
+
+**Usage in any screen:**
+
+```tsx
+import { handleApiError } from "@/lib/errors";
+
+try {
+  await someApiCall();
+} catch (e) {
+  handleApiError(e); // shows toast, handles 401
+}
+```
+
+## Toast System (`src/components/ui/toast/`)
+
+Global toast notifications displayed at the top of the screen.
+
+| File | Purpose |
+| --- | --- |
+| `toast-store.ts` | Zustand store managing a queue of toasts. `useToastStore.getState().show({ variant, title, message })` |
+| `toast-container.tsx` | Animated `<ToastContainer />` rendered in root layout. Auto-dismisses after timeout. |
+| `index.ts` | Barrel export |
+
+Variants: `success`, `error`, `warning`, `info`.
+
+Wired into `_layout.tsx` — no setup needed per screen.
+
+## Loader Components (`src/components/ui/loaders/`)
+
+| File | Purpose |
+| --- | --- |
+| `full-page-loader.tsx` | Full-screen overlay with app icon breathing animation (Reanimated). Grey background. |
+| `spinner.tsx` | Wraps `ActivityIndicator`. Used inline on buttons during API calls. |
+| `index.ts` | Barrel export |
+
+## Modal Components (`src/components/ui/modals/`)
+
+| File | Purpose |
+| --- | --- |
+| `alert-modal.tsx` | Success / error / warning alerts with icon, title, message, and CTA button. |
+| `confirm-modal.tsx` | Confirmation dialog with cancel + confirm actions. |
+| `index.ts` | Barrel export |
+
+## Auth API (`src/api/services/auth.ts`)
 
 Thin functions wrapping each backend auth endpoint:
 
@@ -297,27 +342,62 @@ Thin functions wrapping each backend auth endpoint:
 | `logout()` | `POST /new-auth/logout` |
 | `completeOnboarding()` | `POST /new-auth/complete-onboarding` |
 
-## Authentication Screens
+Barrel-exported from `src/api/index.ts`.
 
-All auth screens live in `src/app/(auth)/`.
+## Authentication Screens (`src/app/(auth)/`)
 
 | Screen | Route | Flow |
 | --- | --- | --- |
-| Sign In | `/(auth)/sign-in` | Email + password → auto-navigate to dashboard |
-| Sign Up | `/(auth)/sign-up` | 3-step: email verification → OTP → full profile form → auto sign-in |
-| Forgot Password | `/(auth)/forgot-password` | 3-step: email → OTP → new password → redirect to sign-in |
+| Sign In | `/(auth)/sign-in` | Email + password → dashboard |
+| Sign Up | `/(auth)/sign-up` | 3-step: email → OTP → profile form → auto sign-in → dashboard |
+| Forgot Password | `/(auth)/forgot-password` | 3-step: email → OTP → new password → sign-in |
 
-### Routing logic (`src/app/index.tsx`)
+**Auth layout** (`(auth)/_layout.tsx`): Renders a `ThemeToggle` absolutely positioned on all auth screens.
 
-1. Show pre-auth onboarding if not completed (persisted locally via AsyncStorage)
-2. If not authenticated → `<Redirect>` to `/(auth)/sign-in`
-3. If authenticated → show dashboard (placeholder for now)
+**Features across all auth screens:**
+- Form validation with computed `canSubmit` states — buttons disabled until all fields are valid
+- Inline error messages that clear as user types
+- `Spinner` on buttons during API loading (not text)
+- All API errors handled via `handleApiError()` → toast
+
+**Sign-up profile step layout:**
+- First Name + Last Name side by side in one row
+- Labeled divider separating personal info from password section
+- Numbered step indicator (1 → 2 → 3) with labels and connector lines
+
+## Routing (`src/app/`)
+
+| Route | File | Purpose |
+| --- | --- | --- |
+| `/` | `index.tsx` | Entry point: onboarding → auth redirect → dashboard redirect |
+| `/(auth)/*` | `(auth)/_layout.tsx` | Auth screens (sign-in, sign-up, forgot-password). Theme toggle in layout. |
+| `/(app)/*` | `(app)/_layout.tsx` | Authenticated route group. Redirects to sign-in if not authenticated. |
+| `/(app)/dashboard` | `(app)/dashboard.tsx` | Dashboard placeholder. Shows welcome message + user's first name. |
+
+**Flow:**
+1. `index.tsx` checks onboarding status → if not completed, shows onboarding
+2. If onboarding done + not authenticated → `<Redirect href="/(auth)/sign-in" />`
+3. If authenticated → `<Redirect href="/(app)/dashboard" />`
+4. `(app)/_layout.tsx` guards all child routes — redirects to sign-in if session lost
+
+## App Store / Play Store Compliance
+
+**Audited and safe.** See `DATA_COLLECTION_DISCLOSURE.md` for full details.
+
+| Concern | Status |
+| --- | --- |
+| No hardware IDs (IMEI, MAC, IDFA) | ✅ App-generated UUID only |
+| No background location | ✅ Foreground only, balanced accuracy |
+| No auto-prompted permissions | ✅ Location requested explicitly from UI context |
+| Tokens encrypted | ✅ SecureStore (Keychain / Keystore) |
+| No tracking / advertising SDKs | ✅ ATT not required |
+| Permission strings in app.json | ✅ Clear purpose descriptions |
+| Dev logging stripped from prod | ✅ `__DEV__` guarded |
 
 ## What to do next
 
 - Replace placeholder `icon.png`, `splash-icon.png`, and `favicon.png` with SmiPay branded versions.
 - Load custom fonts via `expo-font` and update `src/constants/typography.ts` + `tailwind.config.js`.
-- Add async-storage persistence to theme preference if needed.
-- Build the dashboard / tab navigation for authenticated users.
-- Call `requestLocationPermission()` after first sign-in with a pre-permission explainer.
-- Implement token refresh logic in the API interceptor.
+- Call `requestLocationPermission()` after first sign-in with a pre-permission explainer UI.
+- Implement token refresh logic in the API response interceptor (on 401, try refresh before logout).
+- Build tab navigation inside `(app)/` for dashboard, wallet, services, profile, etc.
