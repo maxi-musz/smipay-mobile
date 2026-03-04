@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Image, Pressable, ScrollView, View } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -11,7 +11,7 @@ import { Text } from "@/components/ui/text";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToastStore } from "@/components/ui/toast";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import { useAuthStore, useAppStore } from "@/store";
+import { useAuthStore, useAppStore, useHomepageStore } from "@/store";
 import type { LockTimeout } from "@/store/app.store";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
@@ -49,8 +49,9 @@ const LOCK_OPTIONS: { value: LockTimeout; label: string; description: string }[]
 ];
 
 export default function ProfileScreen() {
-  const user = useAuthStore.use.user();
+  const authUser = useAuthStore.use.user();
   const storeLogout = useAuthStore.use.logout();
+  const homepageData = useHomepageStore.use.data();
   const { isDark } = useAppTheme();
   const [loggingOut, setLoggingOut] = useState(false);
   const [securityExpanded, setSecurityExpanded] = useState(false);
@@ -59,13 +60,20 @@ export default function ProfileScreen() {
   const lockTimeout = useAppStore.use.lockTimeout();
   const setLockTimeout = useAppStore.use.setLockTimeout();
 
-  const fullName = user
-    ? `${user.first_name} ${user.last_name}`
-    : "User";
-  const email = user?.email ?? "";
-  const initials = user
-    ? `${user.first_name?.[0] ?? ""}${user.last_name?.[0] ?? ""}`.toUpperCase()
-    : "U";
+  const hpUser = homepageData?.user;
+  const firstName = hpUser?.first_name ?? authUser?.first_name ?? "";
+  const lastName = hpUser?.last_name ?? authUser?.last_name ?? "";
+  const fullName = `${firstName} ${lastName}`.trim() || "User";
+  const email = hpUser?.email ?? authUser?.email ?? "";
+  const phone = hpUser?.phone_number ?? authUser?.phone_number ?? "";
+  const smipayTag = hpUser?.smipay_tag ?? "";
+  const profileImage = hpUser?.profile_image ?? authUser?.profile_image ?? null;
+  const isVerified = hpUser?.is_email_verified ?? authUser?.is_email_verified ?? false;
+
+  const walletBalance = homepageData?.wallet_card?.current_balance ?? "₦0.00";
+  const tier = homepageData?.current_tier;
+
+  const initials = `${firstName?.[0] ?? ""}${lastName?.[0] ?? ""}`.toUpperCase() || "U";
 
   const cardBg = isDark ? "#1E293B" : "#F5F6F8";
   const dividerColor = isDark ? "#2D3A4D" : "#E8EAED";
@@ -77,7 +85,7 @@ export default function ProfileScreen() {
     try {
       await logoutApi();
     } catch {
-      // Silently ignore — we're logging out regardless
+      // Silently ignore
     }
     await storeLogout();
     useToastStore.getState().show({
@@ -230,21 +238,75 @@ export default function ProfileScreen() {
         contentContainerClassName="px-6 pb-24"
         showsVerticalScrollIndicator={false}
       >
+        {/* Profile card */}
         <View
           className="mt-4 items-center rounded-2xl px-6 py-6"
           style={{ backgroundColor: cardBg }}
         >
-          <View className="h-20 w-20 items-center justify-center rounded-full bg-primary">
-            <Text className="text-2xl font-bold text-primary-foreground">
-              {initials}
+          {profileImage ? (
+            <Image
+              source={{ uri: profileImage }}
+              className="h-20 w-20 rounded-full"
+              resizeMode="cover"
+            />
+          ) : (
+            <View className="h-20 w-20 items-center justify-center rounded-full bg-primary">
+              <Text className="text-2xl font-bold text-primary-foreground">
+                {initials}
+              </Text>
+            </View>
+          )}
+
+          <View className="mt-3 flex-row items-center gap-1.5">
+            <Text variant="h4" className="text-foreground">
+              {fullName}
             </Text>
+            {isVerified && (
+              <Ionicons name="checkmark-circle" size={18} color="#22C55E" />
+            )}
           </View>
-          <Text variant="h4" className="mt-3 text-foreground">
-            {fullName}
-          </Text>
+
+          {smipayTag !== "" && (
+            <Text className="mt-0.5 text-sm text-primary">
+              @{smipayTag}
+            </Text>
+          )}
+
           <Text className="mt-1 text-muted-foreground">{email}</Text>
+
+          {phone !== "" && (
+            <Text className="mt-0.5 text-sm text-muted-foreground">
+              {phone}
+            </Text>
+          )}
         </View>
 
+        {/* Wallet & Tier info */}
+        <View
+          className="mt-4 flex-row rounded-2xl px-4 py-4"
+          style={{ backgroundColor: cardBg }}
+        >
+          <View className="flex-1 items-center">
+            <Text className="text-xs text-muted-foreground">Wallet Balance</Text>
+            <Text className="mt-1 text-lg font-bold text-foreground">
+              {walletBalance}
+            </Text>
+          </View>
+
+          <View
+            className="mx-3"
+            style={{ width: 1, backgroundColor: dividerColor }}
+          />
+
+          <View className="flex-1 items-center">
+            <Text className="text-xs text-muted-foreground">Account Tier</Text>
+            <Text className="mt-1 text-lg font-bold text-foreground">
+              {tier?.name ?? "Basic"}
+            </Text>
+          </View>
+        </View>
+
+        {/* Menu items */}
         <View
           className="mt-6 overflow-hidden rounded-2xl"
           style={{ backgroundColor: cardBg }}

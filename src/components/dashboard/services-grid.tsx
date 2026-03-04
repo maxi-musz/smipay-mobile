@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { colors } from "@/constants/colors";
+import type { CashbackRate } from "@/types";
 
 type ServiceItem = {
   id: string;
@@ -12,7 +13,7 @@ type ServiceItem = {
   iconColor: string;
   bgColor: string;
   darkBgColor: string;
-  discount?: string;
+  cashbackService?: string;
   comingSoon?: boolean;
 };
 
@@ -24,7 +25,7 @@ const SERVICES: ServiceItem[] = [
     iconColor: colors.orange[500],
     bgColor: colors.orange[100],
     darkBgColor: colors.orange[950],
-    discount: "Up to 9% off",
+    cashbackService: "airtime",
   },
   {
     id: "data",
@@ -33,7 +34,7 @@ const SERVICES: ServiceItem[] = [
     iconColor: "#6366F1",
     bgColor: "#EEF2FF",
     darkBgColor: "#1E1B4B",
-    discount: "Up to 7% off",
+    cashbackService: "data",
   },
   {
     id: "cable-tv",
@@ -68,26 +69,42 @@ const SERVICES: ServiceItem[] = [
     darkBgColor: "#082F49",
   },
   {
-    id: "cards",
-    icon: "card",
-    label: "Cards",
+    id: "savings",
+    icon: "trending-up",
+    label: "Savings",
     iconColor: colors.green[500],
     bgColor: colors.green[100],
     darkBgColor: colors.green[950],
     comingSoon: true,
   },
   {
-    id: "betting",
-    icon: "football",
-    label: "Betting",
-    iconColor: colors.orange[500],
-    bgColor: colors.orange[100],
-    darkBgColor: colors.orange[950],
+    id: "streaming",
+    icon: "repeat",
+    label: "Subscriptions",
+    iconColor: "#6366F1",
+    bgColor: "#EEF2FF",
+    darkBgColor: "#1E1B4B",
     comingSoon: true,
   },
 ];
 
-export function ServicesGrid() {
+interface ServicesGridProps {
+  cashbackRates?: CashbackRate[];
+}
+
+function getCashbackLabel(
+  service: ServiceItem,
+  rates?: CashbackRate[],
+): string | null {
+  if (!rates || !service.cashbackService) return null;
+
+  const rate = rates.find((r) => r.service === service.cashbackService);
+  if (!rate || !rate.is_active || rate.percentage <= 0) return null;
+
+  return `${rate.percentage}% cashback`;
+}
+
+export function ServicesGrid({ cashbackRates }: ServicesGridProps) {
   const { isDark } = useAppTheme();
 
   return (
@@ -104,6 +121,7 @@ export function ServicesGrid() {
             key={service.id}
             service={service}
             isDark={isDark}
+            cashbackLabel={getCashbackLabel(service, cashbackRates)}
           />
         ))}
       </View>
@@ -114,9 +132,11 @@ export function ServicesGrid() {
 function ServiceIcon({
   service,
   isDark,
+  cashbackLabel,
 }: {
   service: ServiceItem;
   isDark: boolean;
+  cashbackLabel: string | null;
 }) {
   const bg = isDark ? service.darkBgColor : service.bgColor;
 
@@ -127,10 +147,13 @@ function ServiceIcon({
       disabled={service.comingSoon}
     >
       <View className="relative">
-        {service.discount && (
-          <View className="absolute -top-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-destructive px-2 py-0.5">
+        {cashbackLabel && (
+          <View
+            className="absolute -top-2 left-1/2 z-10 -translate-x-1/2 rounded-full px-2.5 py-0.5"
+            style={{ backgroundColor: colors.green[500] }}
+          >
             <Text className="text-[9px] font-bold text-white" numberOfLines={1}>
-              {service.discount}
+              {cashbackLabel}
             </Text>
           </View>
         )}

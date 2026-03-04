@@ -9,3 +9,16 @@ export type {
   SignInPayload,
   ResetPasswordPayload,
 } from "./api";
+export type {
+  HomepageData,
+  HomepageUser,
+  WalletCard,
+  CashbackWallet,
+  CashbackRate,
+  AccountDVA,
+  TransactionItem,
+  KycVerification,
+  TierLimits,
+  CurrentTier,
+  RewardBanner,
+} from "./homepage";

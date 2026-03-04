@@ -10,3 +10,5 @@ export {
   logout,
   completeOnboarding,
 } from "./services/auth";
+
+export { fetchHomepageDetails } from "./services/user";

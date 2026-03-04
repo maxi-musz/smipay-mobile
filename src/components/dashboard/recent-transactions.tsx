@@ -5,27 +5,19 @@ import { router } from "expo-router";
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { colors } from "@/constants/colors";
+import type { TransactionItem } from "@/types";
 
-type TransactionStatus = "success" | "pending" | "failed" | "cancelled";
-
-export interface Transaction {
-  id: string;
-  title: string;
-  date: string;
-  amount: number;
-  type: "credit" | "debit";
-  status: TransactionStatus;
-}
+type TransactionStatus = "successful" | "pending" | "failed" | "cancelled";
 
 interface RecentTransactionsProps {
-  transactions: Transaction[];
+  transactions: TransactionItem[];
 }
 
 const STATUS_CONFIG: Record<
   TransactionStatus,
   { label: string; color: string; bgColor: string }
 > = {
-  success: {
+  successful: {
     label: "SUCCESS",
     color: colors.green[500],
     bgColor: colors.green[50],
@@ -47,8 +39,8 @@ const STATUS_CONFIG: Record<
   },
 };
 
-function formatAmount(amount: number, type: "credit" | "debit"): string {
-  const sign = type === "credit" ? "+" : "-";
+function formatAmount(amount: number, creditDebit: "credit" | "debit"): string {
+  const sign = creditDebit === "credit" ? "+" : "-";
   return `${sign}₦${new Intl.NumberFormat("en-NG").format(amount)}`;
 }
 
@@ -106,13 +98,14 @@ function TransactionRow({
   isLast,
   isDark,
 }: {
-  transaction: Transaction;
+  transaction: TransactionItem;
   isLast: boolean;
   isDark: boolean;
 }) {
-  const status = STATUS_CONFIG[transaction.status];
+  const statusKey = transaction.status as TransactionStatus;
+  const status = STATUS_CONFIG[statusKey] ?? STATUS_CONFIG.pending;
   const amountColor =
-    transaction.type === "credit" ? colors.green[500] : colors.error;
+    transaction.credit_debit === "credit" ? colors.green[500] : colors.error;
 
   const iconBg = isDark ? "rgba(255,255,255,0.08)" : colors.gray[100];
   const iconColor = isDark ? colors.gray[400] : colors.gray[500];
@@ -129,7 +122,7 @@ function TransactionRow({
       >
         <Ionicons
           name={
-            transaction.type === "credit"
+            transaction.credit_debit === "credit"
               ? "arrow-down-outline"
               : "arrow-up-outline"
           }
@@ -140,7 +133,7 @@ function TransactionRow({
 
       <View className="flex-1">
         <Text className="text-[15px] font-medium text-foreground">
-          {transaction.title}
+          {transaction.description}
         </Text>
         <Text className="mt-0.5 text-xs text-muted-foreground">
           {transaction.date}
@@ -149,7 +142,7 @@ function TransactionRow({
 
       <View className="items-end">
         <Text className="text-[15px] font-semibold" style={{ color: amountColor }}>
-          {formatAmount(transaction.amount, transaction.type)}
+          {formatAmount(transaction.amount, transaction.credit_debit)}
         </Text>
         <View
           className="mt-1 rounded-full px-2 py-0.5"

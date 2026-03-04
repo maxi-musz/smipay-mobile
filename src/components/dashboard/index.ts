@@ -4,4 +4,3 @@ export { PromoBanner } from "./promo-banner";
 export { ServicesGrid } from "./services-grid";
 export { TransferSection } from "./transfer-section";
 export { RecentTransactions } from "./recent-transactions";
-export type { Transaction } from "./recent-transactions";

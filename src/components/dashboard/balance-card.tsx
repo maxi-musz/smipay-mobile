@@ -7,19 +7,14 @@ import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
 
 interface BalanceCardProps {
-  balance: number;
-  cashback?: number;
+  walletBalance: string;
+  cashbackBalance: string;
 }
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-NG", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
-export function BalanceCard({ balance, cashback = 0 }: BalanceCardProps) {
+export function BalanceCard({ walletBalance, cashbackBalance }: BalanceCardProps) {
   const [balanceVisible, setBalanceVisible] = useState(true);
+
+  const hasCashback = cashbackBalance !== "₦0.00" && cashbackBalance !== "";
 
   return (
     <View
@@ -32,7 +27,7 @@ export function BalanceCard({ balance, cashback = 0 }: BalanceCardProps) {
 
       <View className="mt-2 flex-row items-center gap-3">
         <Text className="text-3xl font-bold text-white">
-          {balanceVisible ? `₦${formatCurrency(balance)}` : "₦ • • • • •"}
+          {balanceVisible ? walletBalance : "₦ • • • • •"}
         </Text>
         <Pressable
           onPress={() => setBalanceVisible((v) => !v)}
@@ -46,12 +41,12 @@ export function BalanceCard({ balance, cashback = 0 }: BalanceCardProps) {
         </Pressable>
       </View>
 
-      {cashback > 0 && (
+      {hasCashback && (
         <Text
           className="mt-1 text-sm font-medium"
           style={{ color: colors.green[400] }}
         >
-          Cashback: {cashback}
+          Cashback: {cashbackBalance}
         </Text>
       )}
 

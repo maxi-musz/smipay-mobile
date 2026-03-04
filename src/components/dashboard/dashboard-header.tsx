@@ -5,13 +5,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { Text } from "@/components/ui/text";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import { useAuthStore } from "@/store";
+import { useAuthStore, useHomepageStore } from "@/store";
 
 export function DashboardHeader() {
-  const user = useAuthStore.use.user();
+  const authUser = useAuthStore.use.user();
+  const homepageData = useHomepageStore.use.data();
   const lock = useAuthStore.use.lock();
   const { isDark } = useAppTheme();
-  const firstName = user?.first_name ?? "there";
+
+  const firstName =
+    homepageData?.user?.first_name ?? authUser?.first_name ?? "there";
 
   return (
     <View className="flex-row items-center justify-between px-5 pb-3 pt-2">

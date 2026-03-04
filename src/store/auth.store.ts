@@ -74,6 +74,8 @@ const _useAuthStore = create<AuthStore>()(
 
       logout: async () => {
         await clearAllSecureData();
+        const { useHomepageStore } = await import("./homepage.store");
+        useHomepageStore.getState().reset();
         set(initialState);
       },
 
