@@ -23,6 +23,9 @@ const initialState: HomepageState = {
   error: null,
 };
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1500;
+
 const _useHomepageStore = create<HomepageStore>()((set, get) => ({
   ...initialState,
 
@@ -31,14 +34,23 @@ const _useHomepageStore = create<HomepageStore>()((set, get) => ({
 
     set({ isLoading: true, error: null });
 
-    try {
-      const response = await fetchHomepageDetails();
-      set({ data: response.data, isLoading: false });
-    } catch (e: unknown) {
-      const message =
-        e instanceof Error ? e.message : "Failed to load homepage data";
-      set({ error: message, isLoading: false });
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetchHomepageDetails();
+        set({ data: response.data, isLoading: false });
+        return;
+      } catch {
+        if (attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        }
+      }
     }
+
+    set({
+      error:
+        "Unable to load dashboard. Please check your connection and try again.",
+      isLoading: false,
+    });
   },
 
   reset: () => set(initialState),

@@ -19,6 +19,8 @@ interface AppState {
   themeMode: ThemeMode;
   /** App lock setting — when to lock after backgrounding. */
   lockTimeout: LockTimeout;
+  /** Whether user has enabled biometrics for app unlock. */
+  biometricsEnabled: boolean;
 }
 
 interface AppActions {
@@ -27,6 +29,7 @@ interface AppActions {
   setNotificationCount: (count: number) => void;
   setThemeMode: (mode: ThemeMode) => void;
   setLockTimeout: (timeout: LockTimeout) => void;
+  setBiometricsEnabled: (value: boolean) => void;
   reset: () => void;
 }
 
@@ -38,6 +41,7 @@ const initialState: AppState = {
   notificationCount: 0,
   themeMode: "system",
   lockTimeout: "immediate",
+  biometricsEnabled: false,
 };
 
 const _useAppStore = create<AppStore>()(
@@ -55,12 +59,15 @@ const _useAppStore = create<AppStore>()(
 
       setLockTimeout: (lockTimeout) => set({ lockTimeout }),
 
+      setBiometricsEnabled: (biometricsEnabled) => set({ biometricsEnabled }),
+
       reset: () => set(initialState),
     }),
     createPersistConfig("app", {
       partialize: (state) => ({
         themeMode: state.themeMode,
         lockTimeout: state.lockTimeout,
+        biometricsEnabled: state.biometricsEnabled,
       }),
     }),
   ),

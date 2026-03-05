@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 
 import type { AuthTokens, User } from "@/types";
 import { secureStorage, SECURE_KEYS } from "@/lib/secure-storage";
+import { useAppStore } from "./app.store";
 import { createPersistConfig } from "./middleware";
 import { createSelectors } from "./create-selectors";
 
@@ -22,8 +23,8 @@ interface AuthActions {
   updateUser: (partial: Partial<User>) => void;
   /** Rehydrate tokens from SecureStore into memory on app launch. */
   hydrateTokens: () => Promise<void>;
-  /** Store email + password in SecureStore for lock screen re-auth. */
-  storeCredentials: (email: string, password: string) => Promise<void>;
+  /** Store email + password in SecureStore for lock screen re-auth. Options.requireAuthentication (e.g. iOS) gates password behind biometrics. */
+  storeCredentials: (email: string, password: string, options?: { requireAuthentication?: boolean }) => Promise<void>;
   /** Lock the app (show lock screen overlay). */
   lock: () => void;
   /** Unlock the app after successful re-auth. */
@@ -74,6 +75,7 @@ const _useAuthStore = create<AuthStore>()(
 
       logout: async () => {
         await clearAllSecureData();
+        useAppStore.getState().setBiometricsEnabled(false);
         const { useHomepageStore } = await import("./homepage.store");
         useHomepageStore.getState().reset();
         set(initialState);
@@ -95,10 +97,10 @@ const _useAuthStore = create<AuthStore>()(
         }
       },
 
-      storeCredentials: async (email, password) => {
+      storeCredentials: async (email, password, options?: { requireAuthentication?: boolean }) => {
         await Promise.all([
           secureStorage.set(SECURE_KEYS.USER_EMAIL, email),
-          secureStorage.set(SECURE_KEYS.USER_PASSWORD, password),
+          secureStorage.set(SECURE_KEYS.USER_PASSWORD, password, options),
         ]);
       },
 
@@ -110,7 +112,11 @@ const _useAuthStore = create<AuthStore>()(
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,
+        isLocked: state.isLocked,
       }),
+      onRehydrateStorage: () => () => {
+        useAppStore.getState().setHydrated(true);
+      },
     }),
   ),
 );

@@ -31,3 +31,11 @@ export type {
   HistoryListData,
   SingleTransaction,
 } from "./history";
+export type {
+  UserProfileData,
+  ProfileUser,
+  ProfileAddress,
+  ProfileKycVerification,
+  ProfileWalletCard,
+  ProfileTier,
+} from "./profile";

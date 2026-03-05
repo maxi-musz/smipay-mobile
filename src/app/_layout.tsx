@@ -10,6 +10,7 @@ import { useColorScheme } from "nativewind";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { LockScreen } from "@/components/lock-screen";
+import { FullPageLoader } from "@/components/ui/loaders";
 import { SplashOverlay } from "@/components/splash-overlay";
 import { ToastContainer } from "@/components/ui/toast";
 import { ThemeProvider } from "@/context/theme-context";
@@ -18,7 +19,7 @@ import {
   startInactivityTracking,
   stopInactivityTracking,
 } from "@/lib/inactivity";
-import { useAuthStore } from "@/store";
+import { useAppStore, useAuthStore } from "@/store";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -27,6 +28,7 @@ function InnerLayout() {
   const { setColorScheme } = useColorScheme();
   const [showSplash, setShowSplash] = useState(true);
 
+  const isHydrated = useAppStore.use.isHydrated();
   const isAuthenticated = useAuthStore.use.isAuthenticated();
   const isLocked = useAuthStore.use.isLocked();
 
@@ -51,6 +53,30 @@ function InnerLayout() {
     setShowSplash(false);
   }, []);
 
+  // Wait for auth rehydration before deciding route; avoids flashing dashboard then lock.
+  if (!isHydrated) {
+    return (
+      <View className="flex-1 bg-background">
+        <StatusBar style="dark" />
+        <FullPageLoader message="Loading..." />
+        <ToastContainer />
+        <PortalHost />
+      </View>
+    );
+  }
+
+  // When locked, show only lock screen so user never sees dashboard.
+  if (isAuthenticated && isLocked) {
+    return (
+      <View className="flex-1 bg-background">
+        <StatusBar style={isDark ? "light" : "dark"} />
+        <LockScreen />
+        <ToastContainer />
+        <PortalHost />
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1">
       <StatusBar style={showSplash ? "dark" : isDark ? "light" : "dark"} />
@@ -61,7 +87,6 @@ function InnerLayout() {
         }}
       />
       {showSplash && <SplashOverlay onFinish={handleSplashFinish} />}
-      {isAuthenticated && isLocked && !showSplash && <LockScreen />}
       <ToastContainer />
       <PortalHost />
     </View>

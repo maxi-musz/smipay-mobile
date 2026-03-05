@@ -11,7 +11,7 @@ export {
   completeOnboarding,
 } from "./services/auth";
 
-export { fetchHomepageDetails } from "./services/user";
+export { fetchHomepageDetails, fetchUserProfile } from "./services/user";
 export {
   fetchTransactionHistory,
   fetchTransactionById,

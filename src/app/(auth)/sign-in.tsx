@@ -19,15 +19,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
+import { authenticate, getBiometricsAvailability, getBiometricLabel } from "@/lib/biometrics";
 import { handleApiError } from "@/lib/errors";
-import { secureStorage, SECURE_KEYS } from "@/lib/secure-storage";
-import { useAuthStore } from "@/store";
+import { canUseRequireAuthentication, secureStorage, SECURE_KEYS } from "@/lib/secure-storage";
+import { useAuthStore, useAppStore } from "@/store";
 
 const EMAIL_RE = /\S+@\S+\.\S+/;
 
 export default function SignInScreen() {
   const login = useAuthStore.use.login();
   const storeCredentials = useAuthStore.use.storeCredentials();
+  const setBiometricsEnabled = useAppStore.use.setBiometricsEnabled();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -73,7 +75,40 @@ export default function SignInScreen() {
         },
       );
       await storeCredentials(trimmedEmail, password);
-      router.replace("/(app)/(tabs)");
+
+      const availability = await getBiometricsAvailability();
+      if (!availability.available) {
+        router.replace("/(app)/(tabs)");
+        return;
+      }
+
+      const label = getBiometricLabel(availability);
+      Alert.alert(
+        "Unlock with " + label + "?",
+        "Use " + label + " to unlock SmiPay next time you open the app.",
+        [
+          {
+            text: "Not now",
+            style: "cancel",
+            onPress: () => router.replace("/(app)/(tabs)"),
+          },
+          {
+            text: "Yes",
+            onPress: async () => {
+              const result = await authenticate({
+                promptMessage: "Use " + label + " to unlock SmiPay",
+              });
+              if (result.success) {
+                await storeCredentials(trimmedEmail, password, canUseRequireAuthentication()
+                  ? { requireAuthentication: true }
+                  : undefined);
+                setBiometricsEnabled(true);
+              }
+              router.replace("/(app)/(tabs)");
+            },
+          },
+        ],
+      );
     } catch (e) {
       handleApiError(e);
     } finally {

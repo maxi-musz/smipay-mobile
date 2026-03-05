@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.smipay.mobile"
+      "bundleIdentifier": "com.smipay.mobile",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "SmiPay uses Face ID to unlock the app securely."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -37,6 +40,12 @@
       ],
       "expo-font",
       "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow SmiPay to use Face ID to unlock the app securely."
+        }
+      ],
       [
         "expo-location",
         {

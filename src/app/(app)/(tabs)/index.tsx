@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -21,18 +21,21 @@ export default function HomeScreen() {
   const isLoading = useHomepageStore.use.isLoading();
   const error = useHomepageStore.use.error();
   const fetchHomepage = useHomepageStore.use.fetchHomepage();
+  const wasLockedRef = useRef(isLocked);
 
-  // Fetch on mount.
+  // Fetch on mount only.
   useEffect(() => {
     fetchHomepage();
   }, [fetchHomepage]);
 
-  // After unlock, if we're showing an error (e.g. Unauthorized from before unlock), refetch so dashboard loads with new token.
+  // After unlock only: refetch once so dashboard loads with new token. Do not refetch on every error (avoids loop when backend is down).
   useEffect(() => {
-    if (!isLocked && error && !data) {
+    const justUnlocked = wasLockedRef.current && !isLocked;
+    wasLockedRef.current = isLocked;
+    if (justUnlocked && !data) {
       fetchHomepage();
     }
-  }, [isLocked, error, data, fetchHomepage]);
+  }, [isLocked, data, fetchHomepage]);
 
   if (isLoading && !data) {
     return (
