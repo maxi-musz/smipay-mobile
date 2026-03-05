@@ -5,6 +5,7 @@ import {
   ScrollView,
   View,
 } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, router } from "expo-router";
@@ -119,7 +120,10 @@ export default function SupportListScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-1" style={{ backgroundColor: bg }}>
-        <View className="flex-row items-center justify-between px-5 pb-3 pt-14">
+        <Animated.View
+          className="flex-row items-center justify-between px-5 pb-3 pt-14"
+          entering={FadeInDown.duration(400).springify().damping(15)}
+        >
           <Pressable
             onPress={() => router.back()}
             className="h-9 w-9 items-center justify-center rounded-full active:opacity-70"
@@ -131,7 +135,7 @@ export default function SupportListScreen() {
             Help & Support
           </Text>
           <View className="h-9 w-9" />
-        </View>
+        </Animated.View>
 
         {loading ? (
           <FullPageLoader message="Loading..." />
@@ -140,7 +144,10 @@ export default function SupportListScreen() {
             <Text className="text-center text-muted-foreground">{error}</Text>
           </View>
         ) : conversations.length === 0 ? (
-          <View className="flex-1 items-center justify-center px-8">
+          <Animated.View
+            className="flex-1 items-center justify-center px-8"
+            entering={FadeInDown.delay(80).duration(380).springify().damping(15)}
+          >
             <View className="mb-4 h-16 w-16 items-center justify-center rounded-full bg-primary/10">
               <Ionicons name="headset-outline" size={32} color="#F4831F" />
             </View>
@@ -156,7 +163,7 @@ export default function SupportListScreen() {
             >
               <Text className="font-semibold text-primary-foreground">Start Chat</Text>
             </Button>
-          </View>
+          </Animated.View>
         ) : (
           <ScrollView
             className="flex-1"
@@ -166,16 +173,23 @@ export default function SupportListScreen() {
             }
             showsVerticalScrollIndicator={false}
           >
-            <Button
-              className="mb-4"
-              onPress={() => router.push("/(app)/support/chat")}
+            <Animated.View
+              entering={FadeInDown.delay(80).duration(380).springify().damping(15)}
             >
-              <Text className="font-semibold text-primary-foreground">Start new chat</Text>
-            </Button>
+              <Button
+                className="mb-4"
+                onPress={() => router.push("/(app)/support/chat")}
+              >
+                <Text className="font-semibold text-primary-foreground">Start new chat</Text>
+              </Button>
+            </Animated.View>
 
-            {conversations.map((conv) => (
-              <Pressable
+            {conversations.map((conv, index) => (
+              <Animated.View
                 key={conv.id}
+                entering={FadeInDown.delay(160 + index * 60).duration(380).springify().damping(15)}
+              >
+                <Pressable
                 className="mb-3 flex-row overflow-hidden rounded-2xl py-4 px-4 active:opacity-70"
                 style={{ backgroundColor: cardBg }}
                 onPress={() =>
@@ -222,6 +236,7 @@ export default function SupportListScreen() {
                   color={isDark ? "#808999" : "#9CA3B0"}
                 />
               </Pressable>
+              </Animated.View>
             ))}
           </ScrollView>
         )}

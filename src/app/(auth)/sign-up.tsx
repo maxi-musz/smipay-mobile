@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { Link, router } from "expo-router";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -263,7 +264,10 @@ export default function SignUpScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* ── Header ── */}
-          <View className={`items-center ${step === "profile" ? "mt-4" : ""}`}>
+          <Animated.View
+            className={`items-center ${step === "profile" ? "mt-4" : ""}`}
+            entering={FadeInDown.duration(400).springify().damping(15)}
+          >
             <Image
               source={require("@/assets/images/icon.png")}
               className="mb-3 h-14 w-14 rounded-2xl"
@@ -279,16 +283,22 @@ export default function SignUpScreen() {
               {step === "otp" && `Code sent to ${email}`}
               {step === "profile" && "Just a few more details"}
             </Text>
-          </View>
+          </Animated.View>
 
           {/* ── Step indicator ── */}
-          <View className="mt-5">
+          <Animated.View
+            className="mt-5"
+            entering={FadeInDown.delay(60).duration(380).springify().damping(15)}
+          >
             <StepIndicator />
-          </View>
+          </Animated.View>
 
           {/* ── Step 1: Email ── */}
           {step === "email" && (
-            <View className="mt-8 gap-5">
+            <Animated.View
+              className="mt-8 gap-5"
+              entering={FadeInDown.delay(120).duration(380).springify().damping(15)}
+            >
               <Input
                 label="Email Address"
                 placeholder="you@example.com"
@@ -327,12 +337,15 @@ export default function SignUpScreen() {
                   </Text>
                 </Link>
               </View>
-            </View>
+            </Animated.View>
           )}
 
           {/* ── Step 2: OTP ── */}
           {step === "otp" && (
-            <View className="mt-8 gap-5">
+            <Animated.View
+              className="mt-8 gap-5"
+              entering={FadeInDown.delay(120).duration(380).springify().damping(15)}
+            >
               <Input
                 label="Verification Code"
                 placeholder="0000"
@@ -370,12 +383,15 @@ export default function SignUpScreen() {
                     : "Resend code"}
                 </Text>
               </Pressable>
-            </View>
+            </Animated.View>
           )}
 
           {/* ── Step 3: Profile ── */}
           {step === "profile" && (
-            <View className="mt-6 gap-5">
+            <Animated.View
+              className="mt-6 gap-5"
+              entering={FadeInDown.delay(120).duration(380).springify().damping(15)}
+            >
               {/* Name — side by side */}
               <View className="flex-row gap-3">
                 <View className="flex-1">
@@ -499,7 +515,7 @@ export default function SignUpScreen() {
                   </Text>
                 )}
               </Button>
-            </View>
+            </Animated.View>
           )}
         </ScrollView>
       </KeyboardAvoidingView>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Image, Linking, Pressable, ScrollView, View } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { logout as logoutApi, removePushToken } from "@/api";
@@ -141,7 +142,10 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <View className="flex-row items-center justify-between px-6 pb-2 pt-3">
+      <Animated.View
+        className="flex-row items-center justify-between px-6 pb-2 pt-3"
+        entering={FadeInDown.duration(380).springify().damping(15)}
+      >
         <Text variant="h3" className="text-foreground">
           Profile
         </Text>
@@ -161,7 +165,7 @@ export default function ProfileScreen() {
           </Pressable>
           <ThemeToggle size={18} />
         </View>
-      </View>
+      </Animated.View>
 
       <ScrollView
         className="flex-1"
@@ -169,9 +173,10 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Profile card */}
-        <View
+        <Animated.View
           className="mt-4 items-center rounded-2xl px-6 py-6"
           style={{ backgroundColor: cardBg }}
+          entering={FadeInDown.delay(60).duration(380).springify().damping(15)}
         >
           {profileImage ? (
             <Image
@@ -209,12 +214,13 @@ export default function ProfileScreen() {
               {phone}
             </Text>
           )}
-        </View>
+        </Animated.View>
 
         {/* Wallet & Tier info */}
-        <View
+        <Animated.View
           className="mt-4 flex-row rounded-2xl px-4 py-4"
           style={{ backgroundColor: cardBg }}
+          entering={FadeInDown.delay(120).duration(380).springify().damping(15)}
         >
           <View className="flex-1 items-center">
             <Text className="text-xs text-muted-foreground">Wallet Balance</Text>
@@ -234,22 +240,26 @@ export default function ProfileScreen() {
               {tier?.name ?? "Basic"}
             </Text>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Menu items */}
-        <View
+        <Animated.View
           className="mt-6 overflow-hidden rounded-2xl"
           style={{ backgroundColor: cardBg }}
+          entering={FadeInDown.delay(180).duration(380).springify().damping(15)}
         >
           {menuItems.map((item, index) => renderMenuItem(item, index))}
-        </View>
+        </Animated.View>
 
-        <Button
-          variant="outline"
-          className="mt-6 h-12 rounded-2xl border-destructive"
-          onPress={handleLogout}
-          disabled={loggingOut}
+        <Animated.View
+          entering={FadeInDown.delay(240).duration(380).springify().damping(15)}
         >
+          <Button
+            variant="outline"
+            className="mt-6 h-12 rounded-2xl border-destructive"
+            onPress={handleLogout}
+            disabled={loggingOut}
+          >
           {loggingOut ? (
             <Spinner color="#ef4444" />
           ) : (
@@ -257,7 +267,8 @@ export default function ProfileScreen() {
               Sign Out
             </Text>
           )}
-        </Button>
+          </Button>
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );

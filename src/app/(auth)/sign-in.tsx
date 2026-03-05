@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Link, router } from "expo-router";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { signIn } from "@/api";
@@ -126,7 +127,10 @@ export default function SignInScreen() {
           contentContainerClassName="flex-grow justify-center px-6 py-12"
           keyboardShouldPersistTaps="handled"
         >
-          <View className="items-center">
+          <Animated.View
+            className="items-center"
+            entering={FadeInDown.duration(400).springify().damping(15)}
+          >
             <Image
               source={require("@/assets/images/icon.png")}
               className="mb-3 h-14 w-14 rounded-2xl"
@@ -134,9 +138,12 @@ export default function SignInScreen() {
             />
             <Text variant="h3" className="text-primary">SmiPay</Text>
             <Text className="mt-1 text-muted-foreground">Welcome back</Text>
-          </View>
+          </Animated.View>
 
-          <View className="mt-10 gap-4">
+          <Animated.View
+            className="mt-10 gap-4"
+            entering={FadeInDown.delay(80).duration(380).springify().damping(15)}
+          >
             <Input
               label="Email"
               placeholder="you@example.com"
@@ -169,28 +176,35 @@ export default function SignInScreen() {
                 Forgot password?
               </Text>
             </Link>
-          </View>
+          </Animated.View>
 
-          <Button
-            className="mt-8 h-14 rounded-2xl"
-            onPress={handleSignIn}
-            disabled={!canSubmit}
+          <Animated.View
+            entering={FadeInDown.delay(160).duration(380).springify().damping(15)}
           >
+            <Button
+              className="mt-8 h-14 rounded-2xl"
+              onPress={handleSignIn}
+              disabled={!canSubmit}
+            >
             {loading ? (
               <Spinner color="#fff" />
             ) : (
               <Text className="text-base font-semibold">Sign In</Text>
             )}
-          </Button>
+            </Button>
+          </Animated.View>
 
-          <View className="mt-6 flex-row items-center justify-center gap-1">
+          <Animated.View
+            className="mt-6 flex-row items-center justify-center gap-1"
+            entering={FadeInDown.delay(240).duration(380).springify().damping(15)}
+          >
             <Text className="text-muted-foreground">
               Do not have an account?
             </Text>
             <Link href="/(auth)/sign-up" asChild>
               <Text className="font-semibold text-primary">Create one</Text>
             </Link>
-          </View>
+          </Animated.View>
 
           {__DEV__ && (
             <Pressable

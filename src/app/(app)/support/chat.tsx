@@ -4,10 +4,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   TextInput,
   View,
 } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useLocalSearchParams, router } from "expo-router";
@@ -82,6 +84,7 @@ export default function SupportChatScreen() {
   const [ticket, setTicket] = useState<SupportTicket | null>(null);
   const [satisfactionRating, setSatisfactionRating] = useState<number | null>(null);
   const [loading, setLoading] = useState(!!conversationId);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
@@ -147,6 +150,33 @@ export default function SupportChatScreen() {
       cancelled = true;
     };
   }, [conversationId]);
+
+  const refreshConversation = useCallback(async () => {
+    const id = conversationIdState ?? conversationId;
+    if (!id) return;
+    setRefreshing(true);
+    setError(null);
+    try {
+      const response = await fetchConversationById(id);
+      const conv = response.data.conversation;
+      setMessages(conv.messages ?? []);
+      setAssignedAdminName(conv.assigned_admin_name ?? null);
+      setStatus(conv.status);
+      setTicket(conv.ticket ?? null);
+      setSatisfactionRating((prev) => conv.satisfaction_rating ?? prev);
+      conversationCache.set(id, {
+        messages: conv.messages ?? [],
+        assignedAdminName: conv.assigned_admin_name ?? null,
+        status: conv.status,
+        ticket: conv.ticket ?? null,
+        satisfactionRating: conv.satisfaction_rating ?? null,
+      });
+    } catch {
+      setError("Unable to refresh conversation.");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [conversationId, conversationIdState]);
 
   // Use actual keyboard height so input bar sits flush on keyboard (like WhatsApp). Avoids
   // KeyboardAvoidingView gap on iOS.
@@ -408,9 +438,10 @@ export default function SupportChatScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-1" style={{ backgroundColor: bg }}>
-        <View
+        <Animated.View
           className="flex-row items-center justify-between border-b border-border px-4 pb-3 pt-12"
           style={{ backgroundColor: cardBg }}
+          entering={FadeInDown.duration(400).springify().damping(15)}
         >
           <Pressable
             onPress={() => router.back()}
@@ -434,25 +465,38 @@ export default function SupportChatScreen() {
             )}
           </View>
           <View className="h-9 w-9" />
-        </View>
+        </Animated.View>
 
         {ticket && (
-          <View
+          <Animated.View
             className="mx-4 mt-2 rounded-lg px-3 py-2"
             style={{ backgroundColor: isDark ? "#1E3A5F" : "#FFF3E8" }}
+            entering={FadeInDown.delay(60).duration(380).springify().damping(15)}
           >
             <Text className="text-xs font-medium text-primary">
               Ticket: {ticket.ticket_number}
             </Text>
-          </View>
+          </Animated.View>
         )}
 
-        <View className="flex-1">
+        <Animated.View
+          className="flex-1"
+          entering={FadeInDown.delay(120).duration(380).springify().damping(15)}
+        >
           <ScrollView
             ref={scrollRef}
             className="flex-1 px-4 py-3"
             contentContainerStyle={{ flexGrow: 1 }}
             keyboardShouldPersistTaps="handled"
+            refreshControl={
+              currentConvId ? (
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={refreshConversation}
+                  tintColor="#F4831F"
+                />
+              ) : undefined
+            }
           >
             {messages.length === 0 && !currentConvId && (
               <View className="flex-1 justify-center px-4 py-8">
@@ -599,7 +643,7 @@ export default function SupportChatScreen() {
               </Pressable>
             </View>
           )}
-        </View>
+        </Animated.View>
       </View>
     </>
   );

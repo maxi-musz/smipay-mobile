@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Image, Pressable, ScrollView, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -116,7 +125,9 @@ export default function HistoryScreen() {
 
     try {
       setError(null);
-      if (opts?.page === 1 || page === 1) {
+      if (opts?.page === 1 && transactions.length > 0) {
+        setIsRefreshing(true);
+      } else if (opts?.page === 1 || page === 1) {
         setIsLoading(true);
       } else {
         setIsRefreshing(true);
@@ -166,7 +177,10 @@ export default function HistoryScreen() {
 
   function renderHeader() {
     return (
-      <View className="px-6 pb-3 pt-3">
+      <Animated.View
+        className="px-6 pb-3 pt-3"
+        entering={FadeInDown.duration(400).springify().damping(15)}
+      >
         <Text variant="h3" className="text-foreground">
           History
         </Text>
@@ -224,23 +238,26 @@ export default function HistoryScreen() {
             })}
           </ScrollView>
         )}
-      </View>
+      </Animated.View>
     );
   }
 
-  function renderItem({ item }: { item: HistoryTransaction }) {
+  function renderItem({ item, index }: { item: HistoryTransaction; index: number }) {
     const localLogo = getProviderLogo(item.description);
     const isCredit = item.credit_debit === "credit";
 
     return (
-      <Pressable
-        onPress={() => router.push(`/(app)/history/${item.id}`)}
-        className="mx-5 mb-2.5 flex-row items-center rounded-2xl px-4 py-3 active:opacity-80"
-        style={{
-          backgroundColor: isDark ? "#111827" : "#FFFFFF",
-        }}
+      <Animated.View
+        entering={FadeInDown.delay(index * 45).duration(320).springify().damping(14)}
       >
-        <TxIcon
+        <Pressable
+          onPress={() => router.push(`/(app)/history/${item.id}`)}
+          className="mx-5 mb-2.5 flex-row items-center rounded-2xl px-4 py-3 active:opacity-80"
+          style={{
+            backgroundColor: isDark ? "#111827" : "#FFFFFF",
+          }}
+        >
+          <TxIcon
           localLogo={localLogo}
           remoteIcon={item.icon}
           isCredit={isCredit}
@@ -267,7 +284,8 @@ export default function HistoryScreen() {
           </Text>
           <StatusPill status={item.status as HistoryStatus} isDark={isDark} />
         </View>
-      </Pressable>
+        </Pressable>
+      </Animated.View>
     );
   }
 
@@ -318,6 +336,16 @@ export default function HistoryScreen() {
           contentContainerStyle={{ paddingBottom: 80 }}
           onEndReachedThreshold={0.4}
           onEndReached={handleEndReached}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => {
+                setPage(1);
+                loadHistory({ page: 1 });
+              }}
+              tintColor={colors.orange[500]}
+            />
+          }
           ListFooterComponent={
             isRefreshing ? (
               <View className="py-4">

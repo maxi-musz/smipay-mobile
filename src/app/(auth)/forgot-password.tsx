@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { router } from "expo-router";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { forgotPassword, resetPassword } from "@/api";
@@ -158,7 +159,10 @@ export default function ForgotPasswordScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* Header */}
-          <View className="items-center">
+          <Animated.View
+            className="items-center"
+            entering={FadeInDown.duration(400).springify().damping(15)}
+          >
             <Image
               source={require("@/assets/images/icon.png")}
               className="mb-3 h-14 w-14 rounded-2xl"
@@ -172,11 +176,14 @@ export default function ForgotPasswordScreen() {
                 ? "Enter your email and we'll send you a reset code."
                 : `Enter the code sent to ${email} and your new password.`}
             </Text>
-          </View>
+          </Animated.View>
 
           {/* ── Step 1: Email ── */}
           {step === "email" && (
-            <View className="mt-10 gap-4">
+            <Animated.View
+              className="mt-10 gap-4"
+              entering={FadeInDown.delay(80).duration(380).springify().damping(15)}
+            >
               <Input
                 label="Email"
                 placeholder="you@example.com"
@@ -212,12 +219,15 @@ export default function ForgotPasswordScreen() {
                   Back to Sign In
                 </Text>
               </Pressable>
-            </View>
+            </Animated.View>
           )}
 
           {/* ── Step 2: OTP + New Password ── */}
           {step === "reset" && (
-            <View className="mt-10 gap-4">
+            <Animated.View
+              className="mt-10 gap-4"
+              entering={FadeInDown.delay(80).duration(380).springify().damping(15)}
+            >
               <Input
                 label="Reset Code"
                 placeholder="0000"
@@ -275,7 +285,7 @@ export default function ForgotPasswordScreen() {
                     : "Resend code"}
                 </Text>
               </Pressable>
-            </View>
+            </Animated.View>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
