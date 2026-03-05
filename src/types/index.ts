@@ -39,3 +39,16 @@ export type {
   ProfileWalletCard,
   ProfileTier,
 } from "./profile";
+export type {
+  ConversationStatus,
+  SupportMessage,
+  SupportTicket,
+  SupportConversation,
+  ConversationListItem,
+  ConversationsListData,
+  SendMessagePayload,
+  SendMessageNewResponse,
+  SendMessageExistingResponse,
+  SendMessageData,
+  RateConversationPayload,
+} from "./support";

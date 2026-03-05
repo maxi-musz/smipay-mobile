@@ -75,6 +75,8 @@ export default function ProfileScreen() {
       router.push("/(app)/security");
     } else if (id === "basic-information") {
       router.push("/(app)/basic-information");
+    } else if (id === "help") {
+      router.push("/(app)/support");
     }
   }
 
@@ -106,7 +108,22 @@ export default function ProfileScreen() {
         <Text variant="h3" className="text-foreground">
           Profile
         </Text>
-        <ThemeToggle />
+        <View className="flex-row items-center gap-1">
+          <Pressable
+            className="p-1.5"
+            onPress={() => router.push("/(app)/support")}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Chat with support"
+          >
+            <Ionicons
+              name="headset-outline"
+              size={18}
+              color="#2563EB"
+            />
+          </Pressable>
+          <ThemeToggle size={18} />
+        </View>
       </View>
 
       <ScrollView

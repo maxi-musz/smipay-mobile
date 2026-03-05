@@ -7,10 +7,12 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useAuthStore, useHomepageStore } from "@/store";
 
+const ICON_SIZE = 18;
+const SUPPORT_ICON_COLOR = "#2563EB";
+
 export function DashboardHeader() {
   const authUser = useAuthStore.use.user();
   const homepageData = useHomepageStore.use.data();
-  const lock = useAuthStore.use.lock();
   const { isDark } = useAppTheme();
 
   const firstName =
@@ -33,14 +35,20 @@ export function DashboardHeader() {
       </Pressable>
 
       <View className="flex-row items-center gap-1">
-        <Pressable className="p-2" onPress={lock} hitSlop={8}>
+        <Pressable
+          className="p-1.5"
+          onPress={() => router.push("/(app)/support")}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Chat with support"
+        >
           <Ionicons
-            name="lock-closed-outline"
-            size={20}
-            color={isDark ? "#E5E7EB" : "#374151"}
+            name="headset-outline"
+            size={ICON_SIZE}
+            color={SUPPORT_ICON_COLOR}
           />
         </Pressable>
-        <ThemeToggle />
+        <ThemeToggle size={ICON_SIZE} />
       </View>
     </View>
   );

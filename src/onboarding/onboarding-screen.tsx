@@ -55,7 +55,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             resizeMode="contain"
           />
           <View className="flex-row items-center gap-1">
-            <ThemeToggle />
+            <ThemeToggle size={18} />
             <Button variant="ghost" size="sm" onPress={onComplete}>
               <Text className="text-muted-foreground">Skip</Text>
             </Button>

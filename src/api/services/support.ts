@@ -1,4 +1,5 @@
 import * as Application from "expo-application";
+import * as Device from "expo-device";
 import { Platform } from "react-native";
 
 import { api } from "@/lib/api";
@@ -13,25 +14,18 @@ import type {
 
 const SUPPORT = "/support";
 
-async function getDeviceMetadataForSupport() {
+function getDeviceMetadataForSupport() {
   try {
-    const [applicationName, nativeAppVersion, deviceName] = await Promise.all([
-      Application.getApplicationNameAsync?.() ?? Promise.resolve(""),
-      Application.nativeApplicationVersion ?? null,
-      import("expo-device").then((d) => d.Device?.deviceName ?? null),
-    ]);
     return {
-      device_id: applicationName || undefined,
-      device_model: deviceName ?? undefined,
+      device_id: Application.applicationName ?? undefined,
+      device_model: Device.deviceName ?? undefined,
       platform: Platform.OS,
-      app_version: nativeApplicationVersion ?? undefined,
+      app_version: Application.nativeApplicationVersion ?? undefined,
     };
   } catch {
     return { platform: Platform.OS };
   }
 }
-
-const nativeApplicationVersion: string | null = Application.nativeApplicationVersion ?? null;
 
 export async function fetchConversations() {
   const { data } = await api.get<ApiResponse<ConversationsListData>>(
@@ -52,7 +46,7 @@ export async function sendSupportMessage(payload: SendMessagePayload) {
     message: payload.message,
     conversation_id: payload.conversation_id,
   };
-  const meta = await getDeviceMetadataForSupport();
+  const meta = getDeviceMetadataForSupport();
   if (Object.keys(meta).length > 0) {
     body.device_metadata = meta;
   }

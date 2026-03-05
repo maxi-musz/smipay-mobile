@@ -13,6 +13,7 @@ import { LockScreen } from "@/components/lock-screen";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { SplashOverlay } from "@/components/splash-overlay";
 import { ToastContainer } from "@/components/ui/toast";
+import { SupportSocketProvider } from "@/context/support-socket";
 import { ThemeProvider } from "@/context/theme-context";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import {
@@ -97,7 +98,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <InnerLayout />
+        <SupportSocketProvider>
+          <InnerLayout />
+        </SupportSocketProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

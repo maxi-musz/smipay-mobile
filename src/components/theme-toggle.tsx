@@ -7,7 +7,7 @@ interface ThemeToggleProps {
   size?: number;
 }
 
-export function ThemeToggle({ size = 22 }: ThemeToggleProps) {
+export function ThemeToggle({ size = 18 }: ThemeToggleProps) {
   const { isDark, toggle } = useAppTheme();
 
   return (

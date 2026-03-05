@@ -13,6 +13,12 @@ export {
 
 export { fetchHomepageDetails, fetchUserProfile } from "./services/user";
 export {
+  fetchConversations,
+  fetchConversationById,
+  sendSupportMessage,
+  rateConversation,
+} from "./services/support";
+export {
   fetchTransactionHistory,
   fetchTransactionById,
 } from "./services/history";
