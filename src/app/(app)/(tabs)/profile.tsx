@@ -1,10 +1,14 @@
 import { useState } from "react";
-import { Image, Pressable, ScrollView, View } from "react-native";
+import { Image, Linking, Pressable, ScrollView, View } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { logout as logoutApi } from "@/api";
+import { logout as logoutApi, removePushToken } from "@/api";
+import {
+  clearLastRegisteredToken,
+  getLastRegisteredToken,
+} from "@/lib/push-notifications";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
@@ -21,9 +25,12 @@ type MenuItem = {
   id: string;
 };
 
+const PRIVACY_POLICY_URL = "https://www.smipay.ng/privacy";
+
 const menuItems: MenuItem[] = [
   { id: "basic-information", icon: "person-outline", label: "Basic Information" },
   { id: "security", icon: "shield-checkmark-outline", label: "Security" },
+  { id: "notifications", icon: "notifications-outline", label: "Notifications" },
   { id: "help", icon: "help-circle-outline", label: "Help & Support" },
   { id: "privacy", icon: "document-text-outline", label: "Privacy Policy" },
 ];
@@ -57,6 +64,15 @@ export default function ProfileScreen() {
   async function handleLogout() {
     setLoggingOut(true);
     try {
+      const pushToken = getLastRegisteredToken();
+      if (pushToken) {
+        await removePushToken(pushToken);
+      }
+      clearLastRegisteredToken();
+    } catch {
+      // Proceed with logout even if push remove fails
+    }
+    try {
       await logoutApi();
     } catch {
       // Silently ignore
@@ -70,13 +86,34 @@ export default function ProfileScreen() {
     router.replace("/(auth)/sign-in");
   }
 
-  function handleMenuPress(id: string) {
+  async function handleMenuPress(id: string) {
     if (id === "security") {
       router.push("/(app)/security");
     } else if (id === "basic-information") {
       router.push("/(app)/basic-information");
+    } else if (id === "notifications") {
+      router.push("/(app)/notifications");
     } else if (id === "help") {
       router.push("/(app)/support");
+    } else if (id === "privacy") {
+      try {
+        const canOpen = await Linking.canOpenURL(PRIVACY_POLICY_URL);
+        if (canOpen) {
+          await Linking.openURL(PRIVACY_POLICY_URL);
+        } else {
+          useToastStore.getState().show({
+            variant: "error",
+            title: "Could not open",
+            message: "Privacy policy could not be opened.",
+          });
+        }
+      } catch {
+        useToastStore.getState().show({
+          variant: "error",
+          title: "Could not open",
+          message: "Privacy policy could not be opened.",
+        });
+      }
     }
   }
 

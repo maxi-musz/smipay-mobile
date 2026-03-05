@@ -12,7 +12,11 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
-import { signIn } from "@/api";
+import { logout as logoutApi, removePushToken, signIn } from "@/api";
+import {
+  clearLastRegisteredToken,
+  getLastRegisteredToken,
+} from "@/lib/push-notifications";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loaders";
@@ -126,6 +130,18 @@ export function LockScreen() {
   const biometricTappable = biometricsAvailable && biometricsEnabled && !biometricUnlockLoading;
 
   async function handleSignOut() {
+    try {
+      const pushToken = getLastRegisteredToken();
+      if (pushToken) await removePushToken(pushToken);
+      clearLastRegisteredToken();
+    } catch {
+      // Proceed even if push remove failsdals
+    }
+    try {
+      await logoutApi();
+    } catch {
+      // Ignore
+    }
     await logout();
     useToastStore.getState().show({
       variant: "success",

@@ -21,6 +21,8 @@ interface AppState {
   lockTimeout: LockTimeout;
   /** Whether user has enabled biometrics for app unlock. */
   biometricsEnabled: boolean;
+  /** Whether user has enabled push notifications. When false, we do not register with backend. */
+  pushNotificationsEnabled: boolean;
 }
 
 interface AppActions {
@@ -30,6 +32,7 @@ interface AppActions {
   setThemeMode: (mode: ThemeMode) => void;
   setLockTimeout: (timeout: LockTimeout) => void;
   setBiometricsEnabled: (value: boolean) => void;
+  setPushNotificationsEnabled: (value: boolean) => void;
   reset: () => void;
 }
 
@@ -42,6 +45,7 @@ const initialState: AppState = {
   themeMode: "system",
   lockTimeout: "immediate",
   biometricsEnabled: false,
+  pushNotificationsEnabled: true,
 };
 
 const _useAppStore = create<AppStore>()(
@@ -61,6 +65,8 @@ const _useAppStore = create<AppStore>()(
 
       setBiometricsEnabled: (biometricsEnabled) => set({ biometricsEnabled }),
 
+      setPushNotificationsEnabled: (pushNotificationsEnabled) => set({ pushNotificationsEnabled }),
+
       reset: () => set(initialState),
     }),
     createPersistConfig("app", {
@@ -68,6 +74,7 @@ const _useAppStore = create<AppStore>()(
         themeMode: state.themeMode,
         lockTimeout: state.lockTimeout,
         biometricsEnabled: state.biometricsEnabled,
+        pushNotificationsEnabled: state.pushNotificationsEnabled,
       }),
     }),
   ),

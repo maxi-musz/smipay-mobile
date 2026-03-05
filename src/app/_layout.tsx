@@ -1,7 +1,7 @@
 import "../global.css";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -20,7 +20,16 @@ import {
   startInactivityTracking,
   stopInactivityTracking,
 } from "@/lib/inactivity";
+import { getDeviceId } from "@/lib/device";
+import {
+  didRegisterRecently,
+  markRegistrationDone,
+  registerForPushNotificationsAsync,
+  setLastRegisteredToken,
+} from "@/lib/push-notifications";
 import { useAppStore, useAuthStore } from "@/store";
+import { registerPushToken } from "@/api";
+import * as Application from "expo-application";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -49,6 +58,33 @@ function InnerLayout() {
     }
     return () => stopInactivityTracking();
   }, [isAuthenticated, isLocked]);
+
+  const pushNotificationsEnabled = useAppStore.use.pushNotificationsEnabled();
+  useEffect(() => {
+    if (!isAuthenticated || isLocked || !pushNotificationsEnabled) return;
+    if (didRegisterRecently()) return;
+    (async () => {
+      if (didRegisterRecently()) return;
+      const token = await registerForPushNotificationsAsync();
+      if (!token) return;
+      try {
+        const [deviceId, appVersion] = await Promise.all([
+          getDeviceId(),
+          Promise.resolve(Application.nativeApplicationVersion ?? undefined),
+        ]);
+        await registerPushToken({
+          token,
+          platform: Platform.OS as "ios" | "android",
+          device_id: deviceId,
+          app_version: appVersion?.slice(0, 32),
+        });
+        setLastRegisteredToken(token);
+        markRegistrationDone();
+      } catch (e) {
+        if (__DEV__) console.warn("[Push] Failed to register token with backend:", e);
+      }
+    })();
+  }, [isAuthenticated, isLocked, pushNotificationsEnabled]);
 
   const handleSplashFinish = useCallback(() => {
     setShowSplash(false);

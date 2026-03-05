@@ -21,7 +21,13 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "package": "com.smipay.mobile"
+      "package": "com.smipay.mobile",
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -29,6 +35,16 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#F4831F",
+          "sounds": [
+            "./assets/sounds/notification-1.wav"
+          ]
+        }
+      ],
       "expo-router",
       [
         "expo-splash-screen",
@@ -56,6 +72,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "589fbf17-a8c3-49b0-9d9c-ba2b048f2887"
+      }
+    },
+    "owner": "besttechltd"
   }
 }
