@@ -24,7 +24,7 @@ import { Text } from "@/components/ui/text";
 import { useToastStore } from "@/components/ui/toast";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { authenticate, getBiometricsAvailability, getBiometricLabel } from "@/lib/biometrics";
-import { canUseRequireAuthentication, secureStorage, SECURE_KEYS } from "@/lib/secure-storage";
+import { secureStorage, SECURE_KEYS } from "@/lib/secure-storage";
 import { resetInactivityTimer } from "@/lib/inactivity";
 import { useAppStore, useAuthStore } from "@/store";
 
@@ -57,8 +57,6 @@ export function LockScreen() {
   const firstName = user?.first_name ?? "";
   const canSubmit = password.length > 0 && !loading;
 
-  const hasAutoTriggeredRef = useRef(false);
-
   useEffect(() => {
     getBiometricsAvailability().then((a) => {
       setBiometricsAvailable(a.available);
@@ -66,12 +64,12 @@ export function LockScreen() {
     });
   }, []);
 
-  // Auto-trigger biometrics once availability state has updated.
-  // Separate effect so biometricsAvailable is true when handleBiometricUnlock runs.
+  // Auto-trigger biometrics when the lock screen appears and biometrics are ready.
+  // Small delay lets the lock screen render first so the prompt doesn't appear on a blank screen.
   useEffect(() => {
-    if (biometricsAvailable && biometricsEnabled && !hasAutoTriggeredRef.current) {
-      hasAutoTriggeredRef.current = true;
-      handleBiometricUnlock();
+    if (biometricsAvailable && biometricsEnabled) {
+      const timer = setTimeout(() => handleBiometricUnlock(), 300);
+      return () => clearTimeout(timer);
     }
   }, [biometricsAvailable, biometricsEnabled]);
 
@@ -111,13 +109,10 @@ export function LockScreen() {
         setError("Authentication failed. Try your password.");
         return;
       }
-      const getOptions =
-        Platform.OS === "ios" && canUseRequireAuthentication()
-          ? { requireAuthentication: true as const, authenticationPrompt: "Unlock SmiPay" }
-          : undefined;
+      // Don't pass requireAuthentication here — we already verified biometrics
+      // above. Passing it causes a second Face ID / fingerprint prompt.
       const storedPassword = await secureStorage.get<string>(
         SECURE_KEYS.USER_PASSWORD,
-        getOptions,
       );
       if (!storedPassword) {
         setError("Could not retrieve credentials. Please enter your password.");
