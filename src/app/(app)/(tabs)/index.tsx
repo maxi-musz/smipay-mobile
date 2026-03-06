@@ -1,18 +1,20 @@
-import { useEffect, useRef } from "react";
-import { Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { RefreshControl, ScrollView } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  AddMoneyModal,
   BalanceCard,
   DashboardHeader,
+  FundWithCardFlow,
   PromoBanner,
   RecentTransactions,
   ServicesGrid,
   TransferSection,
 } from "@/components/dashboard";
 import { FullPageLoader } from "@/components/ui/loaders";
-import { Text } from "@/components/ui/text";
+import { useToastStore } from "@/components/ui/toast/toast-store";
 import { useAuthStore, useHomepageStore } from "@/store";
 import { colors } from "@/constants/colors";
 
@@ -23,6 +25,9 @@ export default function HomeScreen() {
   const error = useHomepageStore.use.error();
   const fetchHomepage = useHomepageStore.use.fetchHomepage();
   const wasLockedRef = useRef(isLocked);
+
+  const [addMoneyModalVisible, setAddMoneyModalVisible] = useState(false);
+  const [fundWithCardModalVisible, setFundWithCardModalVisible] = useState(false);
 
   // Fetch on mount only.
   useEffect(() => {
@@ -46,20 +51,7 @@ export default function HomeScreen() {
     );
   }
 
-  if (error && !data) {
-    return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-background px-8" edges={["top"]}>
-        <Text className="mb-4 text-center text-muted-foreground">{error}</Text>
-        <Pressable
-          className="rounded-xl px-6 py-3"
-          style={{ backgroundColor: colors.orange[500] }}
-          onPress={fetchHomepage}
-        >
-          <Text className="font-semibold text-white">Retry</Text>
-        </Pressable>
-      </SafeAreaView>
-    );
-  }
+  const loadFailed = !!error;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -71,8 +63,34 @@ export default function HomeScreen() {
         <BalanceCard
           walletBalance={data?.wallet_card?.current_balance ?? "₦0.00"}
           cashbackBalance={data?.cashback_wallet?.current_balance ?? "₦0.00"}
+          onAddMoneyPress={() => setAddMoneyModalVisible(true)}
+          loadFailed={loadFailed}
+          onRetry={fetchHomepage}
         />
       </Animated.View>
+
+      <AddMoneyModal
+        visible={addMoneyModalVisible}
+        onClose={() => setAddMoneyModalVisible(false)}
+        onFundWithCard={() => {
+          setAddMoneyModalVisible(false);
+          // Delay so the Add Money sheet can unmount before showing Fund with Card (avoids modal stack conflict)
+          setTimeout(() => setFundWithCardModalVisible(true), 350);
+        }}
+        onFundViaTag={() => {
+          setAddMoneyModalVisible(false);
+          useToastStore.getState().show({
+            variant: "info",
+            title: "Coming soon",
+            message: "Fund Via Tag will be available soon.",
+          });
+        }}
+      />
+
+      <FundWithCardFlow
+        visible={fundWithCardModalVisible}
+        onClose={() => setFundWithCardModalVisible(false)}
+      />
 
       <ScrollView
         className="flex-1"
@@ -104,7 +122,11 @@ export default function HomeScreen() {
         <Animated.View
           entering={FadeInDown.delay(320).duration(380).springify().damping(15)}
         >
-          <RecentTransactions transactions={data?.transaction_history ?? []} />
+          <RecentTransactions
+            transactions={data?.transaction_history ?? []}
+            loadFailed={loadFailed}
+            onRetry={fetchHomepage}
+          />
         </Animated.View>
       </ScrollView>
     </SafeAreaView>

@@ -1,0 +1,38 @@
+{
+  "cli": {
+    "version": ">= 18.1.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:1500",
+        "EXPO_PUBLIC_API_VERSION": "/api/v1",
+        "EXPO_PUBLIC_REQUEST_SIGNING_SECRET": "867fc67f86b6f37e59425116fd1f870c45236ea84d7636ad940d9b0fb20d3e10"
+      }
+    },
+    "staging": {
+      "channel": "staging",
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://smipay-backend.onrender.com",
+        "EXPO_PUBLIC_API_VERSION": "/api/v1",
+        "EXPO_PUBLIC_REQUEST_SIGNING_SECRET": "867fc67f86b6f37e59425116fd1f870c45236ea84d7636ad940d9b0fb20d3e10"
+      }
+    },
+    "production": {
+      "channel": "production",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://smipay-prod.onrender.com",
+        "EXPO_PUBLIC_API_VERSION": "/api/v1",
+        "EXPO_PUBLIC_REQUEST_SIGNING_SECRET": "867fc67f86b6f37e59425116fd1f870c45236ea84d7636ad940d9b0fb20d3e10"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

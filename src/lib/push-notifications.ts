@@ -16,7 +16,7 @@ import { router } from "expo-router";
 
 const ANDROID_DEFAULT_CHANNEL_ID = "default";
 /** Custom sound filename (no path). Backend should use this in the push payload for custom sound. */
-export const NOTIFICATION_SOUND_NAME = "notification-1";
+export const NOTIFICATION_SOUND_NAME = "notification_1";
 
 /** Last token we successfully sent to the backend; used to call remove on logout. */
 let lastRegisteredToken: string | null = null;

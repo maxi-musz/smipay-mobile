@@ -8,16 +8,25 @@ import { colors } from "@/constants/colors";
 import { getProviderLogo } from "@/lib/provider-logo";
 import type { TransactionItem } from "@/types";
 
-type TransactionStatus = "successful" | "pending" | "failed" | "cancelled";
+type TransactionStatus = "success" | "successful" | "pending" | "failed" | "cancelled";
 
 interface RecentTransactionsProps {
   transactions: TransactionItem[];
+  /** When true, show refresh state instead of list/empty. */
+  loadFailed?: boolean;
+  /** Called when the user taps to retry after load failed. */
+  onRetry?: () => void;
 }
 
 const STATUS_CONFIG: Record<
   TransactionStatus,
   { label: string; color: string; bgColor: string }
 > = {
+  success: {
+    label: "SUCCESS",
+    color: colors.green[500],
+    bgColor: colors.green[50],
+  },
   successful: {
     label: "SUCCESS",
     color: colors.green[500],
@@ -45,7 +54,11 @@ function formatAmount(amount: number, creditDebit: "credit" | "debit"): string {
   return `${sign}₦${new Intl.NumberFormat("en-NG").format(amount)}`;
 }
 
-export function RecentTransactions({ transactions }: RecentTransactionsProps) {
+export function RecentTransactions({
+  transactions,
+  loadFailed = false,
+  onRetry,
+}: RecentTransactionsProps) {
   const { isDark } = useAppTheme();
 
   return (
@@ -54,14 +67,28 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
         <Text className="text-[15px] font-semibold text-foreground">
           Recent Transactions
         </Text>
-        {transactions.length > 0 && (
+        {transactions.length > 0 && !loadFailed && (
           <Pressable onPress={() => router.push("/(app)/(tabs)/history")}>
             <Text className="text-sm text-primary">See All</Text>
           </Pressable>
         )}
       </View>
 
-      {transactions.length === 0 ? (
+      {loadFailed ? (
+        <Pressable
+          onPress={onRetry}
+          className="items-center rounded-2xl bg-card px-6 py-10"
+        >
+          <Ionicons
+            name="refresh"
+            size={40}
+            color={isDark ? "#808999" : "#9CA3B0"}
+          />
+          <Text className="mt-3 text-center text-muted-foreground">
+            Couldn't load transactions. Tap to retry.
+          </Text>
+        </Pressable>
+      ) : transactions.length === 0 ? (
         <EmptyState isDark={isDark} />
       ) : (
         <View className="overflow-hidden rounded-2xl bg-card">
@@ -179,16 +206,6 @@ function TxIcon({
     );
   }
 
-  if (remoteIcon) {
-    return (
-      <Image
-        source={{ uri: remoteIcon }}
-        className="mr-3 h-10 w-10 rounded-full"
-        resizeMode="cover"
-      />
-    );
-  }
-
   if (isCredit) {
     return (
       <View
@@ -197,6 +214,16 @@ function TxIcon({
       >
         <Ionicons name="arrow-down" size={18} color={colors.green[500]} />
       </View>
+    );
+  }
+
+  if (remoteIcon) {
+    return (
+      <Image
+        source={{ uri: remoteIcon }}
+        className="mr-3 h-10 w-10 rounded-full"
+        resizeMode="cover"
+      />
     );
   }
 

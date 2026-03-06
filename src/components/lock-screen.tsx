@@ -195,7 +195,6 @@ export function LockScreen() {
               secureTextEntry
               toggleable
               autoComplete="password"
-              autoFocus
               returnKeyType="done"
               onSubmitEditing={canSubmit ? handleUnlock : undefined}
             />

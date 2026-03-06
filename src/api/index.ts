@@ -29,3 +29,8 @@ export {
   fetchTransactionHistory,
   fetchTransactionById,
 } from "./services/history";
+export {
+  initialisePaystackFunding,
+  verifyPaystackFunding,
+  cancelPaystackFunding,
+} from "./services/banking";

@@ -226,6 +226,18 @@ function HeroIcon({
     );
   }
 
+  const isCredit = tx.type === "deposit" || tx.type === "referral_bonus";
+  if (isCredit) {
+    return (
+      <View
+        className="h-16 w-16 items-center justify-center rounded-full"
+        style={{ backgroundColor: isDark ? "#052E16" : "#DCFCE7" }}
+      >
+        <Ionicons name="arrow-down" size={28} color={colors.green[500]} />
+      </View>
+    );
+  }
+
   if (tx.icon) {
     return (
       <View
@@ -239,18 +251,6 @@ function HeroIcon({
           className="h-14 w-14 rounded-full"
           resizeMode="cover"
         />
-      </View>
-    );
-  }
-
-  const isCredit = tx.type === "deposit" || tx.type === "referral_bonus";
-  if (isCredit) {
-    return (
-      <View
-        className="h-16 w-16 items-center justify-center rounded-full"
-        style={{ backgroundColor: isDark ? "#052E16" : "#DCFCE7" }}
-      >
-        <Ionicons name="arrow-down" size={28} color={colors.green[500]} />
       </View>
     );
   }

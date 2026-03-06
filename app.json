@@ -12,7 +12,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.smipay.mobile",
       "infoPlist": {
-        "NSFaceIDUsageDescription": "SmiPay uses Face ID to unlock the app securely."
+        "NSFaceIDUsageDescription": "SmiPay uses Face ID to unlock the app securely.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -41,7 +42,7 @@
           "icon": "./assets/images/icon.png",
           "color": "#F4831F",
           "sounds": [
-            "./assets/sounds/notification-1.wav"
+            "./assets/sounds/notification_1.wav"
           ]
         }
       ],
@@ -68,8 +69,15 @@
           "locationAlwaysPermission": false,
           "locationWhenInUsePermission": "SmiPay uses your approximate location to help protect your account from unauthorized access and detect suspicious activity."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/589fbf17-a8c3-49b0-9d9c-ba2b048f2887"
+    },
     "experiments": {
       "typedRoutes": true
     },

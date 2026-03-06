@@ -380,16 +380,6 @@ function TxIcon({
     );
   }
 
-  if (remoteIcon) {
-    return (
-      <Image
-        source={{ uri: remoteIcon }}
-        className="mr-3 h-10 w-10 rounded-full"
-        resizeMode="cover"
-      />
-    );
-  }
-
   if (isCredit) {
     return (
       <View
@@ -398,6 +388,16 @@ function TxIcon({
       >
         <Ionicons name="arrow-down" size={18} color={colors.green[500]} />
       </View>
+    );
+  }
+
+  if (remoteIcon) {
+    return (
+      <Image
+        source={{ uri: remoteIcon }}
+        className="mr-3 h-10 w-10 rounded-full"
+        resizeMode="cover"
+      />
     );
   }
 

@@ -27,7 +27,7 @@ import {
   registerForPushNotificationsAsync,
   setLastRegisteredToken,
 } from "@/lib/push-notifications";
-import { useAppStore, useAuthStore } from "@/store";
+import { useAppStore, useAuthStore, useHomepageStore } from "@/store";
 import { registerPushToken } from "@/api";
 import * as Application from "expo-application";
 
@@ -46,9 +46,13 @@ function InnerLayout() {
     setColorScheme(isDark ? "dark" : "light");
   }, [isDark, setColorScheme]);
 
+  // Hide native splash as soon as we have real UI (lock screen, main app, or loader).
+  // Otherwise when showing lock screen we never mount SplashOverlay, so it would stay stuck.
   useEffect(() => {
-    SplashScreen.hideAsync();
-  }, []);
+    if (isHydrated) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [isHydrated]);
 
   useEffect(() => {
     if (isAuthenticated && !isLocked) {
@@ -60,8 +64,12 @@ function InnerLayout() {
   }, [isAuthenticated, isLocked]);
 
   const pushNotificationsEnabled = useAppStore.use.pushNotificationsEnabled();
+  const homepageData = useHomepageStore.use.data();
+
+  // Only register push token after homepage loads (confirms auth is valid).
+  // Without this, stale tokens trigger a wasted 401 on every app start.
   useEffect(() => {
-    if (!isAuthenticated || isLocked || !pushNotificationsEnabled) return;
+    if (!isAuthenticated || isLocked || !pushNotificationsEnabled || !homepageData) return;
     if (didRegisterRecently()) return;
     (async () => {
       if (didRegisterRecently()) return;
@@ -84,10 +92,13 @@ function InnerLayout() {
         if (__DEV__) console.warn("[Push] Failed to register token with backend:", e);
       }
     })();
-  }, [isAuthenticated, isLocked, pushNotificationsEnabled]);
+  }, [isAuthenticated, isLocked, pushNotificationsEnabled, homepageData]);
 
   const handleSplashFinish = useCallback(() => {
     setShowSplash(false);
+    // Hide native splash only when our custom overlay finishes; wrap in try/catch
+    // in case the native view controller isn't the one that showed splash (e.g. iOS reload).
+    SplashScreen.hideAsync().catch(() => {});
   }, []);
 
   // Wait for auth rehydration before deciding route; avoids flashing dashboard then lock.

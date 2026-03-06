@@ -1,8 +1,20 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
+import CryptoJS from "crypto-js";
+import * as Crypto from "expo-crypto";
 
 import { useAuthStore } from "@/store/auth.store";
 import { getDeviceMetadata } from "./device";
 import { getLocation } from "./location";
+
+const REQUEST_SIGNING_SECRET =
+  process.env.EXPO_PUBLIC_REQUEST_SIGNING_SECRET ?? "";
+
+function computeRequestSignature(timestamp: string, nonce: string): string {
+  if (!REQUEST_SIGNING_SECRET) return "";
+  const message = `${timestamp}.${nonce}`;
+  const signature = CryptoJS.HmacSHA256(message, REQUEST_SIGNING_SECRET);
+  return signature.toString(CryptoJS.enc.Hex);
+}
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:1500";
 const API_VERSION = process.env.EXPO_PUBLIC_API_VERSION ?? "/api/v1";
@@ -25,6 +37,17 @@ api.interceptors.request.use(async (config) => {
     console.log(`→ ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
   }
 
+  // Required by backend SecurityHeadersValidator for all requests
+  const timestamp = String(Date.now());
+  const nonce = Crypto.randomUUID();
+  config.headers["X-Timestamp"] = timestamp;
+  config.headers["X-Nonce"] = nonce;
+  config.headers["X-Request-ID"] = nonce;
+  const signature = computeRequestSignature(timestamp, nonce);
+  if (signature) {
+    config.headers["X-Signature"] = signature;
+  }
+
   try {
     const device = await getDeviceMetadata();
     Object.assign(config.headers, device);
@@ -35,8 +58,8 @@ api.interceptors.request.use(async (config) => {
   try {
     const location = await getLocation();
     if (location) {
-      config.headers["x-latitude"] = location.latitude;
-      config.headers["x-longitude"] = location.longitude;
+      config.headers["x-latitude"] = String(location.latitude);
+      config.headers["x-longitude"] = String(location.longitude);
     }
   } catch (e) {
     if (__DEV__) console.warn("[API] Failed to get location:", e);

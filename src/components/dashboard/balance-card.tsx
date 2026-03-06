@@ -24,9 +24,21 @@ function parseBalance(raw: string): { symbol: string; integer: string; decimal: 
 interface BalanceCardProps {
   walletBalance: string;
   cashbackBalance: string;
+  /** Called when the user taps "Add Money". */
+  onAddMoneyPress?: () => void;
+  /** When true, balance is hidden and a refresh icon is shown; tap to retry. */
+  loadFailed?: boolean;
+  /** Called when the user taps the refresh area after load failed. */
+  onRetry?: () => void;
 }
 
-export function BalanceCard({ walletBalance, cashbackBalance }: BalanceCardProps) {
+export function BalanceCard({
+  walletBalance,
+  cashbackBalance,
+  onAddMoneyPress,
+  loadFailed = false,
+  onRetry,
+}: BalanceCardProps) {
   const [balanceVisible, setBalanceVisible] = useState(true);
 
   const hasCashback = cashbackBalance !== "₦0.00" && cashbackBalance !== "";
@@ -43,7 +55,20 @@ export function BalanceCard({ walletBalance, cashbackBalance }: BalanceCardProps
       </Text>
 
       <View className="mt-2 flex-row items-baseline gap-3">
-        {balanceVisible ? (
+        {loadFailed ? (
+          <Pressable
+            onPress={onRetry}
+            className="flex-row items-center gap-2"
+            hitSlop={12}
+          >
+            <Ionicons
+              name="refresh"
+              size={28}
+              color="rgba(255,255,255,0.8)"
+            />
+            <Text className="text-base text-white/80">Tap to refresh</Text>
+          </Pressable>
+        ) : balanceVisible ? (
           <View className="flex-row items-baseline">
             <Text className="text-3xl font-bold" style={{ color: NAIRA_GREEN }}>
               {parsed.symbol}
@@ -60,19 +85,21 @@ export function BalanceCard({ walletBalance, cashbackBalance }: BalanceCardProps
             {NAIRA_SYMBOL} • • • • •
           </Text>
         )}
-        <Pressable
-          onPress={() => setBalanceVisible((v) => !v)}
-          hitSlop={12}
-        >
-          <Ionicons
-            name={balanceVisible ? "eye-outline" : "eye-off-outline"}
-            size={20}
-            color="rgba(255,255,255,0.5)"
-          />
-        </Pressable>
+        {!loadFailed && (
+          <Pressable
+            onPress={() => setBalanceVisible((v) => !v)}
+            hitSlop={12}
+          >
+            <Ionicons
+              name={balanceVisible ? "eye-outline" : "eye-off-outline"}
+              size={20}
+              color="rgba(255,255,255,0.5)"
+            />
+          </Pressable>
+        )}
       </View>
 
-      {hasCashback && (
+      {hasCashback && !loadFailed && (
         <View className="mt-1 flex-row flex-wrap items-baseline">
           <Text
             className="text-sm font-medium"
@@ -100,6 +127,7 @@ export function BalanceCard({ walletBalance, cashbackBalance }: BalanceCardProps
         <Pressable
           className="flex-row items-center gap-1 rounded-xl px-5 py-2.5"
           style={{ backgroundColor: colors.green[500] }}
+          onPress={onAddMoneyPress}
         >
           <Ionicons name="add" size={16} color="#fff" />
           <Text className="text-sm font-semibold text-white">

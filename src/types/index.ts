@@ -10,6 +10,13 @@ export type {
   ResetPasswordPayload,
 } from "./api";
 export type {
+  InitialisePaystackData,
+  VerifyPaystackSuccessData,
+  VerifyPaystackStatusData,
+  VerifyPaystackData,
+  CancelPaystackData,
+} from "./banking";
+export type {
   HomepageData,
   HomepageUser,
   WalletCard,

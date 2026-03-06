@@ -1,0 +1,14 @@
+name: Staging OTA Update
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  update:
+    name: Publish OTA to staging
+    type: update
+    params:
+      branch: staging
+      message: "OTA: ${{ github.event.head_commit.message }}"
