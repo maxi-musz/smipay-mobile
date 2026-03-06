@@ -57,12 +57,23 @@ export function LockScreen() {
   const firstName = user?.first_name ?? "";
   const canSubmit = password.length > 0 && !loading;
 
+  const hasAutoTriggeredRef = useRef(false);
+
   useEffect(() => {
     getBiometricsAvailability().then((a) => {
       setBiometricsAvailable(a.available);
       setBiometricLabel(getBiometricLabel(a));
     });
   }, []);
+
+  // Auto-trigger biometrics once availability state has updated.
+  // Separate effect so biometricsAvailable is true when handleBiometricUnlock runs.
+  useEffect(() => {
+    if (biometricsAvailable && biometricsEnabled && !hasAutoTriggeredRef.current) {
+      hasAutoTriggeredRef.current = true;
+      handleBiometricUnlock();
+    }
+  }, [biometricsAvailable, biometricsEnabled]);
 
   async function handleUnlock() {
     if (!canSubmit) return;

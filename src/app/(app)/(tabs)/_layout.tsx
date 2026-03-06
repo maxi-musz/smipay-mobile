@@ -44,7 +44,7 @@ export default function TabsLayout() {
   const { isDark } = useAppTheme();
   const t = isDark ? THEME.dark : THEME.light;
   const insets = useSafeAreaInsets();
-  const bottomPadding = Platform.OS === "ios" ? insets.bottom : 8;
+  const bottomPadding = Math.max(insets.bottom, 8);
 
   return (
     <Tabs
