@@ -20,6 +20,8 @@ export const NOTIFICATION_SOUND_NAME = "notification_1";
 
 /** Last token we successfully sent to the backend; used to call remove on logout. */
 let lastRegisteredToken: string | null = null;
+/** When token fetch fails, stores a user-facing reason for the notifications screen. */
+let lastPushErrorReason: string | null = null;
 /** Time (ms) of last successful backend registration; used to avoid duplicate registrations. */
 let lastRegistrationTime = 0;
 const REGISTRATION_DEBOUNCE_MS = 15000;
@@ -128,11 +130,34 @@ export async function getExpoPushTokenAsync(): Promise<string | null> {
     const { data: token } = await Notifications.getExpoPushTokenAsync({
       projectId,
     });
+    lastPushErrorReason = null;
     return token ?? null;
   } catch (e) {
+    const errMsg = e instanceof Error ? e.message : String(e);
     if (__DEV__) console.warn("[Push] Failed to get token:", e);
+
+    // Android: FCM/Firebase must be configured for push to work.
+    if (
+      Platform.OS === "android" &&
+      (errMsg.includes("FirebaseApp") ||
+        errMsg.includes("Firebase") ||
+        errMsg.includes("fcm-credentials"))
+    ) {
+      lastPushErrorReason =
+        "Android push requires FCM setup. Add google-services.json and upload a service account key to EAS. See docs/ANDROID-PUSH-SETUP.md.";
+    } else {
+      lastPushErrorReason = null;
+    }
     return null;
   }
+}
+
+/**
+ * When push token fetch fails, returns a user-facing reason (e.g. FCM not configured).
+ * Use this in the notifications screen to show a clearer error.
+ */
+export function getLastPushErrorReason(): string | null {
+  return lastPushErrorReason;
 }
 
 /**

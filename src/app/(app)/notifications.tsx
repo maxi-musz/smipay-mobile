@@ -13,6 +13,7 @@ import { getDeviceId } from "@/lib/device";
 import {
   clearLastRegisteredToken,
   getLastRegisteredToken,
+  getLastPushErrorReason,
   isPushSupported,
   markRegistrationDone,
   registerForPushNotificationsAsync,
@@ -46,11 +47,13 @@ export default function NotificationsScreen() {
       try {
         const token = await registerForPushNotificationsAsync();
         if (!token) {
+          const reason = getLastPushErrorReason();
           setAlertModal({
             visible: true,
             variant: "error",
             title: "Could not enable",
             message:
+              reason ??
               "Permission was denied or push is unavailable. Check system settings and try again.",
           });
           return;

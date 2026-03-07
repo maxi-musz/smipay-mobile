@@ -17,6 +17,7 @@
       }
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "icon": "./assets/images/icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",

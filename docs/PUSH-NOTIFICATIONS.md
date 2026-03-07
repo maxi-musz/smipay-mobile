@@ -1,6 +1,8 @@
-# Push Notifications (No Firebase)
+# Push Notifications
 
-This app uses **Expo Push Notifications**: your backend sends messages to Expo’s servers, and Expo delivers them to Apple (APNs) and Google (FCM) for you. You never touch Firebase in your code; everything stays between your backend and the app.
+This app uses **Expo Push Notifications**: your backend sends messages to Expo’s servers, and Expo delivers them to Apple (APNs) and Google (FCM) for you. Your backend and app code never talk to Firebase directly.
+
+**Android requires FCM setup** — add `google-services.json` and a service account key. See [ANDROID-PUSH-SETUP.md](./ANDROID-PUSH-SETUP.md).
 
 ---
 
@@ -158,7 +160,8 @@ Without `projectId`, the app will not get a push token (it skips gracefully and 
 
 ## 9. Summary
 
-- **No Firebase** in the app; backend uses Expo Push API.
+- **Backend** uses Expo Push API; no Firebase SDK in app code.
+- **Android**: Requires FCM setup (`google-services.json` + service account key) — see [ANDROID-PUSH-SETUP.md](./ANDROID-PUSH-SETUP.md).
 - **Compliant**: permission-first, user can disable in system settings.
 - **Simulator / Expo Go Android**: push is skipped; app still works.
 - **Sound**: use `"sound": "default"` or a custom file; extend channels on Android as needed.

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  AppState,
+  type AppStateStatus,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -64,13 +66,44 @@ export function LockScreen() {
     });
   }, []);
 
-  // Auto-trigger biometrics when the lock screen appears and biometrics are ready.
-  // Small delay lets the lock screen render first so the prompt doesn't appear on a blank screen.
+  // Auto-trigger biometrics only when the app is fully active (foreground).
+  // On iOS, Face ID fails without showing the prompt if called before the app has
+  // transitioned to active — e.g. when the lock screen mounts while in background.
+  const handleBiometricUnlockRef = useRef(handleBiometricUnlock);
+  handleBiometricUnlockRef.current = handleBiometricUnlock;
+
   useEffect(() => {
-    if (biometricsAvailable && biometricsEnabled) {
-      const timer = setTimeout(() => handleBiometricUnlock(), 300);
-      return () => clearTimeout(timer);
-    }
+    if (!biometricsAvailable || !biometricsEnabled) return;
+
+    const triggerAfterDelay = () => {
+      // iOS needs a longer delay for the scene to settle after resume;
+      // Android works with a shorter delay.
+      const delay = Platform.OS === "ios" ? 600 : 300;
+      return setTimeout(() => {
+        handleBiometricUnlockRef.current();
+      }, delay);
+    };
+
+    const checkAndTrigger = (currentState: AppStateStatus) => {
+      if (currentState !== "active") return;
+      return triggerAfterDelay();
+    };
+
+    // If already active when effect runs (e.g. lock from in-app), trigger after delay.
+    let timer: ReturnType<typeof setTimeout> | undefined = checkAndTrigger(
+      AppState.currentState ?? "background",
+    );
+
+    const sub = AppState.addEventListener("change", (nextState: AppStateStatus) => {
+      if (nextState === "active") {
+        timer = triggerAfterDelay();
+      }
+    });
+
+    return () => {
+      sub.remove();
+      if (timer !== undefined) clearTimeout(timer);
+    };
   }, [biometricsAvailable, biometricsEnabled]);
 
   async function handleUnlock() {
