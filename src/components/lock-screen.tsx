@@ -21,7 +21,7 @@ import {
 } from "@/lib/push-notifications";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/loaders";
+import { FullPageLoader, Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
 import { useToastStore } from "@/components/ui/toast";
 import { useAppTheme } from "@/hooks/use-app-theme";
@@ -52,6 +52,8 @@ export function LockScreen() {
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState("");
   const [biometricUnlockLoading, setBiometricUnlockLoading] = useState(false);
+  /** True after biometric success — show FullPageLoader while signIn runs. */
+  const [unlocking, setUnlocking] = useState(false);
 
   const passwordRef = useRef<TextInput>(null);
 
@@ -111,6 +113,7 @@ export function LockScreen() {
     Keyboard.dismiss();
     setError("");
     setLoading(true);
+    setUnlocking(true);
 
     try {
       const res = await signIn({ email, password });
@@ -124,6 +127,7 @@ export function LockScreen() {
       resetInactivityTimer();
       setPassword("");
     } catch {
+      setUnlocking(false);
       setError("Incorrect password. Please try again.");
     } finally {
       setLoading(false);
@@ -142,12 +146,16 @@ export function LockScreen() {
         setError("Authentication failed. Try your password.");
         return;
       }
+      // Immediately show full-page loader — user gets instant feedback while signIn runs.
+      setUnlocking(true);
+
       // Don't pass requireAuthentication here — we already verified biometrics
       // above. Passing it causes a second Face ID / fingerprint prompt.
       const storedPassword = await secureStorage.get<string>(
         SECURE_KEYS.USER_PASSWORD,
       );
       if (!storedPassword) {
+        setUnlocking(false);
         setError("Could not retrieve credentials. Please enter your password.");
         return;
       }
@@ -158,7 +166,9 @@ export function LockScreen() {
       });
       await secureStorage.set(SECURE_KEYS.USER_PASSWORD, storedPassword);
       resetInactivityTimer();
+      // login() sets isLocked: false — layout will unmount LockScreen and show app.
     } catch {
+      setUnlocking(false);
       setError("Authentication failed. Try your password.");
     } finally {
       setBiometricUnlockLoading(false);
@@ -188,6 +198,17 @@ export function LockScreen() {
       message: "You have been signed out successfully.",
     });
     router.replace("/(auth)/sign-in");
+  }
+
+  if (unlocking) {
+    return (
+      <View
+        className="absolute inset-0 z-50"
+        style={{ backgroundColor: isDark ? "#0F172A" : "#FFFFFF" }}
+      >
+        <FullPageLoader message="Opening..." />
+      </View>
+    );
   }
 
   return (

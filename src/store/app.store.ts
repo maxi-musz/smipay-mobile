@@ -6,7 +6,7 @@ import type { ThemeMode } from "@/constants/theme";
 import { createSelectors } from "./create-selectors";
 import { createPersistConfig } from "./middleware";
 
-export type LockTimeout = "immediate" | "60min" | "none";
+export type LockTimeout = "immediate" | "1min" | "60min" | "none";
 
 interface AppState {
   /** Whether all persisted stores have finished rehydrating. */
@@ -43,7 +43,7 @@ const initialState: AppState = {
   isGlobalLoading: false,
   notificationCount: 0,
   themeMode: "system",
-  lockTimeout: "immediate",
+  lockTimeout: "1min",
   biometricsEnabled: false,
   pushNotificationsEnabled: true,
 };

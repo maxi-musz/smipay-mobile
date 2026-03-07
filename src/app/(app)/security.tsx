@@ -17,8 +17,9 @@ import { useAppStore, useAuthStore } from "@/store";
 import type { LockTimeout } from "@/store/app.store";
 
 const LOCK_OPTIONS: { value: LockTimeout; label: string; description: string }[] = [
-  { value: "immediate", label: "Immediately", description: "Lock as soon as app is minimised or closed" },
+  { value: "1min", label: "After 1 Minute", description: "Lock 1 min after app is minimised or closed" },
   { value: "60min", label: "After 60 Minutes", description: "Lock 60 min after app is minimised or closed" },
+  { value: "immediate", label: "Immediately", description: "Lock as soon as app is minimised or closed" },
   { value: "none", label: "Password-Free", description: "Never auto-lock, even if app is closed" },
 ];
 

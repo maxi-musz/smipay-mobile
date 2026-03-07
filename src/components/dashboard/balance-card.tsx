@@ -108,9 +108,9 @@ export function BalanceCard({
             Cashback:{" "}
           </Text>
           <Text className="text-sm font-medium text-white">
-            {cashbackParsed.symbol}
-            {cashbackParsed.integer}
-            {cashbackParsed.decimal}
+            {balanceVisible
+              ? `${cashbackParsed.symbol}${cashbackParsed.integer}${cashbackParsed.decimal}`
+              : "• • • • •"}
           </Text>
         </View>
       )}

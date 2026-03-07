@@ -6,6 +6,7 @@ import type { LockTimeout } from "@/store/app.store";
 
 const TIMEOUT_MS: Record<LockTimeout, number> = {
   immediate: 0,
+  "1min": 60 * 1000,
   "60min": 60 * 60 * 1000,
   none: Infinity,
 };
