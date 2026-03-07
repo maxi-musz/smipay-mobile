@@ -1,7 +1,9 @@
 import { Pressable, View } from "react-native";
+import { router, type Href } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "@/components/ui/text";
+import { getAirtimeRoute } from "@/lib/provider-config";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { colors } from "@/constants/colors";
 import type { CashbackRate } from "@/types";
@@ -122,6 +124,11 @@ export function ServicesGrid({ cashbackRates }: ServicesGridProps) {
             service={service}
             isDark={isDark}
             cashbackLabel={getCashbackLabel(service, cashbackRates)}
+            onPress={
+              service.id === "airtime" && !service.comingSoon
+                ? () => router.push(getAirtimeRoute() as Href)
+                : undefined
+            }
           />
         ))}
       </View>
@@ -133,10 +140,12 @@ function ServiceIcon({
   service,
   isDark,
   cashbackLabel,
+  onPress,
 }: {
   service: ServiceItem;
   isDark: boolean;
   cashbackLabel: string | null;
+  onPress?: () => void;
 }) {
   const bg = isDark ? service.darkBgColor : service.bgColor;
 
@@ -145,6 +154,7 @@ function ServiceIcon({
       className="mb-3 items-center"
       style={{ width: "25%" }}
       disabled={service.comingSoon}
+      onPress={onPress}
     >
       <View className="relative">
         {cashbackLabel && (
