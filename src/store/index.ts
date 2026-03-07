@@ -1,6 +1,7 @@
 export { useAuthStore } from "./auth.store";
 export { useAppStore } from "./app.store";
 export { useHomepageStore } from "./homepage.store";
+export { useAirtimeStore } from "./airtime.store";
 export { useProfileStore } from "./profile.store";
 export { useFundingResultSheetStore } from "./funding-result-sheet.store";
 export { createPersistConfig } from "./middleware";

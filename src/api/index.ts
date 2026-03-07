@@ -34,3 +34,7 @@ export {
   verifyPaystackFunding,
   cancelPaystackFunding,
 } from "./services/banking";
+export {
+  fetchAirtimeServiceIds,
+  purchaseAirtime,
+} from "./services/vtpass-airtime";

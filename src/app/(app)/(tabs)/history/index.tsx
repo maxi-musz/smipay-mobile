@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
 import {
   ActivityIndicator,
   FlatList,
@@ -81,11 +82,12 @@ const STATUS_CONFIG: Record<HistoryStatus, StatusConfig> = {
 
 export default function HistoryScreen() {
   const { isDark } = useAppTheme();
+  const { type: typeParam } = useLocalSearchParams<{ type?: string }>();
   const [transactions, setTransactions] = useState<HistoryTransaction[]>([]);
   const [categories, setCategories] = useState<HistoryCategories | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [activeType, setActiveType] = useState<string>("all");
+  const [activeType, setActiveType] = useState<string>(typeParam ?? "all");
   const [search, setSearch] = useState("");
   const [pendingSearch, setPendingSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -152,6 +154,10 @@ export default function HistoryScreen() {
       setIsRefreshing(false);
     }
   }
+
+  useEffect(() => {
+    if (typeParam) setActiveType(typeParam);
+  }, [typeParam]);
 
   useEffect(() => {
     loadHistory({ page: 1 });

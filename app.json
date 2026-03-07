@@ -72,7 +72,13 @@
           "locationWhenInUsePermission": "SmiPay uses your approximate location to help protect your account from unauthorized access and detect suspicious activity."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow SmiPay to access your contacts to select a phone number for airtime/data."
+        }
+      ]
     ],
     "runtimeVersion": {
       "policy": "appVersion"
