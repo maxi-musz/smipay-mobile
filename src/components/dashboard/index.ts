@@ -6,5 +6,4 @@ export { FundWithCardFlow } from "./fund-with-card";
 export { FundingResultSheet } from "./funding-result-sheet";
 export { PromoBanner } from "./promo-banner";
 export { ServicesGrid } from "./services-grid";
-export { TransferSection } from "./transfer-section";
 export { RecentTransactions } from "./recent-transactions";

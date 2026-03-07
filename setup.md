@@ -147,6 +147,7 @@ EXPO_PUBLIC_API_VERSION=/api/v1
 
 # Utility service providers (default: vtpass)
 EXPO_PUBLIC_AIRTIME_PROVIDER=vtpass
+EXPO_PUBLIC_DATA_PROVIDER=vtpass
 ```
 
 The API client constructs its base URL as `${EXPO_PUBLIC_API_BASE_URL}${EXPO_PUBLIC_API_VERSION}`.

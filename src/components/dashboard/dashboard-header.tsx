@@ -4,39 +4,50 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "@/components/ui/text";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useAppTheme } from "@/hooks/use-app-theme";
+import { useResponsiveScale } from "@/hooks/use-responsive-scale";
 import { useAuthStore, useHomepageStore } from "@/store";
 
-const ICON_SIZE = 18;
 const SUPPORT_ICON_COLOR = "#2563EB";
 
 export function DashboardHeader() {
   const authUser = useAuthStore.use.user();
   const homepageData = useHomepageStore.use.data();
-  const { isDark } = useAppTheme();
+  const { s } = useResponsiveScale();
 
   const firstName =
     homepageData?.user?.first_name ?? authUser?.first_name ?? "there";
 
   return (
-    <View className="flex-row items-center justify-between px-5 pb-3 pt-2">
+    <View
+      className="flex-row items-center justify-between"
+      style={{
+        paddingHorizontal: s(12),
+        paddingBottom: s(12),
+        paddingTop: s(8),
+      }}
+    >
       <Pressable
-        className="flex-row items-center gap-3"
+        className="flex-row items-center rounded-xl"
+        style={{ gap: s(12) }}
         onPress={() => router.push("/(app)/(tabs)/profile")}
       >
         <Image
           source={require("@/assets/images/icon.png")}
-          className="h-10 w-10 rounded-xl"
+          style={{ width: s(40), height: s(40) }}
+          className="rounded-xl"
           resizeMode="contain"
         />
-        <Text className="text-xl font-bold text-foreground">
+        <Text
+          className="font-bold text-foreground"
+          style={{ fontSize: s(20) }}
+        >
           Hi, {firstName}
         </Text>
       </Pressable>
 
-      <View className="flex-row items-center gap-1">
+      <View className="flex-row items-center" style={{ gap: s(4) }}>
         <Pressable
-          className="p-1.5"
+          style={{ padding: s(6) }}
           onPress={() => router.push("/(app)/support")}
           hitSlop={8}
           accessibilityRole="button"
@@ -44,11 +55,11 @@ export function DashboardHeader() {
         >
           <Ionicons
             name="headset-outline"
-            size={ICON_SIZE}
+            size={s(18)}
             color={SUPPORT_ICON_COLOR}
           />
         </Pressable>
-        <ThemeToggle size={ICON_SIZE} />
+        <ThemeToggle size={s(18)} />
       </View>
     </View>
   );

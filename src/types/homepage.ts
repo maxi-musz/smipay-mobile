@@ -10,6 +10,8 @@ export interface HomepageUser {
   role: string;
   profile_image: string | null;
   is_email_verified: boolean;
+  /** True if user has requested account deletion; show pending state and cancel option. */
+  requested_account_deletion?: boolean;
 }
 
 export interface WalletCard {

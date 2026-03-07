@@ -11,7 +11,6 @@ import {
   PromoBanner,
   RecentTransactions,
   ServicesGrid,
-  TransferSection,
 } from "@/components/dashboard";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { useToastStore } from "@/components/ui/toast/toast-store";
@@ -56,7 +55,7 @@ export default function HomeScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <Animated.View
-        className="z-10 bg-background pb-4"
+        className="z-10 bg-background pb-2"
         entering={FadeInDown.duration(400).springify().damping(15)}
       >
         <DashboardHeader />
@@ -107,26 +106,32 @@ export default function HomeScreen() {
         <Animated.View
           entering={FadeInDown.delay(80).duration(380).springify().damping(15)}
         >
-          <PromoBanner banners={data?.reward_banners ?? []} />
+          <PromoBanner
+          banners={
+            [...(data?.reward_banners ?? [])].sort((a, b) => {
+              const order: ("cashback" | "referral" | "first_transaction")[] = [
+                "cashback",
+                "referral",
+                "first_transaction",
+              ];
+              return order.indexOf(a.type) - order.indexOf(b.type);
+            })
+          }
+        />
         </Animated.View>
         <Animated.View
           entering={FadeInDown.delay(160).duration(380).springify().damping(15)}
         >
-          <ServicesGrid cashbackRates={data?.cashback_rates} />
+          <RecentTransactions
+            transactions={(data?.transaction_history ?? []).slice(0, 2)}
+            loadFailed={loadFailed}
+            onRetry={fetchHomepage}
+          />
         </Animated.View>
         <Animated.View
           entering={FadeInDown.delay(240).duration(380).springify().damping(15)}
         >
-          <TransferSection />
-        </Animated.View>
-        <Animated.View
-          entering={FadeInDown.delay(320).duration(380).springify().damping(15)}
-        >
-          <RecentTransactions
-            transactions={data?.transaction_history ?? []}
-            loadFailed={loadFailed}
-            onRetry={fetchHomepage}
-          />
+          <ServicesGrid cashbackRates={data?.cashback_rates} />
         </Animated.View>
       </ScrollView>
     </SafeAreaView>

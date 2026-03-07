@@ -4,6 +4,7 @@ import { router } from "expo-router";
 
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { useResponsiveScale } from "@/hooks/use-responsive-scale";
 import { colors } from "@/constants/colors";
 import { getProviderLogo } from "@/lib/provider-logo";
 import type { TransactionItem } from "@/types";
@@ -60,43 +61,39 @@ export function RecentTransactions({
   onRetry,
 }: RecentTransactionsProps) {
   const { isDark } = useAppTheme();
+  const { s } = useResponsiveScale();
 
   return (
-    <View className="mt-6 px-5">
-      <View className="mb-3 flex-row items-center justify-between">
-        <Text className="text-[15px] font-semibold text-foreground">
-          Recent Transactions
-        </Text>
-        {transactions.length > 0 && !loadFailed && (
-          <Pressable onPress={() => router.push("/(app)/(tabs)/history")}>
-            <Text className="text-sm text-primary">See All</Text>
-          </Pressable>
-        )}
-      </View>
-
+    <View style={{ marginTop: s(12), paddingHorizontal: s(12) }}>
       {loadFailed ? (
         <Pressable
           onPress={onRetry}
-          className="items-center rounded-2xl bg-card px-6 py-10"
+          className="items-center rounded-2xl bg-card"
+          style={{ paddingHorizontal: s(24), paddingVertical: s(40) }}
         >
           <Ionicons
             name="refresh"
-            size={40}
+            size={s(40)}
             color={isDark ? "#808999" : "#9CA3B0"}
           />
-          <Text className="mt-3 text-center text-muted-foreground">
+          <Text
+            className="text-center text-muted-foreground"
+            style={{ marginTop: s(12), fontSize: s(14) }}
+          >
             {"Couldn't load transactions. Tap to retry."}
           </Text>
         </Pressable>
       ) : transactions.length === 0 ? (
         <EmptyState isDark={isDark} />
       ) : (
-        <View className="overflow-hidden rounded-2xl bg-card">
-          {transactions.map((tx, index) => (
+        <View
+          className="overflow-hidden rounded-2xl bg-card"
+          style={{ paddingVertical: s(8), gap: s(10) }}
+        >
+          {transactions.map((tx) => (
             <TransactionRow
               key={tx.id}
               transaction={tx}
-              isLast={index === transactions.length - 1}
               isDark={isDark}
             />
           ))}
@@ -107,14 +104,21 @@ export function RecentTransactions({
 }
 
 function EmptyState({ isDark }: { isDark: boolean }) {
+  const { s } = useResponsiveScale();
   return (
-    <View className="items-center rounded-2xl bg-card px-6 py-10">
+    <View
+      className="items-center rounded-2xl bg-card"
+      style={{ paddingHorizontal: s(24), paddingVertical: s(40) }}
+    >
       <Ionicons
         name="receipt-outline"
-        size={40}
+        size={s(40)}
         color={isDark ? "#808999" : "#9CA3B0"}
       />
-      <Text className="mt-3 text-center text-muted-foreground">
+      <Text
+        className="text-center text-muted-foreground"
+        style={{ marginTop: s(12), fontSize: s(14) }}
+      >
         No transactions yet
       </Text>
     </View>
@@ -123,13 +127,12 @@ function EmptyState({ isDark }: { isDark: boolean }) {
 
 function TransactionRow({
   transaction,
-  isLast,
   isDark,
 }: {
   transaction: TransactionItem;
-  isLast: boolean;
   isDark: boolean;
 }) {
+  const { s } = useResponsiveScale();
   const statusKey = transaction.status as TransactionStatus;
   const status = STATUS_CONFIG[statusKey] ?? STATUS_CONFIG.pending;
   const amountColor =
@@ -141,9 +144,8 @@ function TransactionRow({
   return (
     <Pressable
       onPress={() => router.push(`/(app)/history/${transaction.id}`)}
-      className={`flex-row items-center px-4 py-3.5 active:opacity-80 ${
-        !isLast ? "border-b border-border" : ""
-      }`}
+      className="flex-row items-center active:opacity-80"
+      style={{ paddingHorizontal: s(16), paddingVertical: s(10) }}
     >
       <TxIcon
         localLogo={localLogo}
@@ -153,29 +155,41 @@ function TransactionRow({
       />
 
       <View className="flex-1">
-        <Text className="text-[15px] font-medium text-foreground">
+        <Text
+          className="font-medium text-foreground"
+          style={{ fontSize: s(13) }}
+        >
           {transaction.description}
         </Text>
-        <Text className="mt-0.5 text-xs text-muted-foreground">
+        <Text
+          className="text-muted-foreground"
+          style={{ marginTop: s(2), fontSize: s(11) }}
+        >
           {transaction.date}
         </Text>
       </View>
 
       <View className="items-end">
-        <Text className="text-[15px] font-semibold" style={{ color: amountColor }}>
+        <Text
+          className="font-semibold"
+          style={{ color: amountColor, fontSize: s(13) }}
+        >
           {formatAmount(transaction.amount, transaction.credit_debit)}
         </Text>
         <View
-          className="mt-1 rounded-full px-2 py-0.5"
+          className="rounded-full"
           style={{
+            marginTop: s(2),
+            paddingHorizontal: s(6),
+            paddingVertical: s(2),
             backgroundColor: isDark
               ? `${status.color}20`
               : status.bgColor,
           }}
         >
           <Text
-            className="text-[9px] font-bold"
-            style={{ color: status.color }}
+            className="font-bold"
+            style={{ color: status.color, fontSize: s(8) }}
           >
             {status.label}
           </Text>
@@ -196,11 +210,16 @@ function TxIcon({
   isCredit: boolean;
   isDark: boolean;
 }) {
+  const { s } = useResponsiveScale();
+  const size = s(40);
+  const style = { width: size, height: size, marginRight: s(12) };
+
   if (localLogo) {
     return (
       <Image
         source={localLogo}
-        className="mr-3 h-10 w-10 rounded-full"
+        className="rounded-full"
+        style={style}
         resizeMode="cover"
       />
     );
@@ -209,10 +228,10 @@ function TxIcon({
   if (isCredit) {
     return (
       <View
-        className="mr-3 h-10 w-10 items-center justify-center rounded-full"
-        style={{ backgroundColor: isDark ? "#052E16" : "#DCFCE7" }}
+        className="items-center justify-center rounded-full"
+        style={[style, { backgroundColor: isDark ? "#052E16" : "#DCFCE7" }]}
       >
-        <Ionicons name="arrow-down" size={18} color={colors.green[500]} />
+        <Ionicons name="arrow-down" size={s(18)} color={colors.green[500]} />
       </View>
     );
   }
@@ -221,7 +240,8 @@ function TxIcon({
     return (
       <Image
         source={{ uri: remoteIcon }}
-        className="mr-3 h-10 w-10 rounded-full"
+        className="rounded-full"
+        style={style}
         resizeMode="cover"
       />
     );
@@ -229,14 +249,17 @@ function TxIcon({
 
   return (
     <View
-      className="mr-3 h-10 w-10 items-center justify-center rounded-full"
-      style={{
-        backgroundColor: isDark ? "rgba(255,255,255,0.08)" : colors.gray[100],
-      }}
+      className="items-center justify-center rounded-full"
+      style={[
+        style,
+        {
+          backgroundColor: isDark ? "rgba(255,255,255,0.08)" : colors.gray[100],
+        },
+      ]}
     >
       <Ionicons
         name="arrow-up"
-        size={18}
+        size={s(18)}
         color={isDark ? colors.gray[400] : colors.gray[500]}
       />
     </View>

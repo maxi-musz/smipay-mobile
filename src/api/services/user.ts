@@ -16,3 +16,30 @@ export async function fetchUserProfile() {
   );
   return data;
 }
+
+export interface RequestAccountDeletionPayload {
+  reason?: string;
+}
+
+export interface AccountDeletionResponseData {
+  requested_account_deletion: boolean;
+}
+
+/** Request account deletion. Optional reason (max 500 chars). Idempotent if already requested. */
+export async function requestAccountDeletion(
+  payload?: RequestAccountDeletionPayload,
+) {
+  const { data } = await api.post<ApiResponse<AccountDeletionResponseData>>(
+    `${USER}/request-account-deletion`,
+    payload ?? {},
+  );
+  return data;
+}
+
+/** Cancel a pending account deletion request. */
+export async function cancelAccountDeletionRequest() {
+  const { data } = await api.post<ApiResponse<AccountDeletionResponseData>>(
+    `${USER}/cancel-account-deletion-request`,
+  );
+  return data;
+}

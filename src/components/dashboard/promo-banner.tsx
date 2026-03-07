@@ -1,24 +1,19 @@
 import { useRef, useState } from "react";
 import {
-  Dimensions,
   FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
+import { useResponsiveScale } from "@/hooks/use-responsive-scale";
 import type { RewardBanner } from "@/types";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const CARD_H_MARGIN = 20;
-const CARD_GAP = 10;
-const CARD_WIDTH = SCREEN_WIDTH - CARD_H_MARGIN * 2;
-const SNAP_INTERVAL = CARD_WIDTH + CARD_GAP;
 
 type BannerConfig = {
   icon: React.ComponentProps<typeof Ionicons>["name"];
@@ -51,17 +46,24 @@ interface PromoBannerProps {
 export function PromoBanner({ banners }: PromoBannerProps) {
   const flatListRef = useRef<FlatList>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const { width } = useWindowDimensions();
+  const { s } = useResponsiveScale();
 
   if (banners.length === 0) return null;
 
+  const cardHMargin = s(12);
+  const cardGap = s(10);
+  const cardWidth = width - cardHMargin * 2;
+  const snapInterval = cardWidth + cardGap;
+
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = e.nativeEvent.contentOffset.x;
-    const index = Math.round(offset / SNAP_INTERVAL);
+    const index = Math.round(offset / snapInterval);
     setActiveIndex(index);
   };
 
   return (
-    <View className="mt-5">
+    <View style={{ marginTop: s(8) }}>
       <FlatList
         ref={flatListRef}
         data={banners}
@@ -70,22 +72,27 @@ export function PromoBanner({ banners }: PromoBannerProps) {
         showsHorizontalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        snapToInterval={SNAP_INTERVAL}
+        snapToInterval={snapInterval}
         decelerationRate="fast"
-        contentContainerStyle={{ paddingHorizontal: CARD_H_MARGIN }}
-        ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
-        renderItem={({ item }) => <PromoCard banner={item} />}
+        contentContainerStyle={{ paddingHorizontal: cardHMargin }}
+        ItemSeparatorComponent={() => <View style={{ width: cardGap }} />}
+        renderItem={({ item }) => (
+          <PromoCard banner={item} cardWidth={cardWidth} />
+        )}
       />
 
       {banners.length > 1 && (
-        <View className="mt-3 flex-row items-center justify-center gap-1.5">
+        <View
+          className="flex-row items-center justify-center"
+          style={{ marginTop: s(12), gap: s(6) }}
+        >
           {banners.map((_, i) => (
             <View
               key={i}
               className="rounded-full"
               style={{
-                width: activeIndex === i ? 20 : 6,
-                height: 6,
+                width: activeIndex === i ? s(20) : s(6),
+                height: s(6),
                 backgroundColor:
                   activeIndex === i ? colors.orange[500] : colors.gray[300],
               }}
@@ -97,13 +104,20 @@ export function PromoBanner({ banners }: PromoBannerProps) {
   );
 }
 
-function PromoCard({ banner }: { banner: RewardBanner }) {
+function PromoCard({
+  banner,
+  cardWidth,
+}: {
+  banner: RewardBanner;
+  cardWidth: number;
+}) {
   const config = BANNER_CONFIG[banner.type];
+  const { s } = useResponsiveScale();
 
   return (
     <View
       className="overflow-hidden rounded-2xl"
-      style={{ width: CARD_WIDTH }}
+      style={{ width: cardWidth }}
     >
       <LinearGradient
         colors={config.gradientColors}
@@ -112,29 +126,46 @@ function PromoCard({ banner }: { banner: RewardBanner }) {
         style={{
           flexDirection: "row",
           alignItems: "center",
-          paddingHorizontal: 16,
-          paddingVertical: 14,
+          paddingHorizontal: s(14),
+          paddingVertical: s(10),
         }}
       >
-        <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-white/20">
-          <Ionicons name={config.icon} size={20} color="#fff" />
+        <View
+          className="items-center justify-center rounded-lg bg-white/20"
+          style={{
+            width: s(36),
+            height: s(36),
+            marginRight: s(10),
+          }}
+        >
+          <Ionicons name={config.icon} size={s(18)} color="#fff" />
         </View>
 
         <View className="flex-1">
-          <Text className="text-[15px] font-bold text-white">
+          <Text
+            className="font-semibold text-white"
+            style={{ fontSize: s(14) }}
+          >
             {banner.title}
           </Text>
           <Text
-            className="mt-0.5 text-[12px] leading-4 text-white/80"
+            className="text-white/80"
+            style={{ marginTop: s(2), fontSize: s(11), lineHeight: s(15) }}
             numberOfLines={2}
           >
             {banner.message}
           </Text>
-          <Pressable className="mt-1.5 flex-row items-center gap-0.5">
-            <Text className="text-[11px] font-bold uppercase text-white">
+          <Pressable
+            className="flex-row items-center gap-0.5"
+            style={{ marginTop: s(4) }}
+          >
+            <Text
+              className="font-semibold uppercase text-white"
+              style={{ fontSize: s(10) }}
+            >
               {config.cta}
             </Text>
-            <Ionicons name="chevron-forward" size={11} color="#fff" />
+            <Ionicons name="chevron-forward" size={s(10)} color="#fff" />
           </Pressable>
         </View>
       </LinearGradient>

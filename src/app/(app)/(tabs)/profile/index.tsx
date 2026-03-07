@@ -36,6 +36,7 @@ const menuItems: MenuItem[] = [
   { id: "notifications", icon: "notifications-outline", label: "Notifications" },
   { id: "help", icon: "help-circle-outline", label: "Help & Support" },
   { id: "privacy", icon: "document-text-outline", label: "Privacy Policy" },
+  { id: "account-deletion", icon: "trash-outline", label: "Delete account" },
 ];
 
 export default function ProfileScreen() {
@@ -128,6 +129,8 @@ export default function ProfileScreen() {
           message: "Privacy policy could not be opened.",
         });
       }
+    } else if (id === "account-deletion") {
+      router.push("/(app)/profile/account-deletion");
     }
   }
 

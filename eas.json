@@ -10,7 +10,9 @@
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "http://localhost:1500",
         "EXPO_PUBLIC_API_VERSION": "/api/v1",
-        "EXPO_PUBLIC_REQUEST_SIGNING_SECRET": "867fc67f86b6f37e59425116fd1f870c45236ea84d7636ad940d9b0fb20d3e10"
+        "EXPO_PUBLIC_REQUEST_SIGNING_SECRET": "867fc67f86b6f37e59425116fd1f870c45236ea84d7636ad940d9b0fb20d3e10",
+        "EXPO_PUBLIC_AIRTIME_PROVIDER": "vtpass",
+        "EXPO_PUBLIC_DATA_PROVIDER": "vtpass"
       }
     },
     "staging": {
@@ -19,7 +21,9 @@
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://smipay-backend.onrender.com",
         "EXPO_PUBLIC_API_VERSION": "/api/v1",
-        "EXPO_PUBLIC_REQUEST_SIGNING_SECRET": "867fc67f86b6f37e59425116fd1f870c45236ea84d7636ad940d9b0fb20d3e10"
+        "EXPO_PUBLIC_REQUEST_SIGNING_SECRET": "867fc67f86b6f37e59425116fd1f870c45236ea84d7636ad940d9b0fb20d3e10",
+        "EXPO_PUBLIC_AIRTIME_PROVIDER": "vtpass",
+        "EXPO_PUBLIC_DATA_PROVIDER": "vtpass"
       }
     },
     "production": {
@@ -28,7 +32,9 @@
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://smipay-prod.onrender.com",
         "EXPO_PUBLIC_API_VERSION": "/api/v1",
-        "EXPO_PUBLIC_REQUEST_SIGNING_SECRET": "867fc67f86b6f37e59425116fd1f870c45236ea84d7636ad940d9b0fb20d3e10"
+        "EXPO_PUBLIC_REQUEST_SIGNING_SECRET": "867fc67f86b6f37e59425116fd1f870c45236ea84d7636ad940d9b0fb20d3e10",
+        "EXPO_PUBLIC_AIRTIME_PROVIDER": "vtpass",
+        "EXPO_PUBLIC_DATA_PROVIDER": "vtpass"
       }
     }
   },

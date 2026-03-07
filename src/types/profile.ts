@@ -46,6 +46,8 @@ export interface ProfileUser {
   referral_code?: string;
   /** Unique SmiPay tag (e.g. johndoe). Often used as shareable referral identifier. */
   smipay_tag?: string;
+  /** True if user has requested account deletion; show pending state and cancel option. */
+  requested_account_deletion?: boolean;
 }
 
 export interface ProfileAddress {

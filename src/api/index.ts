@@ -11,7 +11,14 @@ export {
   completeOnboarding,
 } from "./services/auth";
 
-export { fetchHomepageDetails, fetchUserProfile } from "./services/user";
+export {
+  fetchHomepageDetails,
+  fetchUserProfile,
+  requestAccountDeletion,
+  cancelAccountDeletionRequest,
+  type RequestAccountDeletionPayload,
+  type AccountDeletionResponseData,
+} from "./services/user";
 export {
   registerPushToken,
   removePushToken,
@@ -38,3 +45,17 @@ export {
   fetchAirtimeServiceIds,
   purchaseAirtime,
 } from "./services/vtpass-airtime";
+export {
+  getIntlCountries,
+  getIntlProductTypes,
+  getIntlOperators,
+  getIntlVariations,
+  purchaseIntlAirtime,
+  queryIntlAirtime,
+} from "./services/vtpass-intl-airtime";
+export {
+  fetchDataServiceIds,
+  fetchDataVariationCodes,
+  purchaseData,
+  queryDataTransaction,
+} from "./services/vtpass-data";

@@ -1,10 +1,11 @@
-import { Pressable, View } from "react-native";
+import { Pressable, useWindowDimensions, View } from "react-native";
 import { router, type Href } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "@/components/ui/text";
-import { getAirtimeRoute } from "@/lib/provider-config";
+import { getAirtimeRoute, getDataRoute } from "@/lib/provider-config";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { useResponsiveScale } from "@/hooks/use-responsive-scale";
 import { colors } from "@/constants/colors";
 import type { CashbackRate } from "@/types";
 
@@ -69,6 +70,7 @@ const SERVICES: ServiceItem[] = [
     iconColor: "#0EA5E9",
     bgColor: "#F0F9FF",
     darkBgColor: "#082F49",
+    cashbackService: "international_airtime",
   },
   {
     id: "savings",
@@ -94,6 +96,11 @@ interface ServicesGridProps {
   cashbackRates?: CashbackRate[];
 }
 
+const CASHBACK_LABELS: Partial<Record<string, string>> = {
+  airtime: "up to 9% off",
+  data: "up to 5% off",
+};
+
 function getCashbackLabel(
   service: ServiceItem,
   rates?: CashbackRate[],
@@ -103,31 +110,56 @@ function getCashbackLabel(
   const rate = rates.find((r) => r.service === service.cashbackService);
   if (!rate || !rate.is_active || rate.percentage <= 0) return null;
 
+  const fixedLabel = CASHBACK_LABELS[service.cashbackService];
+  if (fixedLabel) return fixedLabel;
   return `${rate.percentage}% cashback`;
 }
 
 export function ServicesGrid({ cashbackRates }: ServicesGridProps) {
   const { isDark } = useAppTheme();
+  const { width: screenWidth } = useWindowDimensions();
+  const { s } = useResponsiveScale();
+
+  const horizontalMargin = s(12);
+  const cardPadding = s(12);
+  const colGap = s(10);
+  const rowGap = s(26);
+  const contentWidth =
+    screenWidth - horizontalMargin * 2 - cardPadding * 2;
+  const itemWidth = (contentWidth - colGap * 3) / 4;
 
   return (
     <View
-      className="mt-6 rounded-2xl mx-5 px-3 pb-2 pt-4"
-      style={{ backgroundColor: isDark ? "#1E293B" : "#F5F6F8" }}
+      className="rounded-2xl mx-3"
+      style={{
+        backgroundColor: isDark ? "#1E293B" : "#F5F6F8",
+        marginTop: s(24),
+        marginHorizontal: horizontalMargin,
+        paddingHorizontal: cardPadding,
+        paddingTop: s(20),
+        paddingBottom: s(16),
+      }}
     >
-      <Text className="mb-3 px-1 text-[15px] font-semibold text-foreground">
-        Services
-      </Text>
-      <View className="flex-row flex-wrap">
+      <View
+        className="flex-row flex-wrap"
+        style={{ rowGap, columnGap: colGap }}
+      >
         {SERVICES.map((service) => (
           <ServiceIcon
             key={service.id}
             service={service}
             isDark={isDark}
+            itemWidth={itemWidth}
             cashbackLabel={getCashbackLabel(service, cashbackRates)}
+            scale={s}
             onPress={
               service.id === "airtime" && !service.comingSoon
                 ? () => router.push(getAirtimeRoute() as Href)
-                : undefined
+                : service.id === "intl-airtime" && !service.comingSoon
+                  ? () => router.push("/(app)/vtpass/intl-airtime" as Href)
+                  : service.id === "data" && !service.comingSoon
+                    ? () => router.push(getDataRoute() as Href)
+                    : undefined
             }
           />
         ))}
@@ -139,55 +171,93 @@ export function ServicesGrid({ cashbackRates }: ServicesGridProps) {
 function ServiceIcon({
   service,
   isDark,
+  itemWidth,
   cashbackLabel,
   onPress,
+  scale,
 }: {
   service: ServiceItem;
   isDark: boolean;
+  itemWidth: number;
   cashbackLabel: string | null;
   onPress?: () => void;
+  scale: (n: number) => number;
 }) {
   const bg = isDark ? service.darkBgColor : service.bgColor;
+  const s = scale;
+  const iconSize = s(22);
+  const circleSize = s(52);
 
   return (
     <Pressable
-      className="mb-3 items-center"
-      style={{ width: "25%" }}
+      className="items-center"
+      style={{ width: itemWidth }}
       disabled={service.comingSoon}
       onPress={onPress}
     >
       <View className="relative">
         {cashbackLabel && (
           <View
-            className="absolute -top-2 left-1/2 z-10 -translate-x-1/2 rounded-full px-2.5 py-0.5"
-            style={{ backgroundColor: colors.green[500] }}
+            className="absolute left-1/2 z-10 -translate-x-1/2 rounded-full"
+            style={{
+              top: -s(4),
+              paddingHorizontal: s(4),
+              paddingVertical: s(2),
+              backgroundColor: colors.green[500],
+            }}
           >
-            <Text className="text-[9px] font-bold text-white" numberOfLines={1}>
+            <Text
+              className="font-semibold text-white"
+              style={{ fontSize: s(8) }}
+              numberOfLines={1}
+            >
               {cashbackLabel}
             </Text>
           </View>
         )}
 
         {service.comingSoon && (
-          <View className="absolute -right-1 -top-1 z-10 rounded-full bg-destructive px-1.5 py-0.5">
-            <Text className="text-[8px] font-bold uppercase text-white">
+          <View
+            className="absolute z-10 rounded-full bg-destructive"
+            style={{
+              right: -s(2),
+              top: -s(2),
+              paddingHorizontal: s(4),
+              paddingVertical: s(2),
+            }}
+          >
+            <Text
+              className="font-bold uppercase text-white"
+              style={{ fontSize: s(8) }}
+            >
               Soon
             </Text>
           </View>
         )}
 
         <View
-          className="h-14 w-14 items-center justify-center rounded-full"
-          style={{ backgroundColor: bg }}
+          className="items-center justify-center rounded-full"
+          style={{
+            width: circleSize,
+            height: circleSize,
+            backgroundColor: bg,
+          }}
         >
-          <Ionicons name={service.icon} size={24} color={service.iconColor} />
+          <Ionicons
+            name={service.icon}
+            size={iconSize}
+            color={service.iconColor}
+          />
         </View>
       </View>
 
       <Text
-        className="mt-1.5 text-center text-xs text-foreground"
+        className="text-center text-foreground"
         numberOfLines={1}
-        style={service.comingSoon ? { opacity: 0.5 } : undefined}
+        style={[
+          { marginTop: s(6), fontSize: s(12) },
+          service.comingSoon ? { opacity: 0.5 } : undefined,
+        ]}
       >
         {service.label}
       </Text>
