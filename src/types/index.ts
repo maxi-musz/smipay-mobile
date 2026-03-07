@@ -45,6 +45,7 @@ export type {
   ProfileKycVerification,
   ProfileWalletCard,
   ProfileTier,
+  ReferralAnalysis,
 } from "./profile";
 export type {
   ConversationStatus,

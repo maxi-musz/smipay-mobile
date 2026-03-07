@@ -1,4 +1,4 @@
-import { Platform, View } from "react-native";
+import { View } from "react-native";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,21 +9,19 @@ import { colors } from "@/constants/colors";
 const THEME = {
   light: {
     tabBg: "#FFFFFF",
-    activeBg: colors.orange[50],
     activeText: colors.orange[600],
     activeIcon: colors.orange[500],
     inactiveIcon: colors.gray[400],
-    inactiveText: colors.gray[400],
-    shadow: "rgba(0,0,0,0.06)",
+    inactiveText: colors.gray[500],
+    shadow: "rgba(0,0,0,0.08)",
   },
   dark: {
     tabBg: "#1D283A",
-    activeBg: "rgba(244,131,31,0.12)",
     activeText: colors.orange[400],
     activeIcon: colors.orange[400],
     inactiveIcon: "#6B7A8D",
     inactiveText: "#6B7A8D",
-    shadow: "rgba(0,0,0,0.3)",
+    shadow: "rgba(0,0,0,0.4)",
   },
 } as const;
 
@@ -36,15 +34,15 @@ type TabConfig = {
 
 const TABS: TabConfig[] = [
   { name: "index", title: "Home", iconFocused: "home", iconDefault: "home-outline" },
-  { name: "history", title: "History", iconFocused: "time", iconDefault: "time-outline" },
-  { name: "profile", title: "Profile", iconFocused: "person", iconDefault: "person-outline" },
+  { name: "history/index", title: "History", iconFocused: "receipt", iconDefault: "receipt-outline" },
+  { name: "profile/index", title: "Profile", iconFocused: "person", iconDefault: "person-outline" },
 ];
 
 export default function TabsLayout() {
   const { isDark } = useAppTheme();
   const t = isDark ? THEME.dark : THEME.light;
   const insets = useSafeAreaInsets();
-  const bottomPadding = Math.max(insets.bottom, 8);
+  const bottomPadding = Math.max(insets.bottom, 12);
 
   return (
     <Tabs
@@ -59,23 +57,28 @@ export default function TabsLayout() {
           left: 0,
           right: 0,
           backgroundColor: t.tabBg,
-          borderTopWidth: 0,
-          elevation: 0,
+          borderTopWidth: 1,
+          borderTopColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+          elevation: 8,
           shadowColor: t.shadow,
-          shadowOffset: { width: 0, height: -4 },
+          shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 1,
-          shadowRadius: 12,
-          paddingTop: 8,
+          shadowRadius: 16,
+          paddingTop: 12,
           paddingBottom: bottomPadding,
-          height: 60 + bottomPadding,
+          height: 64 + bottomPadding,
+          minHeight: 64 + bottomPadding,
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: "600",
-          marginTop: 2,
+          marginTop: 4,
         },
         tabBarItemStyle: {
-          paddingVertical: 2,
+          paddingVertical: 4,
+        },
+        tabBarIconStyle: {
+          marginBottom: -2,
         },
       }}
     >
@@ -85,26 +88,31 @@ export default function TabsLayout() {
           name={tab.name}
           options={{
             title: tab.title,
-            tabBarIcon: ({ focused, size }) => {
+            tabBarIcon: ({ focused }) => {
               const iconName = focused ? tab.iconFocused : tab.iconDefault;
               const iconColor = focused ? t.activeIcon : t.inactiveIcon;
-
-              if (focused) {
-                return (
-                  <View
-                    style={{
-                      backgroundColor: t.activeBg,
-                      borderRadius: 12,
-                      paddingHorizontal: 16,
-                      paddingVertical: 4,
-                    }}
-                  >
-                    <Ionicons name={iconName} size={size} color={iconColor} />
-                  </View>
-                );
-              }
-
-              return <Ionicons name={iconName} size={size} color={iconColor} />;
+              return (
+                <View
+                  style={{
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 48,
+                    height: 32,
+                    borderRadius: 16,
+                    backgroundColor: focused
+                      ? isDark
+                        ? "rgba(245,130,32,0.18)"
+                        : colors.orange[50]
+                      : "transparent",
+                  }}
+                >
+                  <Ionicons
+                    name={iconName}
+                    size={22}
+                    color={iconColor}
+                  />
+                </View>
+              );
             },
           }}
         />

@@ -1,5 +1,31 @@
 import type { TierLimits } from "./homepage";
 
+/** Referral analysis as returned by fetch-user-profile. */
+export interface ReferralAnalysis {
+  total_referred: number;
+  by_status: {
+    pending?: number;
+    eligible?: number;
+    rewarded?: number;
+    partially_rewarded?: number;
+    expired?: number;
+    rejected?: number;
+  };
+  referrer_rewards_issued: number;
+  referrer_rewards_total_amount: number;
+  referee_rewards_issued: number;
+  referee_rewards_total_amount: number;
+  slots_remaining: number;
+  program_config?: {
+    is_active: boolean;
+    referrer_reward_amount: number;
+    referee_reward_amount: number;
+    reward_trigger: string;
+    max_referrals_per_user: number;
+    min_transaction_amount: number;
+  };
+}
+
 /** User object as returned by fetch-user-profile (snake_case from backend). */
 export interface ProfileUser {
   id: string;
@@ -16,6 +42,10 @@ export interface ProfileUser {
   totalCards?: number;
   totalAccounts?: number;
   wallet_balance?: number;
+  /** User's referral code for sharing (e.g. JOHN7ABC). Use smipay_tag if empty. */
+  referral_code?: string;
+  /** Unique SmiPay tag (e.g. johndoe). Often used as shareable referral identifier. */
+  smipay_tag?: string;
 }
 
 export interface ProfileAddress {
@@ -65,4 +95,5 @@ export interface UserProfileData {
   wallet_card: ProfileWalletCard;
   current_tier: ProfileTier;
   available_tiers: ProfileTier[];
+  referral_analysis?: ReferralAnalysis;
 }

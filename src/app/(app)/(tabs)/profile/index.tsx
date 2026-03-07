@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, Linking, Pressable, ScrollView, View } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,7 +16,8 @@ import { Text } from "@/components/ui/text";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToastStore } from "@/components/ui/toast";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import { useAuthStore, useHomepageStore } from "@/store";
+import { colors } from "@/constants/colors";
+import { useAuthStore, useHomepageStore, useProfileStore } from "@/store";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -30,6 +31,7 @@ const PRIVACY_POLICY_URL = "https://www.smipay.ng/privacy";
 
 const menuItems: MenuItem[] = [
   { id: "basic-information", icon: "person-outline", label: "Basic Information" },
+  { id: "referral", icon: "gift-outline", label: "Referral" },
   { id: "security", icon: "shield-checkmark-outline", label: "Security" },
   { id: "notifications", icon: "notifications-outline", label: "Notifications" },
   { id: "help", icon: "help-circle-outline", label: "Help & Support" },
@@ -40,21 +42,30 @@ export default function ProfileScreen() {
   const authUser = useAuthStore.use.user();
   const storeLogout = useAuthStore.use.logout();
   const homepageData = useHomepageStore.use.data();
+  const profileData = useProfileStore.use.data();
+  const fetchProfile = useProfileStore.use.fetchProfile();
   const { isDark } = useAppTheme();
   const [loggingOut, setLoggingOut] = useState(false);
 
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
+
   const hpUser = homepageData?.user;
-  const firstName = hpUser?.first_name ?? authUser?.first_name ?? "";
-  const lastName = hpUser?.last_name ?? authUser?.last_name ?? "";
+  const profileUser = profileData?.user;
+  const firstName = hpUser?.first_name ?? authUser?.first_name ?? profileUser?.first_name ?? "";
+  const lastName = hpUser?.last_name ?? authUser?.last_name ?? profileUser?.last_name ?? "";
   const fullName = `${firstName} ${lastName}`.trim() || "User";
-  const email = hpUser?.email ?? authUser?.email ?? "";
-  const phone = hpUser?.phone_number ?? authUser?.phone_number ?? "";
-  const smipayTag = hpUser?.smipay_tag ?? "";
-  const profileImage = hpUser?.profile_image ?? authUser?.profile_image ?? null;
-  const isVerified = hpUser?.is_email_verified ?? authUser?.is_email_verified ?? false;
+  const email = hpUser?.email ?? authUser?.email ?? profileUser?.email ?? "";
+  const phone = hpUser?.phone_number ?? authUser?.phone_number ?? profileUser?.phone_number ?? "";
+  const smipayTag = hpUser?.smipay_tag ?? profileUser?.smipay_tag ?? "";
+  const profileImage =
+    hpUser?.profile_image ?? authUser?.profile_image ?? profileUser?.profile_image ?? null;
+  const isVerified =
+    hpUser?.is_email_verified ?? authUser?.is_email_verified ?? profileUser?.is_verified ?? false;
 
   const walletBalance = homepageData?.wallet_card?.current_balance ?? "₦0.00";
-  const tier = homepageData?.current_tier;
+  const tier = homepageData?.current_tier ?? profileData?.current_tier;
 
   const initials = `${firstName?.[0] ?? ""}${lastName?.[0] ?? ""}`.toUpperCase() || "U";
 
@@ -89,11 +100,13 @@ export default function ProfileScreen() {
 
   async function handleMenuPress(id: string) {
     if (id === "security") {
-      router.push("/(app)/security");
+      router.push("/(app)/profile/security");
     } else if (id === "basic-information") {
-      router.push("/(app)/basic-information");
+      router.push("/(app)/profile/basic-information");
+    } else if (id === "referral") {
+      router.push("/(app)/profile/referral");
     } else if (id === "notifications") {
-      router.push("/(app)/notifications");
+      router.push("/(app)/profile/notifications");
     } else if (id === "help") {
       router.push("/(app)/support");
     } else if (id === "privacy") {
@@ -130,7 +143,7 @@ export default function ProfileScreen() {
         onPress={() => handleMenuPress(item.id)}
       >
         <View className="mr-3 h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
-          <Ionicons name={item.icon} size={18} color="#F4831F" />
+          <Ionicons name={item.icon} size={18} color={colors.orange[500]} />
         </View>
         <Text className="flex-1 text-[15px] text-foreground">
           {item.label}
@@ -160,7 +173,7 @@ export default function ProfileScreen() {
             <Ionicons
               name="headset-outline"
               size={18}
-              color="#2563EB"
+              color={colors.info}
             />
           </Pressable>
           <ThemeToggle size={18} />
@@ -197,12 +210,12 @@ export default function ProfileScreen() {
               {fullName}
             </Text>
             {isVerified && (
-              <Ionicons name="checkmark-circle" size={18} color="#22C55E" />
+              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
             )}
           </View>
 
           {smipayTag !== "" && (
-            <Text className="mt-0.5 text-sm text-primary">
+            <Text className="mt-0.5 text-sm font-medium" style={{ color: colors.orange[600] }}>
               @{smipayTag}
             </Text>
           )}
@@ -220,7 +233,7 @@ export default function ProfileScreen() {
         <Animated.View
           className="mt-4 flex-row rounded-2xl px-4 py-4"
           style={{ backgroundColor: cardBg }}
-          entering={FadeInDown.delay(120).duration(380).springify().damping(15)}
+          entering={FadeInDown.delay(60).duration(380).springify().damping(15)}
         >
           <View className="flex-1 items-center">
             <Text className="text-xs text-muted-foreground">Wallet Balance</Text>
@@ -246,13 +259,13 @@ export default function ProfileScreen() {
         <Animated.View
           className="mt-6 overflow-hidden rounded-2xl"
           style={{ backgroundColor: cardBg }}
-          entering={FadeInDown.delay(180).duration(380).springify().damping(15)}
+          entering={FadeInDown.delay(120).duration(380).springify().damping(15)}
         >
           {menuItems.map((item, index) => renderMenuItem(item, index))}
         </Animated.View>
 
         <Animated.View
-          entering={FadeInDown.delay(240).duration(380).springify().damping(15)}
+          entering={FadeInDown.delay(180).duration(380).springify().damping(15)}
         >
           <Button
             variant="outline"
@@ -260,13 +273,13 @@ export default function ProfileScreen() {
             onPress={handleLogout}
             disabled={loggingOut}
           >
-          {loggingOut ? (
-            <Spinner color="#ef4444" />
-          ) : (
-            <Text className="text-sm font-semibold text-destructive">
-              Sign Out
-            </Text>
-          )}
+            {loggingOut ? (
+              <Spinner color="#ef4444" />
+            ) : (
+              <Text className="text-sm font-semibold text-destructive">
+                Sign Out
+              </Text>
+            )}
           </Button>
         </Animated.View>
       </ScrollView>

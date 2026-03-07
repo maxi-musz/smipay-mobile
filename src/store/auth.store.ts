@@ -77,7 +77,9 @@ const _useAuthStore = create<AuthStore>()(
         await clearAllSecureData();
         useAppStore.getState().setBiometricsEnabled(false);
         const { useHomepageStore } = await import("./homepage.store");
+        const { useProfileStore } = await import("./profile.store");
         useHomepageStore.getState().reset();
+        useProfileStore.getState().reset();
         set(initialState);
       },
 

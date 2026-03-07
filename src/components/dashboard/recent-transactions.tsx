@@ -85,7 +85,7 @@ export function RecentTransactions({
             color={isDark ? "#808999" : "#9CA3B0"}
           />
           <Text className="mt-3 text-center text-muted-foreground">
-            Couldn't load transactions. Tap to retry.
+            {"Couldn't load transactions. Tap to retry."}
           </Text>
         </Pressable>
       ) : transactions.length === 0 ? (
