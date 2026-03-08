@@ -46,6 +46,7 @@ const SERVICES: ServiceItem[] = [
     iconColor: "#EF4444",
     bgColor: "#FEF2F2",
     darkBgColor: "#450A0A",
+    cashbackService: "cable",
   },
   {
     id: "education",
@@ -54,6 +55,7 @@ const SERVICES: ServiceItem[] = [
     iconColor: colors.green[500],
     bgColor: colors.green[100],
     darkBgColor: colors.green[950],
+    cashbackService: "education",
   },
   {
     id: "electricity",
@@ -62,6 +64,7 @@ const SERVICES: ServiceItem[] = [
     iconColor: "#EAB308",
     bgColor: "#FEFCE8",
     darkBgColor: "#422006",
+    cashbackService: "electricity",
   },
   {
     id: "intl-airtime",
@@ -101,10 +104,12 @@ const CASHBACK_LABELS: Partial<Record<string, string>> = {
   data: "up to 5% off",
 };
 
+/** Only airtime and data show cashback badges on the quick links. */
 function getCashbackLabel(
   service: ServiceItem,
   rates?: CashbackRate[],
 ): string | null {
+  if (service.id !== "airtime" && service.id !== "data") return null;
   if (!rates || !service.cashbackService) return null;
 
   const rate = rates.find((r) => r.service === service.cashbackService);
@@ -159,7 +164,13 @@ export function ServicesGrid({ cashbackRates }: ServicesGridProps) {
                   ? () => router.push("/(app)/vtpass/intl-airtime" as Href)
                   : service.id === "data" && !service.comingSoon
                     ? () => router.push(getDataRoute() as Href)
-                    : undefined
+                    : service.id === "cable-tv" && !service.comingSoon
+                      ? () => router.push("/(app)/vtpass/cable" as Href)
+                      : service.id === "education" && !service.comingSoon
+                        ? () => router.push("/(app)/vtpass/education" as Href)
+                        : service.id === "electricity" && !service.comingSoon
+                          ? () => router.push("/(app)/vtpass/electricity" as Href)
+                          : undefined
             }
           />
         ))}

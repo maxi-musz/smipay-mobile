@@ -310,7 +310,7 @@ export default function DataAmountScreen() {
     setPhone("");
     resetStore();
     fetchHomepage();
-    router.replace("/(app)/vtpass/data");
+    router.replace("/(app)/(tabs)");
   }
 
   function handleSelectRecent(entry: DataRecentEntry) {

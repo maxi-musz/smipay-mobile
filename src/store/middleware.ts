@@ -1,7 +1,9 @@
+import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { PersistOptions } from "zustand/middleware";
 
 const STORE_PREFIX = "@smipay";
+const isSSR = Platform.OS === "web" && typeof window === "undefined";
 
 /**
  * Pre-configured AsyncStorage adapter for zustand persist middleware.
@@ -18,13 +20,16 @@ export function createPersistConfig<T>(
     name: `${STORE_PREFIX}/${name}`,
     storage: {
       getItem: async (key) => {
+        if (isSSR) return null;
         const value = await AsyncStorage.getItem(key);
         return value ? JSON.parse(value) : null;
       },
       setItem: async (key, value) => {
+        if (isSSR) return;
         await AsyncStorage.setItem(key, JSON.stringify(value));
       },
       removeItem: async (key) => {
+        if (isSSR) return;
         await AsyncStorage.removeItem(key);
       },
     },

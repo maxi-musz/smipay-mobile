@@ -328,7 +328,7 @@ export default function IntlAirtimeAmountScreen() {
     setPhone("");
     resetStore();
     fetchHomepage();
-    router.replace("/(app)/vtpass/intl-airtime");
+    router.replace("/(app)/(tabs)");
   }
 
   if (

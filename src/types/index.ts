@@ -37,6 +37,7 @@ export type {
   HistoryTransaction,
   HistoryListData,
   SingleTransaction,
+  TransactionMeta,
 } from "./history";
 export type {
   UserProfileData,
@@ -47,6 +48,30 @@ export type {
   ProfileTier,
   ReferralAnalysis,
 } from "./profile";
+export type {
+  CableServiceItem,
+  CableVariation,
+  CableVerifyContent,
+  CableVerifyContentDstvGotv,
+  CableVerifyContentStartimes,
+  CableSubscriptionType,
+  CablePurchaseData,
+} from "./vtpass-cable";
+export { isDstvGotvContent } from "./vtpass-cable";
+export type {
+  EducationVariation,
+  EducationProductID,
+  EducationCredentials,
+  EducationPurchaseData,
+  JambVerifyContent,
+  WaecCard,
+} from "./vtpass-education";
+export type {
+  ElectricityServiceItem,
+  ElectricityVerifyContent,
+  ElectricityPurchaseData,
+  MeterType,
+} from "./vtpass-electricity";
 export type {
   ConversationStatus,
   SupportMessage,

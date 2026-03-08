@@ -224,7 +224,7 @@ export default function VtpassAirtimeScreen() {
     setSuccessModal({ visible: false, message: "" });
     setAmountStr("");
     fetchHomepage();
-    router.back();
+    router.replace("/(app)/(tabs)");
   }
 
   function handleSelectRecent(entry: { phone: string; serviceID: string }) {

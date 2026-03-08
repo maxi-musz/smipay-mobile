@@ -59,3 +59,22 @@ export {
   purchaseData,
   queryDataTransaction,
 } from "./services/vtpass-data";
+export {
+  fetchCableServiceIds,
+  fetchCableVariationCodes,
+  verifyCableSmartcard,
+  purchaseCable,
+  queryCableTransaction,
+} from "./services/vtpass-cable";
+export {
+  fetchEducationVariations,
+  verifyJambProfile,
+  purchaseEducation,
+  queryEducationTransaction,
+} from "./services/vtpass-education";
+export {
+  fetchElectricityServiceIds,
+  verifyElectricityMeter,
+  purchaseElectricity,
+  queryElectricityTransaction,
+} from "./services/vtpass-electricity";

@@ -42,7 +42,7 @@ const initialState: AppState = {
   isHydrated: false,
   isGlobalLoading: false,
   notificationCount: 0,
-  themeMode: "dark",
+  themeMode: "light",
   lockTimeout: "1min",
   biometricsEnabled: false,
   pushNotificationsEnabled: true,

@@ -45,6 +45,44 @@ export interface HistoryListData {
   transactions: HistoryTransaction[];
 }
 
+export interface TransactionMeta {
+  /** VTU / Cable / Education */
+  service_id?: string;
+  variation_code?: string;
+  product_name?: string;
+  phone?: string;
+  quantity?: number;
+
+  /** Education-specific */
+  pin?: string;
+  serial?: string;
+  tokens?: string[];
+  cards?: { Serial: string; Pin: string }[];
+  profile_id?: string | null;
+  purchased_code?: string;
+
+  /** Cable-specific */
+  smartcard_number?: string;
+  subscription_type?: string;
+  customer_name?: string;
+  current_bouquet?: string;
+
+  /** Airtime / Data */
+  network?: string;
+  recipient_phone?: string;
+  data_plan?: string;
+
+  /** Electricity-specific */
+  meter_number?: string;
+  meter_type?: string;
+  electricity_token?: string;
+  units?: string;
+  address?: string;
+
+  /** Catch-all for future fields */
+  [key: string]: unknown;
+}
+
 export interface SingleTransaction {
   id: string;
   amount: string;
@@ -58,5 +96,9 @@ export interface SingleTransaction {
   updated_on: string;
   sender: string | null;
   icon: string | null;
+  credit_debit?: string;
+  raw_amount?: number;
+  wallet_balance?: number;
+  meta?: TransactionMeta | null;
 }
 
