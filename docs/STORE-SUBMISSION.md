@@ -193,17 +193,49 @@ Add `google-service-account.json` to `.gitignore` — it contains sensitive cred
 
 ### Review process
 
-- **Internal testing**: Available to testers immediately (no review)
-- **Closed testing** (alpha/beta): Available within hours, no review
-- **Production**: Google reviews your app (typically 1-7 days for new apps, faster for updates)
+- **Internal testing**: Available immediately, no review. Does NOT count toward production access.
+- **Closed testing**: Available within hours, no review. This IS what counts for production eligibility.
+- **Production**: Google reviews your app (typically 1-7 days for new apps, faster for updates).
 
-Start with **internal testing** to verify everything works, then promote to production.
+### Google's mandatory closed testing requirement (first-time apps)
+
+Google will NOT let you publish to production until you meet ALL of these:
+
+| Requirement | Detail |
+|---|---|
+| **Testing track** | Must be **Closed testing** (not Internal testing) |
+| **Minimum testers** | At least **12 unique testers** must opt in and install the app |
+| **Minimum duration** | Testers must be active for at least **14 continuous days** |
+| **Opt-in required** | Testers must click the opt-in link and install from Play Store |
+
+Internal testing (the 100-person track) does NOT satisfy this requirement. You must
+use **Closed testing** specifically.
 
 ---
 
 ## 4. Testing before store release
 
+### Recommended testing timeline
+
+| Day | What to do |
+|---|---|
+| Day 1 | Build staging: `eas build --profile staging --platform all` |
+| Day 1 | iOS: Submit to App Store Connect, distribute via TestFlight |
+| Day 1 | Android: Upload to Play Console **Closed testing** track, invite 15-20 testers |
+| Day 1-3 | Testers install and start using the app on both platforms |
+| Day 2-13 | Fix bugs as they come in via OTA: `eas update --channel staging --message "fix: description"` (no rebuild needed) |
+| Day 14 | Google's 14-day requirement is met |
+| Day 14+ | Build production: `eas build --profile production --platform all` |
+| Day 14+ | Submit to both stores for review |
+
+During the 14-day testing period, you can push unlimited bug fixes and UI changes
+via OTA updates. Testers receive fixes on their next app launch without reinstalling.
+
 ### TestFlight (iOS)
+
+Apple has **no minimum tester count or testing duration**. You can submit for App
+Store review as soon as you are satisfied the app works. However, Apple's review team
+will manually test every flow, so make sure nothing is broken.
 
 After your production build is submitted to App Store Connect:
 
@@ -213,13 +245,48 @@ After your production build is submitted to App Store Connect:
 4. **External testers**: Add up to 10,000 people by email — requires a brief Beta App Review (usually <24 hours)
 5. Testers get the TestFlight app and install your build from there
 
-### Internal testing (Android)
+### Closed testing (Android) -- use this, not Internal testing
+
+This is the track that counts toward Google's 14-day production access requirement.
+
+1. Go to Play Console → **Testing** → **Closed testing**
+2. Click **Create track** (or use the default "Closed testing" track)
+3. **Create a testers list**: click **Manage testers** → create a new email list
+4. Add at least **15-20 email addresses** (aim higher than 12 to account for people who don't opt in)
+5. Upload a build: click **Create new release** → upload the `.aab` file from your EAS build
+6. Add release notes → click **Review release** → **Start rollout to Closed testing**
+7. After rollout, go back to **Testers** tab → copy the **Opt-in URL**
+8. Send the opt-in URL to all your testers via WhatsApp, email, etc.
+9. Each tester must: click the link → accept → install from Play Store
+10. Wait **14 days** from when testers start installing
+
+After 14 days with 12+ active testers, the "Production" option becomes available in
+Play Console.
+
+### Internal testing (Android) -- optional, for quick personal testing only
+
+This track is instant (no review, no wait) but does NOT count toward the 14-day
+requirement. Use it only to quickly verify your build works before setting up closed
+testing.
 
 1. Go to Play Console → **Testing** → **Internal testing**
 2. Create a testers list (add emails)
 3. Upload a build (or use EAS submit)
 4. Share the opt-in link with testers
 5. Testers install from the Play Store (shows as "internal test" version)
+
+### Fixing bugs during testing (OTA)
+
+You do NOT need to rebuild or re-upload when you find bugs during testing. For any
+JavaScript/TypeScript/UI fix:
+
+```bash
+# Fix the bug in your code, then:
+eas update --channel staging --message "fix: describe what you fixed"
+```
+
+Testers receive the fix on their next app launch. This works for both TestFlight and
+Play Store testing builds, as long as they were built with the `staging` profile.
 
 ---
 
@@ -243,18 +310,23 @@ eas submit --platform all
 ### Complete release flow
 
 ```
-1. Finish development and testing on dev build
-2. Build production:
-   eas build --profile production --platform ios
-   eas build --profile production --platform android
-3. Test via TestFlight (iOS) and Internal Testing (Android)
-4. Fix any issues found in testing
-5. Submit for review:
-   - iOS: Submit via App Store Connect → App Review (1-3 days)
-   - Android: Promote from Internal Testing → Production (1-7 days for new apps)
-6. App goes live on stores
-7. For JS-only updates after release: use OTA (see OTA-UPDATES-AND-WORKFLOWS.md)
-8. For native changes: build again and resubmit
+1.  Finish development and testing on dev build
+2.  Build staging:
+      eas build --profile staging --platform all
+3.  iOS: Submit to App Store Connect → distribute via TestFlight
+4.  Android: Upload to Play Console → Closed testing (NOT Internal testing)
+5.  Invite 15-20 testers, share the opt-in link, have them install
+6.  Fix bugs during testing via OTA:
+      eas update --channel staging --message "fix: description"
+7.  Wait 14 days (Google requirement for first-time apps)
+8.  Build production:
+      eas build --profile production --platform all
+9.  Submit for review:
+      - iOS: Submit via App Store Connect → App Review (1-3 days)
+      - Android: Promote to Production in Play Console (1-7 days for new apps)
+10. App goes live on stores
+11. For JS-only updates after release: use OTA (see docs/deploy-command.md)
+12. For native changes: build again and resubmit
 ```
 
 ### Accounts needed
@@ -269,7 +341,7 @@ eas submit --platform all
 
 ## 6. Summary
 
-- **iOS**: Build with EAS → submit with `eas submit` → appears in App Store Connect → submit for Apple review → goes live
-- **Android**: Build with EAS → first upload manually to Play Console → subsequent uploads via `eas submit` → Google review → goes live
-- **Test first**: Use TestFlight (iOS) and Internal Testing (Android) before going to production
+- **iOS**: Build → submit to App Store Connect → test via TestFlight → submit for Apple review → goes live
+- **Android**: Build → upload to Play Console **Closed testing** → 12+ testers for 14 days → promote to Production → Google review → goes live
+- **During testing**: Push bug fixes instantly via OTA (`eas update --channel staging`) -- no rebuild needed
 - **After release**: Use OTA updates for JS changes (no store review needed), rebuild only for native changes
