@@ -325,7 +325,7 @@ eas submit --platform all
       - iOS: Submit via App Store Connect → App Review (1-3 days)
       - Android: Promote to Production in Play Console (1-7 days for new apps)
 10. App goes live on stores
-11. For JS-only updates after release: use OTA (see docs/deploy-command.md)
+11. For JS-only updates after release: use OTA (see docs/06-BUILD-DEPLOY-OTA.md)
 12. For native changes: build again and resubmit
 ```
 

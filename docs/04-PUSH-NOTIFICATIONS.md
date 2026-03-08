@@ -2,7 +2,7 @@
 
 This app uses **Expo Push Notifications**: your backend sends messages to Expo’s servers, and Expo delivers them to Apple (APNs) and Google (FCM) for you. Your backend and app code never talk to Firebase directly.
 
-**Android requires FCM setup** — add `google-services.json` and a service account key. See [ANDROID-PUSH-SETUP.md](./ANDROID-PUSH-SETUP.md).
+**Android requires FCM setup** — add `google-services.json` and a service account key. See [05-ANDROID-PUSH-SETUP.md](./05-ANDROID-PUSH-SETUP.md).
 
 ---
 
