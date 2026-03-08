@@ -16,7 +16,9 @@ function computeRequestSignature(timestamp: string, nonce: string): string {
   return signature.toString(CryptoJS.enc.Hex);
 }
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:1500";
+const BASE_URL = __DEV__
+  ? (process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:1500")
+  : process.env.EXPO_PUBLIC_API_BASE_URL!;
 const API_VERSION = process.env.EXPO_PUBLIC_API_VERSION ?? "/api/v1";
 const API_BASE_URL = `${BASE_URL}${API_VERSION}`;
 

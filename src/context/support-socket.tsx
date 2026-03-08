@@ -4,7 +4,9 @@ import { io, type Socket } from "socket.io-client";
 import { useAuthStore } from "@/store";
 
 function getSupportSocketUrl(): string {
-  const base = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:1500";
+  const base = __DEV__
+    ? (process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:1500")
+    : process.env.EXPO_PUBLIC_API_BASE_URL!;
   const version = process.env.EXPO_PUBLIC_API_VERSION ?? "/api/v1";
   try {
     const origin = new URL(`${base}${version}`).origin;

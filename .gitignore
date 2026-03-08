@@ -49,6 +49,8 @@ yarn-error.*
 .smipay-firebase-adminsdk.json
 *firebase*.json
 *adminsdk*.json
+google-services.json
+*.keystore
 
 /docs
 docs/
