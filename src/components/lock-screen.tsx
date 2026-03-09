@@ -25,7 +25,9 @@ import { FullPageLoader, Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
 import { useToastStore } from "@/components/ui/toast";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { ApiClientError } from "@/lib/api";
 import { authenticate, getBiometricsAvailability, getBiometricLabel } from "@/lib/biometrics";
+import { classifyError } from "@/lib/errors";
 import { secureStorage, SECURE_KEYS } from "@/lib/secure-storage";
 import { resetInactivityTimer } from "@/lib/inactivity";
 import { useAppStore, useAuthStore } from "@/store";
@@ -54,6 +56,8 @@ export function LockScreen() {
   const [biometricUnlockLoading, setBiometricUnlockLoading] = useState(false);
   /** True after biometric success — show FullPageLoader while signIn runs. */
   const [unlocking, setUnlocking] = useState(false);
+  /** Stops auto-trigger after a server/network failure to prevent infinite loop. */
+  const serverFailedRef = useRef(false);
 
   const passwordRef = useRef<TextInput>(null);
 
@@ -78,11 +82,12 @@ export function LockScreen() {
     if (!biometricsAvailable || !biometricsEnabled) return;
 
     const triggerAfterDelay = () => {
-      // iOS needs a longer delay for the scene to settle after resume;
-      // Android works with a shorter delay.
+      if (serverFailedRef.current) return;
       const delay = Platform.OS === "ios" ? 600 : 300;
       return setTimeout(() => {
-        handleBiometricUnlockRef.current();
+        if (!serverFailedRef.current) {
+          handleBiometricUnlockRef.current();
+        }
       }, delay);
     };
 
@@ -91,7 +96,6 @@ export function LockScreen() {
       return triggerAfterDelay();
     };
 
-    // If already active when effect runs (e.g. lock from in-app), trigger after delay.
     let timer: ReturnType<typeof setTimeout> | undefined = checkAndTrigger(
       AppState.currentState ?? "background",
     );
@@ -124,6 +128,7 @@ export function LockScreen() {
 
       await secureStorage.set(SECURE_KEYS.USER_PASSWORD, password);
 
+      serverFailedRef.current = false;
       resetInactivityTimer();
       setPassword("");
     } catch {
@@ -146,11 +151,8 @@ export function LockScreen() {
         setError("Authentication failed. Try your password.");
         return;
       }
-      // Immediately show full-page loader — user gets instant feedback while signIn runs.
       setUnlocking(true);
 
-      // Don't pass requireAuthentication here — we already verified biometrics
-      // above. Passing it causes a second Face ID / fingerprint prompt.
       const storedPassword = await secureStorage.get<string>(
         SECURE_KEYS.USER_PASSWORD,
       );
@@ -165,14 +167,27 @@ export function LockScreen() {
         refreshToken: res.data.refresh_token,
       });
       await secureStorage.set(SECURE_KEYS.USER_PASSWORD, storedPassword);
+      serverFailedRef.current = false;
       resetInactivityTimer();
-      // login() sets isLocked: false — layout will unmount LockScreen and show app.
-    } catch {
+    } catch (e) {
       setUnlocking(false);
-      setError("Authentication failed. Try your password.");
+      const classified = classifyError(e);
+      if (classified.variant === "warning" || (classified.statusCode && classified.statusCode >= 500)) {
+        serverFailedRef.current = true;
+        setError("We're experiencing difficulty right now. Please try again later.");
+      } else if (e instanceof ApiClientError && e.statusCode === 401) {
+        setError("Your credentials have changed. Please enter your password.");
+      } else {
+        setError("Authentication failed. Try your password.");
+      }
     } finally {
       setBiometricUnlockLoading(false);
     }
+  }
+
+  function handleManualBiometricTap() {
+    serverFailedRef.current = false;
+    handleBiometricUnlock();
   }
 
   const showBiometricIcon = biometricsAvailable || biometricsEnabled;
@@ -267,7 +282,7 @@ export function LockScreen() {
           {showBiometricIcon && (
             <View className="mt-6 items-center">
               <Pressable
-                onPress={biometricTappable ? handleBiometricUnlock : undefined}
+                onPress={biometricTappable ? handleManualBiometricTap : undefined}
                 disabled={!biometricTappable}
                 className="items-center justify-center active:opacity-70"
                 style={{

@@ -244,60 +244,67 @@ After completing all 5 steps, you are ready to publish OTA updates.
 
 ## Publishing an OTA Update Manually
 
-This is the core workflow you will use most often. After making JS/TS/asset changes,
-you publish an update that all users on that channel receive automatically.
+### CRITICAL WARNING: `eas update` uses YOUR LOCAL env, NOT `eas.json`
+
+`eas build` uses the env vars from `eas.json`. But `eas update` uses whatever is
+in your **local `.env` file**. If your `.env` points to your dev server and you run
+`eas update --channel production`, your production users will hit your dev server.
+
+**NEVER run `eas update` directly.** Always use the OTA script:
+
+```bash
+./scripts/ota-update.sh staging "fix: corrected payment display"
+./scripts/ota-update.sh production "fix: corrected payment display"
+```
+
+The script loads the correct `.env.staging` or `.env.production` file, shows you
+the API URL it will use, and asks for confirmation before publishing.
+
+### How the env files work
+
+| File | Used by | Points to |
+|---|---|---|
+| `.env` | Local development (`npx expo start`) | Your dev/ngrok server |
+| `.env.staging` | OTA script for staging | Staging backend |
+| `.env.production` | OTA script for production | Production backend |
+| `eas.json` env | `eas build` only | Per-profile backend |
 
 ### Push to Staging (for internal testing)
 
 ```bash
-eas update --channel staging --message "fix: corrected payment amount display"
+./scripts/ota-update.sh staging "fix: corrected payment amount display"
 ```
 
-What this does:
-1. Bundles your current JS code and assets locally.
-2. Uploads the bundle to Expo's CDN.
-3. Links it to the `staging` channel.
-4. Any device running a **staging** build will download the update on next app launch.
+The script will show:
+```
+  Channel:  staging
+  Env file: .env.staging
+  API URL:  https://smipay-prod.onrender.com
+
+  Proceed? (y/n)
+```
+
+Confirm with `y`. Any device running a staging build will download the update on
+the next app launch.
 
 ### Push to Production (for all users)
 
 ```bash
-eas update --channel production --message "fix: corrected payment amount display"
+./scripts/ota-update.sh production "fix: corrected payment amount display"
 ```
 
-What this does:
-1. Same bundling and upload as staging.
-2. Links it to the `production` channel.
-3. Any device running a **production** build (from App Store / Play Store) will
-   download the update on next app launch.
+Same flow -- confirms the correct production API URL before publishing.
 
 ### Recommended Workflow
 
 ```
 1. Make your code changes
-2. Test locally with `npx expo start`
-3. Publish to staging:
-   eas update --channel staging --message "describe your change"
-4. Test on a staging build (physical device or simulator with staging build installed)
-5. When verified, publish to production:
-   eas update --channel production --message "describe your change"
-```
-
-### Environment Variables
-
-EAS Update uses the environment variables from your **local `.env`** file or from the
-`eas.json` profile env at build time. The env variables are baked into the JS bundle
-at update publish time. Make sure your local env matches what you expect:
-
-- For staging: the update will use whatever env is in your current shell/env files.
-- For production: double-check `EXPO_PUBLIC_API_BASE_URL` points to production.
-
-To be explicit, set env inline:
-
-```bash
-EXPO_PUBLIC_API_BASE_URL=https://smipay-prod.onrender.com \
-EXPO_PUBLIC_API_VERSION=/api/v1 \
-eas update --channel production --message "fix: payment display"
+2. Test locally with `npx expo start` (uses .env → dev server)
+3. Push to staging:
+   ./scripts/ota-update.sh staging "describe your change"
+4. Test on a staging build (close app fully, reopen twice)
+5. When verified, push to production:
+   ./scripts/ota-update.sh production "describe your change"
 ```
 
 ### Viewing Published Updates

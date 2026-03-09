@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
 import { authenticate, getBiometricsAvailability, getBiometricLabel } from "@/lib/biometrics";
+import { ApiClientError } from "@/lib/api";
 import { handleApiError } from "@/lib/errors";
 import { canUseRequireAuthentication, secureStorage, SECURE_KEYS } from "@/lib/secure-storage";
 import { useAuthStore, useAppStore } from "@/store";
@@ -111,7 +112,11 @@ export default function SignInScreen() {
         ],
       );
     } catch (e) {
-      handleApiError(e);
+      if (e instanceof ApiClientError && e.statusCode === 401) {
+        setErrors({ password: e.message || "Invalid email or password" });
+      } else {
+        handleApiError(e);
+      }
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RefreshControl, ScrollView } from "react-native";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -13,6 +13,7 @@ import {
   ServicesGrid,
 } from "@/components/dashboard";
 import { FullPageLoader } from "@/components/ui/loaders";
+import { Text } from "@/components/ui/text";
 import { useToastStore } from "@/components/ui/toast/toast-store";
 import { useAuthStore, useHomepageStore } from "@/store";
 import { colors } from "@/constants/colors";
@@ -27,6 +28,9 @@ export default function HomeScreen() {
 
   const [addMoneyModalVisible, setAddMoneyModalVisible] = useState(false);
   const [fundWithCardModalVisible, setFundWithCardModalVisible] = useState(false);
+
+  // TODO: REMOVE THIS — temporary OTA test banner
+  const [otaBannerVisible, setOtaBannerVisible] = useState(true);
 
   // Fetch on mount only.
   useEffect(() => {
@@ -54,6 +58,16 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+      {otaBannerVisible && (
+        <View className="flex-row items-center justify-between bg-green-600 px-4 py-2.5">
+          <Text className="text-sm font-semibold text-white">
+            OTA Update Working!!!!!!!!!
+          </Text>
+          <Pressable onPress={() => setOtaBannerVisible(false)}>
+            <Text className="text-sm font-bold text-white">✕</Text>
+          </Pressable>
+        </View>
+      )}
       <Animated.View
         className="z-10 bg-background pb-2"
         entering={FadeInDown.duration(400).springify().damping(15)}
