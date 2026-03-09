@@ -170,11 +170,11 @@ export default function ReferralScreen() {
                     isDark={isDark}
                     highlight
                   />
-                  <StatChip
+                  {/* <StatChip
                     label="Slots left"
                     value={String(referralAnalysis.slots_remaining)}
                     isDark={isDark}
-                  />
+                  /> */}
                 </View>
                 {referralAnalysis.by_status &&
                   Object.keys(referralAnalysis.by_status).length > 0 && (

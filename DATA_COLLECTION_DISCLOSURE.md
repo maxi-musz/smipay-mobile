@@ -69,17 +69,50 @@ All data listed above is collected **exclusively** for the following purposes:
 
 **Purpose to select:** "App Functionality", "Analytics" (fraud detection falls under this).
 
-### Google Play — Data Safety
+### Google Play — Data Safety (Complete Form Guide)
 
-| Data type | Collected | Shared | Purpose |
-|-----------|-----------|--------|---------|
-| Approximate location | Yes (optional) | No | Fraud prevention, security, compliance |
-| Device or other IDs | Yes | No | Fraud prevention, security, compliance |
-| Email address | Yes | No | Account management |
-| Phone number | Yes | No | Account management |
-| Name | Yes | No | Account management |
+Use this when filling out **Policy → App content → Data safety** in Play Console.
 
-**Declare:** Data is encrypted in transit (HTTPS). Data is not sold. Users can request deletion.
+---
+
+#### Categories to select YES (expand and check the types below)
+
+| Category | Data type to select | Collected? | Shared? | Required? | Purpose |
+|----------|---------------------|------------|---------|----------|---------|
+| **Contacts** | Contact info (names, phone numbers) | Yes | Yes* | No (optional) | App functionality — user picks a contact’s phone number for airtime/data; recipient number is sent to our backend and to the airtime provider |
+| **Location** | Approximate location | Yes | No | No (optional) | Fraud prevention, account security, compliance — only if user grants permission; foreground only |
+| **Personal info** | Name | Yes | No | Yes | Account management |
+| **Personal info** | Email address | Yes | No | Yes | Account management |
+| **Personal info** | Phone number | Yes | No | Yes | Account management |
+| **Device or other IDs** | Device or other IDs | Yes | No | Yes | Fraud prevention, account security — app-generated UUID, device model, OS version sent in API headers |
+| **App info** | Push notifications token | Yes | Yes** | No (optional) | App functionality — sent to our backend so we can send transaction/support notifications |
+
+\* Recipient phone number is shared with airtime/data provider (e.g. VTPass) to fulfill the transaction.  
+\** Push token is sent to our backend and to Expo/Google (FCM) for delivery; we do not sell or share it for ads.
+
+---
+
+#### Categories to leave as NO (do not select)
+
+| Category | Why |
+|----------|-----|
+| Health and fitness | Not collected |
+| Messages | Not collected |
+| Photos and videos | Not collected |
+| Audio files | Not collected |
+| Files and docs | Not collected |
+| Calendar | Not collected |
+| App activity (interactions, search history, etc.) | No analytics SDK; search in history is a filter only, not stored |
+| Web browsing | Not collected |
+
+---
+
+#### General answers when prompted
+
+- **Is data encrypted in transit?** Yes (HTTPS/TLS)
+- **Can users request data deletion?** Yes (account deletion)
+- **Is this data sold?** No
+- **Is this data shared for advertising?** No
 
 ---
 
