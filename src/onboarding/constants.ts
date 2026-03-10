@@ -2,36 +2,32 @@ import { ImageSourcePropType } from "react-native";
 
 export type OnboardingSlide = {
   id: string;
-  icon?: string;
-  image?: ImageSourcePropType;
+  image: ImageSourcePropType;
   title: string;
   description: string;
-  serviceIcons?: string[];
 };
 
 export const ONBOARDING_SLIDES: OnboardingSlide[] = [
   {
     id: "welcome",
-    image: require("@/assets/images/icon.png"),
-    title: "Welcome to SmiPay",
+    image: require("@/assets/images/onboarding-imgs/png-512w/01-png.png"),
+    title: "Your Money, Just Smarter",
     description:
-      "Thank you for your interest in SmiPay. We're excited to have you join us. Pay with a smile — it's that simple.",
+      "Everything you need to spend, and stay ahead, packed into one sleek app.",
   },
   {
     id: "utilities",
-    icon: "flash",
-    title: "Utility Services",
+    image: require("@/assets/images/onboarding-imgs/png-512w/02-png.png"),
+    title: "Keep the Light & Vibes On",
     description:
-      "Airtime, data bundles, electricity bills, and cable TV subscriptions — all in one place. Pay instantly and recharge anytime.",
-    serviceIcons: ["call", "cellular", "flash", "tv"],
+      "Instant airtime, data, cable TV renewals, plus electricity tokens that arrive before you can blink.",
   },
   {
     id: "education",
-    icon: "school",
-    title: "Education Payments",
+    image: require("@/assets/images/onboarding-imgs/png-512w/03-png.png"),
+    title: "The Way to Your Success",
     description:
-      "JAMB, WAEC, NECO, and other exam fees. Secure, fast, and hassle-free. Your payments, our priority.",
-    serviceIcons: ["document-text", "school", "library"],
+      "Skip the bank queues—grab your WAEC or JAMB pins and settle school fees in a few taps.",
   },
 ];
 

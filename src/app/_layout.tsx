@@ -113,28 +113,27 @@ function InnerLayout() {
     );
   }
 
-  // When locked, show only lock screen so user never sees dashboard.
-  if (isAuthenticated && isLocked) {
-    return (
-      <View className="flex-1 bg-background">
-        <StatusBar style={isDark ? "light" : "dark"} />
-        <LockScreen />
-        <ToastContainer />
-        <PortalHost />
-      </View>
-    );
-  }
-
   return (
-    <View className="flex-1">
-      <StatusBar style={showSplash ? "dark" : isDark ? "light" : "dark"} />
+    <View className="flex-1 bg-background">
+      <StatusBar
+        style={
+          isAuthenticated && isLocked
+            ? (isDark ? "light" : "dark")
+            : showSplash
+            ? "dark"
+            : isDark
+            ? "light"
+            : "dark"
+        }
+      />
       <Stack
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: "transparent" },
         }}
       />
-      {showSplash && <SplashOverlay onFinish={handleSplashFinish} />}
+      {showSplash && !isLocked && <SplashOverlay onFinish={handleSplashFinish} />}
+      {isAuthenticated && isLocked && <LockScreen />}
       <ToastContainer />
       <PortalHost />
     </View>

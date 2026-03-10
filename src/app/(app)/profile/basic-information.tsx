@@ -1,13 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Image, Pressable, ScrollView, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, router } from "expo-router";
 
-import { fetchUserProfile } from "@/api";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import type { UserProfileData } from "@/types";
+import { useProfileStore } from "@/store";
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -51,32 +50,20 @@ function Row({ label, value }: { label: string; value: string }) {
 
 export default function BasicInformationScreen() {
   const { isDark } = useAppTheme();
-  const [profile, setProfile] = useState<UserProfileData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const profile = useProfileStore.use.data();
+  const loading = useProfileStore.use.isLoading();
+  const error = useProfileStore.use.error();
+  const fetchProfile = useProfileStore.use.fetchProfile();
 
   const bg = isDark ? "#0F172A" : "#F8F9FB";
   const cardBg = isDark ? "#1E293B" : "#F5F6F8";
 
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        setError(null);
-        setLoading(true);
-        const response = await fetchUserProfile();
-        if (!cancelled) setProfile(response.data);
-      } catch {
-        if (!cancelled) setError("Unable to load your profile.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+    if (!profile && !loading) {
+      // Use cached profile data when available; otherwise fetch once via zustand store.
+      fetchProfile();
     }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [profile, loading, fetchProfile]);
 
   return (
     <>
@@ -96,9 +83,9 @@ export default function BasicInformationScreen() {
           <View className="h-9 w-9" />
         </View>
 
-        {loading ? (
+        {loading && !profile ? (
           <FullPageLoader message="Loading..." />
-        ) : error || !profile ? (
+        ) : (error && !profile) || !profile ? (
           <View className="flex-1 items-center justify-center px-8">
             <Text className="text-center text-muted-foreground">
               {error ?? "Unable to load your profile."}
@@ -134,29 +121,56 @@ export default function BasicInformationScreen() {
                   ) : null}
                 </View>
               </View>
-              <Row label="Full name" value={profile.user.name} />
-              <Row label="Email" value={profile.user.email} />
-              <Row label="Phone" value={profile.user.phone_number} />
-              <Row label="Gender" value={profile.user.gender ?? ""} />
-              <Row label="Date of birth" value={formatDate(profile.user.date_of_birth)} />
-              <Row label="Member since" value={profile.user.joined} />
+              {profile.user.name && (
+                <Row label="Full name" value={profile.user.name} />
+              )}
+              {profile.user.email && (
+                <Row label="Email" value={profile.user.email} />
+              )}
+              {profile.user.phone_number && (
+                <Row label="Phone" value={profile.user.phone_number} />
+              )}
+              {profile.user.gender && (
+                <Row label="Gender" value={profile.user.gender} />
+              )}
+              {profile.user.date_of_birth && (
+                <Row label="Date of birth" value={formatDate(profile.user.date_of_birth)} />
+              )}
+              {profile.user.joined && (
+                <Row label="Member since" value={profile.user.joined} />
+              )}
             </Section>
 
             {profile.address && (
-              <Section title="Address" cardBg={cardBg}>
-                <Row label="Address" value={profile.address.house_address} />
-                <Row label="City" value={profile.address.city} />
-                <Row label="State" value={profile.address.state} />
-                <Row label="Country" value={profile.address.country} />
-                <Row label="Postal code" value={profile.address.postal_code} />
-              </Section>
+              (() => {
+                const { house_address, city, state, country, postal_code } = profile.address;
+                const hasAny =
+                  !!house_address || !!city || !!state || !!country || !!postal_code;
+                if (!hasAny) return null;
+                return (
+                  <Section title="Address" cardBg={cardBg}>
+                    {house_address && <Row label="Address" value={house_address} />}
+                    {city && <Row label="City" value={city} />}
+                    {state && <Row label="State" value={state} />}
+                    {country && <Row label="Country" value={country} />}
+                    {postal_code && <Row label="Postal code" value={postal_code} />}
+                  </Section>
+                );
+              })()
             )}
 
             {profile.kyc_verification && (
-              <Section title="KYC" cardBg={cardBg}>
-                <Row label="Status" value={profile.kyc_verification.status} />
-                <Row label="ID type" value={profile.kyc_verification.id_type} />
-              </Section>
+              (() => {
+                const { status, id_type } = profile.kyc_verification;
+                const hasAny = !!status || !!id_type;
+                if (!hasAny) return null;
+                return (
+                  <Section title="KYC" cardBg={cardBg}>
+                    {status && <Row label="Status" value={status} />}
+                    {id_type && <Row label="ID type" value={id_type} />}
+                  </Section>
+                );
+              })()
             )}
 
             <Section title="Wallet" cardBg={cardBg}>

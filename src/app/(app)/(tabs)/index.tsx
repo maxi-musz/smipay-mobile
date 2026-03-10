@@ -28,6 +28,7 @@ export default function HomeScreen() {
 
   const [addMoneyModalVisible, setAddMoneyModalVisible] = useState(false);
   const [fundWithCardModalVisible, setFundWithCardModalVisible] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Fetch on mount only.
   useEffect(() => {
@@ -57,7 +58,7 @@ export default function HomeScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <Animated.View
         className="z-10 bg-background pb-2"
-        entering={FadeInDown.duration(400).springify().damping(15)}
+        entering={FadeInDown.duration(400)}
       >
         <DashboardHeader />
         <BalanceCard
@@ -98,15 +99,16 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={isLoading && !!data}
-            onRefresh={fetchHomepage}
+            refreshing={isRefreshing}
+            onRefresh={() => {
+              setIsRefreshing(true);
+              Promise.resolve(fetchHomepage()).finally(() => setIsRefreshing(false));
+            }}
             tintColor={colors.orange[500]}
           />
         }
       >
-        <Animated.View
-          entering={FadeInDown.delay(80).duration(380).springify().damping(15)}
-        >
+        <Animated.View>
           <PromoBanner
           banners={
             [...(data?.reward_banners ?? [])].sort((a, b) => {
@@ -120,18 +122,14 @@ export default function HomeScreen() {
           }
         />
         </Animated.View>
-        <Animated.View
-          entering={FadeInDown.delay(160).duration(380).springify().damping(15)}
-        >
+        <Animated.View>
           <RecentTransactions
             transactions={(data?.transaction_history ?? []).slice(0, 2)}
             loadFailed={loadFailed}
             onRetry={fetchHomepage}
           />
         </Animated.View>
-        <Animated.View
-          entering={FadeInDown.delay(240).duration(380).springify().damping(15)}
-        >
+        <Animated.View>
           <ServicesGrid cashbackRates={data?.cashback_rates} />
         </Animated.View>
       </ScrollView>

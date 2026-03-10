@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.smipay.mobile",
       "infoPlist": {
         "NSFaceIDUsageDescription": "SmiPay uses Face ID to unlock the app securely.",

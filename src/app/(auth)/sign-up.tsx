@@ -266,7 +266,7 @@ export default function SignUpScreen() {
           {/* ── Header ── */}
           <Animated.View
             className={`items-center ${step === "profile" ? "mt-4" : ""}`}
-            entering={FadeInDown.duration(400).springify().damping(15)}
+            entering={FadeInDown.duration(220)}
           >
             <Image
               source={require("@/assets/images/icon.png")}
@@ -288,7 +288,7 @@ export default function SignUpScreen() {
           {/* ── Step indicator ── */}
           <Animated.View
             className="mt-5"
-            entering={FadeInDown.delay(60).duration(380).springify().damping(15)}
+            entering={FadeInDown.delay(40).duration(220)}
           >
             <StepIndicator />
           </Animated.View>
@@ -297,7 +297,7 @@ export default function SignUpScreen() {
           {step === "email" && (
             <Animated.View
               className="mt-8 gap-5"
-              entering={FadeInDown.delay(120).duration(380).springify().damping(15)}
+              entering={FadeInDown.delay(80).duration(220)}
             >
               <Input
                 label="Email Address"
@@ -344,7 +344,7 @@ export default function SignUpScreen() {
           {step === "otp" && (
             <Animated.View
               className="mt-8 gap-5"
-              entering={FadeInDown.delay(120).duration(380).springify().damping(15)}
+              entering={FadeInDown.delay(80).duration(220)}
             >
               <Input
                 label="Verification Code"
@@ -390,7 +390,7 @@ export default function SignUpScreen() {
           {step === "profile" && (
             <Animated.View
               className="mt-6 gap-5"
-              entering={FadeInDown.delay(120).duration(380).springify().damping(15)}
+              entering={FadeInDown.delay(80).duration(220)}
             >
               {/* Name — side by side */}
               <View className="flex-row gap-3">

@@ -144,29 +144,17 @@ function PromoCard({
         <View className="flex-1">
           <Text
             className="font-semibold text-white"
-            style={{ fontSize: s(14) }}
+            style={{ fontSize: s(16) }}
           >
             {banner.title}
           </Text>
           <Text
             className="text-white/80"
-            style={{ marginTop: s(2), fontSize: s(11), lineHeight: s(15) }}
+            style={{ marginTop: s(3), fontSize: s(12), lineHeight: s(17) }}
             numberOfLines={2}
           >
             {banner.message}
           </Text>
-          <Pressable
-            className="flex-row items-center gap-0.5"
-            style={{ marginTop: s(4) }}
-          >
-            <Text
-              className="font-semibold uppercase text-white"
-              style={{ fontSize: s(10) }}
-            >
-              {config.cta}
-            </Text>
-            <Ionicons name="chevron-forward" size={s(10)} color="#fff" />
-          </Pressable>
         </View>
       </LinearGradient>
     </View>

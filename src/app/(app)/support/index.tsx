@@ -122,7 +122,7 @@ export default function SupportListScreen() {
       <View className="flex-1" style={{ backgroundColor: bg }}>
         <Animated.View
           className="flex-row items-center justify-between px-5 pb-3 pt-14"
-          entering={FadeInDown.duration(400).springify().damping(15)}
+          entering={FadeInDown.duration(220)}
         >
           <Pressable
             onPress={() => router.back()}
@@ -146,7 +146,7 @@ export default function SupportListScreen() {
         ) : conversations.length === 0 ? (
           <Animated.View
             className="flex-1 items-center justify-center px-8"
-            entering={FadeInDown.delay(80).duration(380).springify().damping(15)}
+            entering={FadeInDown.delay(60).duration(220)}
           >
             <View className="mb-4 h-16 w-16 items-center justify-center rounded-full bg-primary/10">
               <Ionicons name="headset-outline" size={32} color="#F4831F" />
@@ -174,7 +174,7 @@ export default function SupportListScreen() {
             showsVerticalScrollIndicator={false}
           >
             <Animated.View
-              entering={FadeInDown.delay(80).duration(380).springify().damping(15)}
+              entering={FadeInDown.delay(80).duration(220)}
             >
               <Button
                 className="mb-4"
@@ -187,7 +187,7 @@ export default function SupportListScreen() {
             {conversations.map((conv, index) => (
               <Animated.View
                 key={conv.id}
-                entering={FadeInDown.delay(160 + index * 60).duration(380).springify().damping(15)}
+                entering={FadeInDown.delay(120 + index * 40).duration(220)}
               >
                 <Pressable
                 className="mb-3 flex-row overflow-hidden rounded-2xl py-4 px-4 active:opacity-70"

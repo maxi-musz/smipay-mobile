@@ -441,7 +441,7 @@ export default function SupportChatScreen() {
         <Animated.View
           className="flex-row items-center justify-between border-b border-border px-4 pb-3 pt-12"
           style={{ backgroundColor: cardBg }}
-          entering={FadeInDown.duration(400).springify().damping(15)}
+          entering={FadeInDown.duration(220)}
         >
           <Pressable
             onPress={() => router.back()}
@@ -471,7 +471,7 @@ export default function SupportChatScreen() {
           <Animated.View
             className="mx-4 mt-2 rounded-lg px-3 py-2"
             style={{ backgroundColor: isDark ? "#1E3A5F" : "#FFF3E8" }}
-            entering={FadeInDown.delay(60).duration(380).springify().damping(15)}
+            entering={FadeInDown.delay(80).duration(220)}
           >
             <Text className="text-xs font-medium text-primary">
               Ticket: {ticket.ticket_number}
@@ -481,7 +481,7 @@ export default function SupportChatScreen() {
 
         <Animated.View
           className="flex-1"
-          entering={FadeInDown.delay(120).duration(380).springify().damping(15)}
+          entering={FadeInDown.delay(120).duration(220)}
         >
           <ScrollView
             ref={scrollRef}

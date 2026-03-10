@@ -134,7 +134,7 @@ export default function SignInScreen() {
         >
           <Animated.View
             className="items-center"
-            entering={FadeInDown.duration(400).springify().damping(15)}
+            entering={FadeInDown.duration(220)}
           >
             <Image
               source={require("@/assets/images/icon.png")}
@@ -147,7 +147,7 @@ export default function SignInScreen() {
 
           <Animated.View
             className="mt-10 gap-4"
-            entering={FadeInDown.delay(80).duration(380).springify().damping(15)}
+            entering={FadeInDown.delay(40).duration(220)}
           >
             <Input
               label="Email"
@@ -184,7 +184,7 @@ export default function SignInScreen() {
           </Animated.View>
 
           <Animated.View
-            entering={FadeInDown.delay(160).duration(380).springify().damping(15)}
+            entering={FadeInDown.delay(80).duration(220)}
           >
             <Button
               className="mt-8 h-14 rounded-2xl"
@@ -201,7 +201,7 @@ export default function SignInScreen() {
 
           <Animated.View
             className="mt-6 flex-row items-center justify-center gap-1"
-            entering={FadeInDown.delay(240).duration(380).springify().damping(15)}
+            entering={FadeInDown.delay(120).duration(220)}
           >
             <Text className="text-muted-foreground">
               Do not have an account?

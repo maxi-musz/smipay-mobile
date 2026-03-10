@@ -1,21 +1,12 @@
 import { useRef, useState } from "react";
-import {
-  Dimensions,
-  FlatList,
-  Image,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
-  View,
-} from "react-native";
+import { Dimensions, FlatList, Image, NativeSyntheticEvent, NativeScrollEvent, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
-import { useAppTheme } from "@/hooks/use-app-theme";
-
 import { ONBOARDING_SLIDES, type OnboardingSlide } from "./constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -42,123 +33,122 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
       });
     } else {
       onComplete();
+      router.replace("/(auth)/sign-up");
     }
   };
 
+  const activeSlide = ONBOARDING_SLIDES[currentIndex] ?? ONBOARDING_SLIDES[0];
+
+  const handleSkip = () => {
+    onComplete();
+  };
+
+  const handleSignIn = () => {
+    onComplete();
+    router.push("/(auth)/sign-in");
+  };
+
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
-      <View className="flex-1">
-        <View className="flex-row items-center justify-between px-6 pt-2">
-          <Image
-            source={require("@/assets/images/smipay-logo.png")}
-            style={{ width: 100, height: 32 }}
-            resizeMode="contain"
+    <SafeAreaView className="flex-1" edges={["bottom"]}>
+      <LinearGradient
+        colors={["#FFE5D2", "#FFF5EC"]}
+        style={{ flex: 1 }}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+      >
+        <View className="flex-1 pt-2">
+          <FlatList
+            ref={flatListRef}
+            data={ONBOARDING_SLIDES}
+            keyExtractor={(item) => item.id}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            bounces={false}
+            renderItem={({ item }) => <SlideCard slide={item} />}
           />
-          <View className="flex-row items-center gap-1">
-            <ThemeToggle size={18} />
-            <Button variant="ghost" size="sm" onPress={onComplete}>
-              <Text className="text-muted-foreground">Skip</Text>
-            </Button>
-          </View>
-        </View>
 
-        <FlatList
-          ref={flatListRef}
-          data={ONBOARDING_SLIDES}
-          keyExtractor={(item) => item.id}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
-          bounces={false}
-          renderItem={({ item }) => <SlideCard slide={item} />}
-        />
+          <View className="mt-auto rounded-t-[56px] bg-white px-6 pb-10 pt-8 shadow-lg shadow-black/5">
+            <View className="mb-5 flex-row justify-center gap-2">
+              {ONBOARDING_SLIDES.map((_, i) => (
+                <View
+                  key={i}
+                  className="h-1.5 rounded-full"
+                  style={{
+                    width: currentIndex === i ? 24 : 8,
+                    backgroundColor:
+                      currentIndex === i ? colors.orange[500] : "#FACCAB",
+                  }}
+                />
+              ))}
+            </View>
 
-        <View className="px-6 pb-10">
-          <View className="mb-8 flex-row justify-center gap-2">
-            {ONBOARDING_SLIDES.map((_, i) => (
-              <View
-                key={i}
-                className="h-2 rounded-full"
-                style={{
-                  width: currentIndex === i ? 24 : 8,
-                  backgroundColor:
-                    currentIndex === i
-                      ? colors.orange[500]
-                      : colors.gray[300],
-                }}
-              />
-            ))}
-          </View>
-
-          <Button size="lg" className="rounded-2xl" onPress={handleNext}>
-            <Text>
-              {currentIndex === ONBOARDING_SLIDES.length - 1
-                ? "Get Started"
-                : "Next"}
+            <Text variant="h3" className="text-center">
+              {activeSlide.title}
             </Text>
-          </Button>
+
+            <Text className="mt-3 text-center text-sm leading-6 text-muted-foreground">
+              {activeSlide.description}
+            </Text>
+
+            <View className="mt-6 flex-row gap-3">
+              <Button
+                className="flex-1 rounded-full bg-orange-50"
+                variant="outline"
+                onPress={handleSkip}
+              >
+                <Text className="text-orange-500">Skip</Text>
+              </Button>
+              <Button
+                className="flex-1 rounded-full"
+                onPress={handleNext}
+              >
+                <Text>
+                  {currentIndex === ONBOARDING_SLIDES.length - 1
+                    ? "Create my account"
+                    : "Next"}
+                </Text>
+              </Button>
+            </View>
+
+            <View className="mt-5 flex-row justify-center">
+              <Text className="text-sm text-muted-foreground">
+                Already have an account?{" "}
+              </Text>
+              <Text
+                className="text-sm font-semibold text-orange-500"
+                onPress={handleSignIn}
+              >
+                Sign in
+              </Text>
+            </View>
+
+            <View className="mt-5 items-center">
+              <View className="h-1 w-24 rounded-full bg-black/10" />
+            </View>
+          </View>
         </View>
-      </View>
+      </LinearGradient>
     </SafeAreaView>
   );
 }
 
 function SlideCard({ slide }: { slide: OnboardingSlide }) {
-  const { isDark } = useAppTheme();
-  const iconBg = isDark ? colors.orange[950] : colors.orange[100];
-  const serviceIconBg = isDark ? colors.green[950] : colors.green[100];
-
   return (
     <View
       style={{ width: SCREEN_WIDTH }}
-      className="flex-1 items-center justify-center px-12"
+      className="flex-1 items-center justify-center px-6"
     >
-      {slide.image ? (
-        <Image
-          source={slide.image}
-          className="mb-10 h-32 w-32 rounded-3xl"
-          resizeMode="contain"
-        />
-      ) : (
-        <View
-          className="mb-10 h-32 w-32 items-center justify-center rounded-3xl"
-          style={{ backgroundColor: iconBg }}
-        >
-          <Ionicons
-            name={slide.icon as keyof typeof Ionicons.glyphMap}
-            size={64}
-            color={colors.orange[500]}
-          />
-        </View>
-      )}
-
-      <Text variant="h3" className="text-center">
-        {slide.title}
-      </Text>
-
-      <Text className="mt-5 text-center leading-7 text-muted-foreground">
-        {slide.description}
-      </Text>
-
-      {slide.serviceIcons && slide.serviceIcons.length > 0 && (
-        <View className="mt-8 flex-row gap-4">
-          {slide.serviceIcons.map((name, i) => (
-            <View
-              key={i}
-              className="h-14 w-14 items-center justify-center rounded-2xl"
-              style={{ backgroundColor: serviceIconBg }}
-            >
-              <Ionicons
-                name={name as keyof typeof Ionicons.glyphMap}
-                size={28}
-                color={colors.green[500]}
-              />
-            </View>
-          ))}
-        </View>
-      )}
+      <Image
+        source={slide.image}
+        style={{
+          width: SCREEN_WIDTH - 48,
+          height: (SCREEN_WIDTH - 48) * 1.4,
+        }}
+        resizeMode="contain"
+      />
     </View>
   );
 }

@@ -161,7 +161,7 @@ export default function ForgotPasswordScreen() {
           {/* Header */}
           <Animated.View
             className="items-center"
-            entering={FadeInDown.duration(400).springify().damping(15)}
+            entering={FadeInDown.duration(220)}
           >
             <Image
               source={require("@/assets/images/icon.png")}
@@ -182,7 +182,7 @@ export default function ForgotPasswordScreen() {
           {step === "email" && (
             <Animated.View
               className="mt-10 gap-4"
-              entering={FadeInDown.delay(80).duration(380).springify().damping(15)}
+              entering={FadeInDown.delay(40).duration(220)}
             >
               <Input
                 label="Email"
@@ -226,7 +226,7 @@ export default function ForgotPasswordScreen() {
           {step === "reset" && (
             <Animated.View
               className="mt-10 gap-4"
-              entering={FadeInDown.delay(80).duration(380).springify().damping(15)}
+              entering={FadeInDown.delay(40).duration(220)}
             >
               <Input
                 label="Reset Code"

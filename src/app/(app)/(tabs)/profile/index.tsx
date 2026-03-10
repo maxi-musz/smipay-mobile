@@ -160,7 +160,7 @@ export default function ProfileScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <Animated.View
         className="flex-row items-center justify-between px-6 pb-2 pt-3"
-        entering={FadeInDown.duration(380).springify().damping(15)}
+        entering={FadeInDown.duration(220)}
       >
         <Text variant="h3" className="text-foreground">
           Profile
@@ -192,7 +192,7 @@ export default function ProfileScreen() {
         <Animated.View
           className="mt-4 items-center rounded-2xl px-6 py-6"
           style={{ backgroundColor: cardBg }}
-          entering={FadeInDown.delay(60).duration(380).springify().damping(15)}
+          entering={FadeInDown.delay(60).duration(220)}
         >
           {profileImage ? (
             <Image
@@ -236,7 +236,7 @@ export default function ProfileScreen() {
         <Animated.View
           className="mt-4 flex-row rounded-2xl px-4 py-4"
           style={{ backgroundColor: cardBg }}
-          entering={FadeInDown.delay(60).duration(380).springify().damping(15)}
+          entering={FadeInDown.delay(100).duration(220)}
         >
           <View className="flex-1 items-center">
             <Text className="text-xs text-muted-foreground">Wallet Balance</Text>
@@ -262,13 +262,13 @@ export default function ProfileScreen() {
         <Animated.View
           className="mt-6 overflow-hidden rounded-2xl"
           style={{ backgroundColor: cardBg }}
-          entering={FadeInDown.delay(120).duration(380).springify().damping(15)}
+          entering={FadeInDown.delay(140).duration(220)}
         >
           {menuItems.map((item, index) => renderMenuItem(item, index))}
         </Animated.View>
 
         <Animated.View
-          entering={FadeInDown.delay(180).duration(380).springify().damping(15)}
+          entering={FadeInDown.delay(180).duration(220)}
         >
           <Button
             variant="outline"

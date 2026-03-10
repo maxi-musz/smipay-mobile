@@ -185,7 +185,7 @@ export default function HistoryScreen() {
     return (
       <Animated.View
         className="px-6 pb-3 pt-3"
-        entering={FadeInDown.duration(400).springify().damping(15)}
+        entering={FadeInDown.duration(220)}
       >
         <Text variant="h3" className="text-foreground">
           History
@@ -254,7 +254,7 @@ export default function HistoryScreen() {
 
     return (
       <Animated.View
-        entering={FadeInDown.delay(index * 45).duration(320).springify().damping(14)}
+        entering={FadeInDown.delay(index * 35).duration(220)}
       >
         <Pressable
           onPress={() => router.push(`/(app)/history/${item.id}`)}
