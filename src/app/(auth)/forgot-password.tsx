@@ -7,7 +7,6 @@ import {
   Pressable,
   ScrollView,
   TextInput,
-  View,
 } from "react-native";
 import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -151,12 +150,16 @@ export default function ForgotPasswordScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        enabled={Platform.OS === "ios"}
+        behavior="padding"
         className="flex-1"
+        style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerClassName="flex-grow justify-center px-6 py-12"
+          contentContainerClassName="flex-grow justify-start px-6 pt-10 pb-12"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
         >
           {/* Header */}
           <Animated.View

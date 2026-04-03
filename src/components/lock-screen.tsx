@@ -232,12 +232,16 @@ export function LockScreen() {
       style={{ backgroundColor: isDark ? "#0F172A" : "#FFFFFF" }}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        enabled={Platform.OS === "ios"}
+        behavior="padding"
         className="flex-1"
+        style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerClassName="flex-grow justify-center px-8 py-12"
+          contentContainerClassName="flex-grow justify-start px-8 pt-10 pb-12"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
         >
           <View className="items-center">
             <Image

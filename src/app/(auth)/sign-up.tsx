@@ -255,12 +255,16 @@ export default function SignUpScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        enabled={Platform.OS === "ios"}
+        behavior="padding"
         className="flex-1"
+        style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerClassName={`flex-grow px-6 pb-8 ${step !== "profile" ? "justify-center" : ""}`}
+          contentContainerClassName="flex-grow justify-start px-6 pt-8 pb-12"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
           showsVerticalScrollIndicator={false}
         >
           {/* ── Header ── */}

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { fetchHomepageDetails } from "@/api";
+import { normalizeHomepageMoneyFields } from "@/lib/money";
 import type { HomepageData } from "@/types";
 import { createSelectors } from "./create-selectors";
 
@@ -37,7 +38,10 @@ const _useHomepageStore = create<HomepageStore>()((set, get) => ({
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         const response = await fetchHomepageDetails();
-        set({ data: response.data, isLoading: false });
+        set({
+          data: normalizeHomepageMoneyFields(response.data),
+          isLoading: false,
+        });
         return;
       } catch {
         if (attempt < MAX_RETRIES) {

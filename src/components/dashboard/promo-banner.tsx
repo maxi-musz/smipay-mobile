@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { router, type Href } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "@/components/ui/text";
@@ -115,9 +116,14 @@ function PromoCard({
   const { s } = useResponsiveScale();
 
   return (
-    <View
-      className="overflow-hidden rounded-2xl"
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${banner.title}. View details.`}
+      onPress={() =>
+        router.push(`/(app)/reward/${banner.type}` as Href)
+      }
       style={{ width: cardWidth }}
+      className="overflow-hidden rounded-2xl active:opacity-90"
     >
       <LinearGradient
         colors={config.gradientColors}
@@ -157,6 +163,6 @@ function PromoCard({
           </Text>
         </View>
       </LinearGradient>
-    </View>
+    </Pressable>
   );
 }
