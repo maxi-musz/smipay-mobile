@@ -54,7 +54,7 @@ Before submitting to either store, make sure you have:
 
 You need at least **3 screenshots** per required size. Take them from your production build or create marketing images.
 
-### Build and submit
+### Build and upload (required)
 
 ```bash
 # Build for production
@@ -82,6 +82,43 @@ After submission, the build appears in App Store Connect under **TestFlight** (f
 5. Apple reviews your app (typically 1-3 days)
 6. If approved, you can release it immediately or schedule a release date
 7. If rejected, Apple tells you why — fix the issues and resubmit
+
+#### Updated iOS build + TestFlight flow (simplified)
+
+Use this if the UI you see on App Store Connect doesn’t exactly match the screenshots above.
+
+```bash
+# 1. Build a production iOS binary
+eas build --profile production --platform ios
+
+# 2. Submit that build to App Store Connect
+eas submit --platform ios --profile production
+```
+
+During `eas submit`, answer:
+
+| Prompt | Answer |
+|--------|--------|
+| **Select a build to submit** | Choose the latest **production** iOS build |
+| **Apple ID** | Your Apple developer email |
+| **App-specific password** | Generate one at [appleid.apple.com](https://appleid.apple.com) → **Sign-In and Security** → **App-Specific Passwords** |
+
+After submission and a short processing period (usually 5–30 minutes), the build appears in App Store Connect:
+
+- On the **TestFlight** tab (if you decide to use TestFlight for testing), and  
+- On the **App Store** version page when you choose a build for review.
+
+> **Note:** TestFlight is **recommended but not mandatory**. You can skip testers and go straight to App Review once you are confident in the build.
+
+**Optional – internal TestFlight testing**
+
+1. In App Store Connect, open your app → **TestFlight** tab.  
+2. Wait until the uploaded build finishes processing and appears in the **Builds** list.  
+3. Under **Internal Testing**, create or use an existing group.  
+4. Add internal testers (members of your App Store Connect team).  
+5. Testers install the **TestFlight** app on their iPhones and will see your build there to install/update.  
+
+You can still later submit **this same build** for App Review; you do not need to upload a new one.
 
 ### Common rejection reasons
 
