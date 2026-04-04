@@ -42,8 +42,8 @@ const initialState: AppState = {
   isHydrated: false,
   isGlobalLoading: false,
   notificationCount: 0,
-  themeMode: "light",
-  lockTimeout: "1min",
+  themeMode: "dark",
+  lockTimeout: "60min",
   biometricsEnabled: false,
   pushNotificationsEnabled: true,
 };
