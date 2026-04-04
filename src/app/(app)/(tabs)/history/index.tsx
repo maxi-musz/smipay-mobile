@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import {
   ActivityIndicator,
   FlatList,
@@ -30,7 +30,6 @@ import type {
   HistoryStatus,
 } from "@/types";
 import { handleApiError } from "@/lib/errors";
-import { router } from "expo-router";
 
 type CategoryKey = keyof HistoryCategories;
 
@@ -42,6 +41,7 @@ const CATEGORY_LABELS: Partial<Record<CategoryKey, string>> = {
   data: "Data",
   cable: "Cable TV",
   education: "Education",
+  betting: "Betting",
   referral_bonus: "Rewards",
 };
 
@@ -274,6 +274,11 @@ export default function HistoryScreen() {
           <Text className="text-[14px] font-medium text-foreground" numberOfLines={1}>
             {item.description}
           </Text>
+          {item.type === "data" && item.data_plan_name ? (
+            <Text className="mt-0.5 text-xs text-muted-foreground" numberOfLines={1}>
+              {item.data_plan_name}
+            </Text>
+          ) : null}
           <Text className="mt-0.5 text-xs text-muted-foreground">
             {item.date}
           </Text>

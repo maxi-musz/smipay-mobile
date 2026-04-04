@@ -161,6 +161,15 @@ function TransactionRow({
         >
           {transaction.description}
         </Text>
+        {transaction.type === "data" && transaction.data_plan_name ? (
+          <Text
+            className="text-muted-foreground"
+            style={{ marginTop: s(2), fontSize: s(11) }}
+            numberOfLines={1}
+          >
+            {transaction.data_plan_name}
+          </Text>
+        ) : null}
         <Text
           className="text-muted-foreground"
           style={{ marginTop: s(2), fontSize: s(11) }}

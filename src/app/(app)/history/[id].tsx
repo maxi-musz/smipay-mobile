@@ -15,6 +15,7 @@ import { FullPageLoader } from "@/components/ui/loaders";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { colors } from "@/constants/colors";
 import { getProviderLogo } from "@/lib/provider-logo";
+import { coerceMoneyNumber, formatBalanceForDisplay } from "@/lib/money";
 import { useToastStore } from "@/components/ui/toast/toast-store";
 import type { HistoryStatus, SingleTransaction, TransactionMeta } from "@/types";
 
@@ -59,17 +60,29 @@ export default function TransactionDetailScreen() {
   const cardBg = isDark ? "#111827" : "#FFFFFF";
   const status = tx?.status as HistoryStatus | undefined;
   const statusConfig = status ? STATUS_MAP[status] : null;
+  const heroCredit =
+    tx &&
+    (tx.credit_debit != null
+      ? tx.credit_debit === "credit"
+      : tx.type === "deposit" || tx.type === "referral_bonus");
+  const heroAmountColor = heroCredit ? colors.green[500] : colors.error;
+  const heroAmountPrefix = heroCredit ? "+" : "-";
+  const metaAddress = getMetaAddress(tx?.meta);
+  const walletRows = tx ? walletCashbackRows(tx) : [];
+  const walletSectionTitle = tx ? getWalletSectionTitle(tx) : "Wallet";
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-1" style={{ backgroundColor: bg }}>
         {/* Header */}
-        <View className="flex-row items-center justify-between px-5 pb-3 pt-14">
+        <View className="flex-row items-center px-5 pb-3 pt-14">
           <Pressable
             onPress={() => router.back()}
             className="h-9 w-9 items-center justify-center rounded-full"
             style={{ backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "#F3F4F6" }}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
           >
             <Ionicons
               name="chevron-back"
@@ -77,10 +90,42 @@ export default function TransactionDetailScreen() {
               color={isDark ? "#E5E7EB" : "#111827"}
             />
           </Pressable>
-          <Text className="text-base font-semibold text-foreground">
-            Transaction Details
-          </Text>
-          <View className="h-9 w-9" />
+          <View className="flex-1 items-center justify-center px-2">
+            <Text
+              className="text-base font-semibold text-foreground"
+              numberOfLines={1}
+            >
+              Transaction Details
+            </Text>
+          </View>
+          <View className="flex-row items-center gap-0.5">
+            <Pressable
+              className="h-9 w-9 items-center justify-center rounded-full"
+              style={{ backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "#F3F4F6" }}
+              accessibilityRole="button"
+              accessibilityLabel="Contact support"
+              hitSlop={6}
+            >
+              <Ionicons
+                name="chatbubbles-outline"
+                size={20}
+                color={colors.orange[500]}
+              />
+            </Pressable>
+            <Pressable
+              className="h-9 w-9 items-center justify-center rounded-full"
+              style={{ backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "#F3F4F6" }}
+              accessibilityRole="button"
+              accessibilityLabel="Share receipt"
+              hitSlop={6}
+            >
+              <Ionicons
+                name="share-outline"
+                size={20}
+                color={colors.green[500]}
+              />
+            </Pressable>
+          </View>
         </View>
 
         {loading ? (
@@ -110,8 +155,11 @@ export default function TransactionDetailScreen() {
                 {getProviderLabel(tx)}
               </Text>
 
-              <Text className="mt-2 text-3xl font-bold text-foreground">
-                ₦{tx.amount}
+              <Text
+                className="mt-2 text-3xl font-bold"
+                style={{ color: heroAmountColor }}
+              >
+                {heroAmountPrefix}₦{tx.amount}
               </Text>
 
               {statusConfig && (
@@ -145,6 +193,16 @@ export default function TransactionDetailScreen() {
               )}
 
               <DetailRow label="Transaction Type" value={formatType(tx.type)} />
+
+              {tx.type === "data" && tx.data_plan_name && (
+                <DetailRow label="Data plan" value={tx.data_plan_name} />
+              )}
+
+              {tx.type === "data" &&
+                !tx.data_plan_name &&
+                tx.meta?.data_plan && (
+                  <DetailRow label="Data plan" value={String(tx.meta.data_plan)} />
+                )}
 
               {tx.meta?.product_name && (
                 <DetailRow label="Product" value={tx.meta.product_name} />
@@ -196,8 +254,12 @@ export default function TransactionDetailScreen() {
                 />
               )}
 
-              {tx.meta?.address && (
-                <DetailRow label="Address" value={String(tx.meta.address)} />
+              {tx.type === "electricity" && tx.meta?.disco && (
+                <DetailRow label="Disco" value={String(tx.meta.disco)} />
+              )}
+
+              {metaAddress != null && (
+                <DetailRow label="Address" value={metaAddress} />
               )}
 
               {tx.meta?.units && (
@@ -224,6 +286,25 @@ export default function TransactionDetailScreen() {
 
               <DetailRow label="Date" value={tx.created_on} isLast />
             </View>
+
+            {walletRows.length > 0 && (
+              <View
+                className="mx-5 mt-4 rounded-2xl px-5 py-4"
+                style={{ backgroundColor: cardBg }}
+              >
+                <Text className="mb-3 text-sm font-semibold text-foreground">
+                  {walletSectionTitle}
+                </Text>
+                {walletRows.map((row, i) => (
+                  <DetailRow
+                    key={row.label}
+                    label={row.label}
+                    value={row.value}
+                    isLast={i === walletRows.length - 1}
+                  />
+                ))}
+              </View>
+            )}
 
             {/* Credentials Card — Education PINs/Serials */}
             {tx.type === "education" &&
@@ -348,16 +429,15 @@ export default function TransactionDetailScreen() {
               )}
 
             {/* Electricity Token Card */}
-            {tx.type === "electricity" &&
-              tx.status === "success" &&
-              tx.meta?.electricity_token && (
-                <View
-                  className="mx-5 mt-4 rounded-2xl px-5 py-4"
-                  style={{ backgroundColor: cardBg }}
-                >
-                  <Text className="mb-3 text-sm font-semibold text-foreground">
-                    Electricity Token
-                  </Text>
+            {tx.type === "electricity" && tx.status === "success" && (
+              <View
+                className="mx-5 mt-4 rounded-2xl px-5 py-4"
+                style={{ backgroundColor: cardBg }}
+              >
+                <Text className="mb-3 text-sm font-semibold text-foreground">
+                  Electricity Token
+                </Text>
+                {tx.meta?.electricity_token ? (
                   <CredentialCopyRow
                     label="Token"
                     value={tx.meta.electricity_token}
@@ -365,35 +445,19 @@ export default function TransactionDetailScreen() {
                     onCopy={copyText}
                     isCopied={copiedField === "elec-token"}
                   />
-                </View>
-              )}
+                ) : (
+                  <View className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 px-4 py-3">
+                    <Text className="text-[13px] font-medium text-foreground">
+                      Token not available
+                    </Text>
+                    <Text className="mt-1.5 text-xs text-muted-foreground">
+                      If you completed payment, use the support icon at the top of this screen and our team can help.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
 
-            {/* Action Buttons */}
-            <View className="mx-5 mt-5 flex-row gap-3">
-              <Pressable
-                className="flex-1 items-center rounded-xl border py-3.5"
-                style={{
-                  borderColor: isDark ? "#374151" : "#E5E7EB",
-                  backgroundColor: isDark ? "#111827" : "#FFFFFF",
-                }}
-              >
-                <Text
-                  className="text-sm font-semibold"
-                  style={{ color: colors.orange[500] }}
-                >
-                  Report Issue
-                </Text>
-              </Pressable>
-
-              <Pressable
-                className="flex-1 items-center rounded-xl py-3.5"
-                style={{ backgroundColor: colors.green[500] }}
-              >
-                <Text className="text-sm font-semibold text-white">
-                  Share Receipt
-                </Text>
-              </Pressable>
-            </View>
           </ScrollView>
         )}
       </View>
@@ -559,6 +623,56 @@ function CredentialCopyRow({
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 
+function getMetaAddress(meta: TransactionMeta | null | undefined): string | null {
+  if (!meta) return null;
+  const raw = meta.customer_address ?? meta.address;
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (s === "" || s.toUpperCase() === "N/A") return null;
+  return s;
+}
+
+/** Resolve earned cashback from snake_case or camelCase API payloads. */
+function getCashbackEarnedAmount(tx: SingleTransaction): number | null {
+  const raw = (tx as unknown as Record<string, unknown>).cashback_earned;
+  const rawCamel = (tx as unknown as Record<string, unknown>).cashbackEarned;
+  return coerceMoneyNumber(raw ?? rawCamel);
+}
+
+function getWalletSectionTitle(tx: SingleTransaction): string {
+  const hasWallet = tx.balance_before != null || tx.balance_after != null;
+  const earned = getCashbackEarnedAmount(tx);
+  const hasEarned = earned != null && earned > 0;
+  if (hasWallet && hasEarned) return "Wallet & cashback";
+  if (hasEarned) return "Cashback";
+  return "Wallet";
+}
+
+/** Wallet before/after plus cashback earned only (no zero-clutter cashback breakdown). */
+function walletCashbackRows(tx: SingleTransaction): { label: string; value: string }[] {
+  const rows: { label: string; value: string }[] = [];
+  if (tx.balance_before != null) {
+    rows.push({
+      label: "Wallet balance before",
+      value: formatBalanceForDisplay(tx.balance_before),
+    });
+  }
+  if (tx.balance_after != null) {
+    rows.push({
+      label: "Wallet balance after",
+      value: formatBalanceForDisplay(tx.balance_after),
+    });
+  }
+  const earned = getCashbackEarnedAmount(tx);
+  if (earned != null && earned > 0) {
+    rows.push({
+      label: "Cashback earned",
+      value: formatBalanceForDisplay(earned),
+    });
+  }
+  return rows;
+}
+
 function hasCredentials(meta: TransactionMeta): boolean {
   return !!(
     meta.pin ||
@@ -609,6 +723,8 @@ function getProviderLabel(tx: SingleTransaction): string {
       return "Education";
     case "electricity":
       return "Electricity";
+    case "betting":
+      return "Betting";
     case "referral_bonus":
       return "Referral Bonus";
     default:
@@ -632,6 +748,8 @@ function formatType(type: string) {
       return "Education";
     case "electricity":
       return "Electricity";
+    case "betting":
+      return "Betting";
     case "referral_bonus":
       return "Referral Bonus";
     default:
@@ -655,6 +773,8 @@ function getTypeIcon(type: string): React.ComponentProps<typeof Ionicons>["name"
       return "school-outline";
     case "electricity":
       return "flash-outline";
+    case "betting":
+      return "trophy-outline";
     case "referral_bonus":
       return "gift-outline";
     default:

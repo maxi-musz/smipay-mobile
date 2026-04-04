@@ -60,6 +60,8 @@ export interface TransactionItem {
   date: string;
   sender: string | null;
   icon: string | null;
+  /** Present for data purchases when the API includes it */
+  data_plan_name?: string | null;
 }
 
 export interface KycVerification {

@@ -16,6 +16,24 @@ function normalizeFraction(raw: string): string {
 }
 
 /**
+ * Coerce API money fields (number or string with commas / ₦) to a finite number.
+ * Use before comparisons like `> 0` — raw `"> 0"` on string `"1,250"` is false (NaN).
+ */
+export function coerceMoneyNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    const cleaned = value.replace(/[₦,\s]/g, "").trim();
+    if (cleaned === "") return null;
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
  * Formats a wallet-style balance for display without parsing the whole amount as a float.
  * Prefer API values as decimal strings; numbers may lose precision if not safe integers.
  */
@@ -32,7 +50,12 @@ export function formatBalanceForDisplay(
       const intStr = String(abs);
       return `${sign}${NAIRA_SYMBOL}${groupIntegerDigits(intStr)}.00`;
     }
-    if (__DEV__) {
+    // Fractional amounts (e.g. cashback ₦320.50) are expected; only warn for huge integers.
+    if (
+      __DEV__ &&
+      Number.isInteger(raw) &&
+      !Number.isSafeInteger(raw)
+    ) {
       console.warn(
         "[money] Balance arrived as non–safe-integer number; possible precision loss. Prefer string from API.",
         raw,

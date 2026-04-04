@@ -1,0 +1,355 @@
+# Transaction History API
+
+## Base Path
+`/api/v1/history`
+
+**Auth:** JWT Bearer token (all endpoints)
+
+---
+
+## 1. Get Transaction History (with Filtering & Categories)
+**GET** `/api/v1/history/fetch-all-history`
+
+Returns the user's transactions with pagination, category counts for filter tabs, and optional filtering by type/status/direction/search.
+
+### Query Parameters
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `page` | number | `1` | Page number |
+| `limit` | number | `10` | Items per page |
+| `type` | string | — | Filter by transaction type (see enum below) |
+| `status` | string | — | Filter by status: `pending`, `success`, `failed`, `cancelled` |
+| `credit_debit` | string | — | Filter by direction: `credit` (money in) or `debit` (money out) |
+| `search` | string | — | Search across description, reference, and recipient phone number (case-insensitive) |
+
+### Example Requests
+```
+GET /api/v1/history/fetch-all-history
+GET /api/v1/history/fetch-all-history?page=2&limit=15
+GET /api/v1/history/fetch-all-history?type=airtime
+GET /api/v1/history/fetch-all-history?type=deposit&status=success
+GET /api/v1/history/fetch-all-history?credit_debit=debit
+GET /api/v1/history/fetch-all-history?search=MTN
+```
+
+### Response
+```json
+{
+  "success": true,
+  "message": "Transactions successfully retrieved",
+  "data": {
+    "categories": {
+      "all": 25,
+      "deposit": 10,
+      "airtime": 6,
+      "data": 4,
+      "transfer": 3,
+      "referral_bonus": 2
+    },
+    "pagination": {
+      "currentPage": 1,
+      "totalItems": 25,
+      "totalPages": 3,
+      "activeFilter": "all"
+    },
+    "transactions": [
+      {
+        "id": "uuid",
+        "amount": "1,200",
+        "raw_amount": 1200,
+        "type": "deposit",
+        "credit_debit": "credit",
+        "transaction_type": "deposit",
+        "description": "Wallet Funding Via Gateway",
+        "status": "success",
+        "data_plan_name": null,
+        "date": "Feb 24, 2026, 10:30 PM",
+        "reference": "ref-abc123",
+        "sender": "John Doe",
+        "icon": "https://...",
+        "payment_channel": "paystack",
+        "payment_method": "paystack"
+      },
+      {
+        "id": "uuid",
+        "amount": "500",
+        "raw_amount": 500,
+        "type": "airtime",
+        "credit_debit": "debit",
+        "transaction_type": "airtime",
+        "description": "MTN ₦500 Airtime - 08012345678",
+        "status": "success",
+        "data_plan_name": null,
+        "date": "Feb 24, 2026, 9:15 PM",
+        "reference": "ref-xyz789",
+        "sender": null,
+        "icon": "https://...",
+        "payment_channel": "vtpass",
+        "payment_method": "wallet"
+      },
+      {
+        "id": "uuid",
+        "amount": "537",
+        "raw_amount": 537,
+        "type": "data",
+        "credit_debit": "debit",
+        "transaction_type": "data",
+        "description": "MTN DATA - 08039587072",
+        "status": "success",
+        "data_plan_name": "MTN 500MB Daily",
+        "date": "Mar 12, 2026, 6:11 PM",
+        "reference": "2026031217118kbkqzcn",
+        "sender": null,
+        "icon": "https://...",
+        "payment_channel": "other",
+        "payment_method": "wallet"
+      }
+    ]
+  }
+}
+```
+
+### Response Fields
+
+#### `categories` — Always present, always unfiltered
+
+Counts of ALL the user's transactions grouped by type. This is **not affected by filters** — it always shows the full picture so the frontend can render filter tabs with accurate counts.
+
+| Key | Description |
+|---|---|
+| `all` | Total transaction count for this user |
+| `deposit` | Wallet funding (bank transfer, Paystack gateway) |
+| `transfer` | Transfers to other users (SmipPay tag, bank) |
+| `airtime` | Airtime purchases |
+| `data` | Data bundle purchases |
+| `cable` | Cable TV subscriptions |
+| `education` | Education payments |
+| `betting` | Betting wallet funding |
+| `referral_bonus` | Referral program rewards |
+
+Only categories that have at least 1 transaction will appear. If a user has never bought airtime, `airtime` won't be in the object.
+
+#### `pagination`
+
+| Field | Type | Description |
+|---|---|---|
+| `currentPage` | number | Current page number |
+| `totalItems` | number | Total matching transactions (affected by filters) |
+| `totalPages` | number | Total pages (affected by filters) |
+| `activeFilter` | string | Currently applied type filter, or `"all"` if none |
+
+#### `transactions[]`
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Transaction UUID |
+| `amount` | string | Formatted amount with commas, e.g. `"1,200"`, `"50,000"`. Add `₦` prefix in UI. |
+| `raw_amount` | number | Raw numeric amount (e.g. `1200`). Use for calculations, sorting, or custom formatting. |
+| `type` | string | Transaction type (same as `transaction_type`) |
+| `credit_debit` | string | `"credit"` (money in) or `"debit"` (money out) |
+| `transaction_type` | string | Same as `type` — kept for backward compatibility |
+| `description` | string | Human-readable description |
+| `data_plan_name` | string \| null | Data plan name (e.g. `"MTN 1GB Daily"`, `"MTN 500MB Daily"`) for data purchases; `null` for other types or when not available. Display in list and detail for data transactions. |
+| `status` | string | `"pending"`, `"success"`, `"failed"`, `"cancelled"` |
+| `date` | string | Formatted date string, e.g. `"Feb 24, 2026, 10:30 PM"` |
+| `reference` | string \| null | Transaction reference |
+| `sender` | string \| null | Sender name (for deposits via bank transfer) |
+| `icon` | string \| null | Transaction icon URL |
+| `payment_channel` | string \| null | e.g. `"paystack"`, `"vtpass"`, `"smipay_tag"` |
+| `payment_method` | string \| null | e.g. `"paystack"`, `"wallet"`, `"bank_transfer"` |
+
+---
+
+## 2. Get Single Transaction
+**GET** `/api/v1/history/:id`
+
+Returns full details for a single transaction.
+
+### Response
+
+**Example (deposit):**
+```json
+{
+  "success": true,
+  "message": "Single transaction retrieved",
+  "data": {
+    "id": "uuid",
+    "amount": "1,200",
+    "type": "deposit",
+    "description": "Wallet Funding Via Gateway",
+    "provider": null,
+    "data_plan_name": null,
+    "status": "success",
+    "recipient_mobile": null,
+    "tx_reference": "ref-abc123",
+    "created_on": "Feb 24, 2026, 10:30 PM",
+    "updated_on": "Feb 24, 2026, 10:30 PM",
+    "sender": "John Doe",
+    "icon": "https://...",
+    "meta": {}
+  }
+}
+```
+
+**Example (electricity prepaid):**
+```json
+{
+  "success": true,
+  "message": "Single transaction retrieved",
+  "data": {
+    "id": "uuid",
+    "amount": "12,000",
+    "type": "electricity",
+    "description": "IBEDC prepaid - 0159001256456",
+    "provider": "ibadan-electric",
+    "data_plan_name": null,
+    "status": "success",
+    "recipient_mobile": null,
+    "tx_reference": "202603121630e4jp4dot",
+    "created_on": "Mar 12, 2026, 4:30 PM",
+    "updated_on": "Mar 12, 2026, 4:30 PM",
+    "sender": null,
+    "icon": "https://...",
+    "meta": {
+      "electricity_token": "0189 6657 9514 4895 9630",
+      "units": "107.89",
+      "meter_number": "0159001256456",
+      "meter_type": "prepaid",
+      "customer_name": "ONAPITAN GRACE(MR)",
+      "customer_address": "ALAKA AREA OYO",
+      "disco": "IBEDC - Ibadan Electricity Distribution Company"
+    }
+  }
+}
+```
+
+> **Note:** `meta` is type-specific. For electricity, it contains token + meter details. For airtime, data, cable, education, etc., it contains different fields.
+
+#### Data plan name (`data_plan_name`)
+
+For **data** transactions, `data.data_plan_name` is the plan the user bought (e.g. `"MTN 1GB Daily"`, `"MTN 500MB Daily"`). It is `null` for non-data types (deposit, transfer, airtime, electricity, etc.). Use it on the transaction detail screen to show which data plan was purchased.
+
+#### Cashback tracking (VTpass purchases)
+
+When the user used cashback or earned cashback on this transaction, the response includes:
+
+| Field | Type | Description |
+|---|---|---|
+| `cashback_balance_before` | number \| null | Cashback balance before this transaction. `null` when no cashback was used. |
+| `cashback_used` | number \| null | Cashback amount used for this purchase. `null` when none used. |
+| `cashback_balance_after` | number \| null | Cashback balance after deducting `cashback_used`. `null` when none used. |
+| `cashback_earned` | number \| null | New cashback earned on this transaction (credited after success). `null` if none or not applicable. |
+
+Use these with `balance_before` / `balance_after` so the user can see how wallet + cashback changed (e.g. "Used ₦100 cashback; wallet: ₦1,000 → ₦400").
+
+#### `meta` for electricity transactions (`type: "electricity"`)
+
+When `data.type === "electricity"`, the `data.meta` object has:
+
+| Field | Type | Description |
+|---|---|---|
+| `electricity_token` | string \| null | **Primary token** the user must load on the meter (already cleaned; no `"Token : "` prefix). Always use this for display + copy button. |
+| `units` | string \| null | Units purchased, e.g. `"79.9 kWh"` or `"107.89"`. |
+| `meter_number` | string \| null | Meter number (from request payload or VTpass `meterNumber`). |
+| `meter_type` | string \| null | `"prepaid"` / `"postpaid"` (from request `variation_code`). |
+| `customer_name` | string \| null | Customer name from provider (null when VTpass sends `"N/A"` or omits it). |
+| `customer_address` | string \| null | Customer address from provider (null when `"N/A"` or missing). |
+| `disco` | string \| null | Provider label, e.g. `"Ikeja Electric Payment - IKEDC"`, `"IBEDC - Ibadan Electricity Distribution Company"`. |
+
+**Frontend rule (electricity detail screen):**
+
+- Always read the token from `data.meta.electricity_token`. Do **not** parse raw VTpass JSON on the frontend.
+- If `status === "success"` but `meta.electricity_token` is `null` (should be extremely rare), show a safe fallback state (e.g. "Token not available") and surface a support action. The backend logs and emails admins when this anomaly happens.
+
+---
+
+## Enum Values
+
+### Transaction Types
+Use these values for the `type` query parameter:
+
+| Value | Display Name | Direction | Description |
+|---|---|---|---|
+| `deposit` | Deposit | credit | Wallet funding (bank transfer, Paystack) |
+| `transfer` | Transfer | debit | Transfers to other users or banks |
+| `airtime` | Airtime | debit | Airtime purchases |
+| `data` | Data | debit | Data bundle purchases |
+| `cable` | Cable TV | debit | Cable TV subscriptions (DSTV, GOtv, etc.) |
+| `education` | Education | debit | Education payments |
+| `betting` | Betting | debit | Betting wallet funding |
+| `referral_bonus` | Referral Bonus | credit | Referral program rewards |
+
+### Transaction Status
+
+| Value | Display | Color |
+|---|---|---|
+| `pending` | Pending | Yellow/Orange |
+| `success` | Success | Green |
+| `failed` | Failed | Red |
+| `cancelled` | Cancelled | Gray |
+
+### Credit/Debit
+
+| Value | Meaning | UI Treatment |
+|---|---|---|
+| `credit` | Money coming in | Green text, `+₦` prefix |
+| `debit` | Money going out | Red text, `-₦` prefix |
+
+---
+
+## Frontend Implementation Guide
+
+### Transaction List Screen
+
+#### Filter Tabs (from `categories`)
+
+Build filter tabs dynamically from the `categories` object:
+
+```javascript
+// Response: data.categories = { all: 25, deposit: 10, airtime: 6, data: 4, transfer: 3, referral_bonus: 2 }
+
+const CATEGORY_LABELS = {
+  all: 'All',
+  deposit: 'Deposits',
+  transfer: 'Transfers',
+  airtime: 'Airtime',
+  data: 'Data',
+  cable: 'Cable TV',
+  education: 'Education',
+  betting: 'Betting',
+  referral_bonus: 'Rewards',
+};
+
+// Only render tabs for categories that exist
+const tabs = Object.entries(data.categories).map(([key, count]) => ({
+  key,
+  label: CATEGORY_LABELS[key] || key,
+  count,
+}));
+```
+
+Renders as:
+```
+[All (25)]  [Deposits (10)]  [Airtime (6)]  [Data (4)]  [Transfers (3)]  [Rewards (2)]
+```
+
+When a tab is tapped, re-fetch with `?type=airtime` (or whichever). When "All" is tapped, fetch without `type` param.
+
+#### Search
+
+Debounce 300–500ms, then pass `?search=MTN`. The backend searches description, reference, and phone number.
+
+#### Amount Display
+
+- `amount` field is already comma-formatted (e.g. `"1,200"`) — just prepend `₦`
+- `raw_amount` field is a raw number (e.g. `1200`) — use for sorting or custom formatting
+- Use `credit_debit` to decide the sign: `credit` → `+₦1,200` (green), `debit` → `-₦500` (red)
+
+#### Pagination
+
+Standard page-based. Show `totalItems` as "X transactions". Use `totalPages` to show/hide next button.
+
+#### Adding New Categories Later
+
+When a new transaction type is added to the backend (e.g. `electricity`, `insurance`), it will automatically appear in the `categories` object. The frontend just needs a label mapping entry in `CATEGORY_LABELS` — no API changes needed.

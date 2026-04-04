@@ -31,6 +31,8 @@ export interface HistoryTransaction {
   transaction_type: string;
   description: string;
   status: HistoryStatus;
+  /** Data bundle label for `data` transactions; null otherwise */
+  data_plan_name?: string | null;
   date: string;
   reference: string | null;
   sender: string | null;
@@ -78,6 +80,10 @@ export interface TransactionMeta {
   electricity_token?: string;
   units?: string;
   address?: string;
+  /** Electricity: customer address from provider (preferred over `address` when both exist) */
+  customer_address?: string | null;
+  /** Electricity: distribution company label */
+  disco?: string | null;
 
   /** Catch-all for future fields */
   [key: string]: unknown;
@@ -88,6 +94,8 @@ export interface SingleTransaction {
   amount: string;
   type: string;
   description: string;
+  /** Data plan name for `data` transactions */
+  data_plan_name?: string | null;
   provider: string | null;
   status: HistoryStatus;
   recipient_mobile: string | null;
@@ -99,6 +107,12 @@ export interface SingleTransaction {
   credit_debit?: string;
   raw_amount?: number;
   wallet_balance?: number;
+  balance_before?: number | null;
+  balance_after?: number | null;
+  cashback_balance_before?: number | null;
+  cashback_used?: number | null;
+  cashback_balance_after?: number | null;
+  cashback_earned?: number | null;
   meta?: TransactionMeta | null;
 }
 
