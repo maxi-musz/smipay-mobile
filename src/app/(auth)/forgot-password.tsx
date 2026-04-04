@@ -13,6 +13,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { forgotPassword, resetPassword } from "@/api";
+import { AuthCenteredForm } from "@/components/auth/auth-centered-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loaders";
@@ -156,11 +157,12 @@ export default function ForgotPasswordScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerClassName="flex-grow justify-start px-6 pt-10 pb-12"
+          contentContainerClassName="flex-grow pb-12"
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
         >
+          <AuthCenteredForm className="px-6">
           {/* Header */}
           <Animated.View
             className="items-center"
@@ -290,6 +292,7 @@ export default function ForgotPasswordScreen() {
               </Pressable>
             </Animated.View>
           )}
+          </AuthCenteredForm>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

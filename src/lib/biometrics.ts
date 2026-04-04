@@ -1,4 +1,5 @@
 import * as LocalAuthentication from "expo-local-authentication";
+import { Platform } from "react-native";
 
 const DEFAULT_PROMPT = "Authenticate to continue";
 
@@ -23,11 +24,26 @@ export async function getBiometricsAvailability(): Promise<BiometricsAvailabilit
       LocalAuthentication.isEnrolledAsync(),
       LocalAuthentication.supportedAuthenticationTypesAsync(),
     ]);
-    const biometricType =
-      types?.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION) ? "face"
-      : types?.includes(LocalAuthentication.AuthenticationType.FINGERPRINT) ? "fingerprint"
-      : types?.includes(LocalAuthentication.AuthenticationType.IRIS) ? "iris"
-      : null;
+    const hasFace = types?.includes(
+      LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
+    );
+    const hasFingerprint = types?.includes(
+      LocalAuthentication.AuthenticationType.FINGERPRINT,
+    );
+    const hasIris = types?.includes(LocalAuthentication.AuthenticationType.IRIS);
+
+    // Android often reports both face + fingerprint even when only fingerprint is used;
+    // prefer fingerprint there. iOS: face (Face ID) before fingerprint (Touch ID).
+    let biometricType: BiometricsAvailability["biometricType"] = null;
+    if (Platform.OS === "android") {
+      if (hasFingerprint) biometricType = "fingerprint";
+      else if (hasFace) biometricType = "face";
+      else if (hasIris) biometricType = "iris";
+    } else {
+      if (hasFace) biometricType = "face";
+      else if (hasFingerprint) biometricType = "fingerprint";
+      else if (hasIris) biometricType = "iris";
+    }
     cached = {
       available: hasHardware && isEnrolled,
       hasHardware,
@@ -76,15 +92,16 @@ export async function authenticate(
 }
 
 /**
- * User-facing label for the biometric type (Face ID, Touch ID, or fingerprint).
+ * User-facing label for the biometric type (platform-specific; Face ID is iOS-only branding).
  */
 export function getBiometricLabel(availability: BiometricsAvailability): string {
   if (!availability.available) return "Biometrics";
+  const isIos = Platform.OS === "ios";
   switch (availability.biometricType) {
     case "face":
-      return "Face ID";
+      return isIos ? "Face ID" : "Face unlock";
     case "fingerprint":
-      return "Touch ID / Fingerprint";
+      return isIos ? "Touch ID" : "Fingerprint";
     case "iris":
       return "Iris";
     default:

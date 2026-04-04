@@ -18,6 +18,7 @@ import {
   verifyEmailForRegistration,
   register,
 } from "@/api";
+import { AuthCenteredForm } from "@/components/auth/auth-centered-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loaders";
@@ -261,12 +262,13 @@ export default function SignUpScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerClassName="flex-grow justify-start px-6 pt-8 pb-12"
+          contentContainerClassName="flex-grow pb-12"
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
           showsVerticalScrollIndicator={false}
         >
+          <AuthCenteredForm className="px-6">
           {/* ── Header ── */}
           <Animated.View
             className={`items-center ${step === "profile" ? "mt-4" : ""}`}
@@ -521,6 +523,7 @@ export default function SignUpScreen() {
               </Button>
             </Animated.View>
           )}
+          </AuthCenteredForm>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

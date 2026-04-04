@@ -19,6 +19,7 @@ import {
   clearLastRegisteredToken,
   getLastRegisteredToken,
 } from "@/lib/push-notifications";
+import { AuthCenteredForm } from "@/components/auth/auth-centered-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FullPageLoader, Spinner } from "@/components/ui/loaders";
@@ -58,6 +59,11 @@ export function LockScreen() {
   const [unlocking, setUnlocking] = useState(false);
   /** Stops auto-trigger after a server/network failure to prevent infinite loop. */
   const serverFailedRef = useRef(false);
+  /**
+   * After biometric cancel/failure, AppState often goes "active" again and would re-schedule
+   * auto biometric indefinitely. Suppress until the user taps the biometric control.
+   */
+  const suppressAutoBiometricRef = useRef(false);
 
   const passwordRef = useRef<TextInput>(null);
 
@@ -82,10 +88,10 @@ export function LockScreen() {
     if (!biometricsAvailable || !biometricsEnabled) return;
 
     const triggerAfterDelay = () => {
-      if (serverFailedRef.current) return;
+      if (serverFailedRef.current || suppressAutoBiometricRef.current) return;
       const delay = Platform.OS === "ios" ? 600 : 300;
       return setTimeout(() => {
-        if (!serverFailedRef.current) {
+        if (!serverFailedRef.current && !suppressAutoBiometricRef.current) {
           handleBiometricUnlockRef.current();
         }
       }, delay);
@@ -148,6 +154,7 @@ export function LockScreen() {
         promptMessage: "Unlock SmiPay",
       });
       if (!authResult.success) {
+        suppressAutoBiometricRef.current = true;
         setError("Authentication failed. Try your password.");
         return;
       }
@@ -157,6 +164,7 @@ export function LockScreen() {
         SECURE_KEYS.USER_PASSWORD,
       );
       if (!storedPassword) {
+        suppressAutoBiometricRef.current = true;
         setUnlocking(false);
         setError("Could not retrieve credentials. Please enter your password.");
         return;
@@ -171,6 +179,7 @@ export function LockScreen() {
       resetInactivityTimer();
     } catch (e) {
       setUnlocking(false);
+      suppressAutoBiometricRef.current = true;
       const classified = classifyError(e);
       if (classified.variant === "warning" || (classified.statusCode && classified.statusCode >= 500)) {
         serverFailedRef.current = true;
@@ -186,6 +195,7 @@ export function LockScreen() {
   }
 
   function handleManualBiometricTap() {
+    suppressAutoBiometricRef.current = false;
     serverFailedRef.current = false;
     handleBiometricUnlock();
   }
@@ -238,11 +248,12 @@ export function LockScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerClassName="flex-grow justify-start px-8 pt-10 pb-12"
+          contentContainerClassName="flex-grow pb-12"
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
         >
+          <AuthCenteredForm className="px-8">
           <View className="items-center">
             <Image
               source={require("@/assets/images/icon.png")}
@@ -369,6 +380,7 @@ export function LockScreen() {
               Switch Account
             </Text>
           </Pressable>
+          </AuthCenteredForm>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
