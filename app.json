@@ -79,6 +79,13 @@
           "contactsPermission": "Allow SmiPay to access your contacts to select a phone number for airtime/data."
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow SmiPay to access your photos to set your profile picture.",
+          "cameraPermission": "Allow SmiPay to use your camera to take a profile photo."
+        }
+      ],
       "expo-asset"
     ],
     "runtimeVersion": {

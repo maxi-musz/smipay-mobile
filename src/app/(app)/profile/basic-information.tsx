@@ -1,15 +1,30 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, router } from "expo-router";
 
+import { updateDisplayPicture } from "@/api";
+import {
+  ProfilePhotoPickMode,
+  ProfilePhotoPreviewModal,
+  ProfilePhotoSourceSheet,
+} from "@/components/profile";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
+import { useToastStore } from "@/components/ui/toast";
 import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { formatTierRequirement } from "@/lib/format-tier-requirement";
-import { useProfileStore } from "@/store";
+import { ApiClientError } from "@/lib/api";
+import {
+  pickFromCamera,
+  pickFromFile,
+  pickFromLibrary,
+  rejectIfProfileImageTooLarge,
+  type PickedProfileImage,
+} from "@/lib/pick-profile-image";
+import { useHomepageStore, useProfileStore } from "@/store";
 
 type Ion = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -194,6 +209,12 @@ export default function BasicInformationScreen() {
   const loading = useProfileStore.use.isLoading();
   const error = useProfileStore.use.error();
   const fetchProfile = useProfileStore.use.fetchProfile();
+  const refreshHomepageSilently = useHomepageStore.use.refreshHomepageSilently();
+
+  const [sourceSheetOpen, setSourceSheetOpen] = useState(false);
+  const [previewPicked, setPreviewPicked] = useState<PickedProfileImage | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const bg = isDark ? "#080C14" : "#F4F6F9";
 
@@ -202,6 +223,53 @@ export default function BasicInformationScreen() {
       fetchProfile();
     }
   }, [profile, loading, fetchProfile]);
+
+  const handlePhotoSource = useCallback((mode: ProfilePhotoPickMode) => {
+    void (async () => {
+      let picked: PickedProfileImage | null = null;
+      if (mode === "camera") picked = await pickFromCamera();
+      else if (mode === "library") picked = await pickFromLibrary();
+      else picked = await pickFromFile();
+      const ok = picked ? rejectIfProfileImageTooLarge(picked) : null;
+      if (ok) {
+        setPreviewPicked(ok);
+        setUploadError(null);
+      }
+    })();
+  }, []);
+
+  const handleConfirmPhoto = useCallback(async () => {
+    if (!previewPicked) return;
+    setUploadingPhoto(true);
+    setUploadError(null);
+    try {
+      await updateDisplayPicture(
+        {
+          uri: previewPicked.uri,
+          name: previewPicked.fileName,
+          type: previewPicked.mimeType,
+        },
+        previewPicked.fileSize,
+      );
+      setPreviewPicked(null);
+      await Promise.all([fetchProfile(), refreshHomepageSilently()]);
+      useToastStore.getState().show({
+        variant: "success",
+        title: "Profile photo updated",
+        message: "Your new picture is live across SmiPay.",
+      });
+    } catch (e) {
+      const msg =
+        e instanceof ApiClientError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : "Could not upload your photo. Please try again.";
+      setUploadError(msg);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }, [previewPicked, fetchProfile, refreshHomepageSilently]);
 
   return (
     <>
@@ -312,29 +380,51 @@ export default function BasicInformationScreen() {
                       marginBottom: 16,
                     }}
                   >
-                    <View
-                      style={{
-                        borderRadius: 999,
-                        overflow: "hidden",
-                        backgroundColor: isDark ? "#1E293B" : "#fff",
-                        borderWidth: 3,
-                        borderColor: isDark ? "#151d2e" : "#FAFBFC",
-                      }}
+                    <Pressable
+                      onPress={() => setSourceSheetOpen(true)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Change profile photo"
+                      style={{ position: "relative" }}
                     >
-                      {profile.user.profile_image ? (
-                        <Image
-                          source={{ uri: profile.user.profile_image }}
-                          className="h-[88px] w-[88px]"
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View className="h-[88px] w-[88px] items-center justify-center bg-primary/15">
-                          <Text className="text-[28px] font-bold text-primary">
-                            {(profile.user.first_name?.[0] ?? "") + (profile.user.last_name?.[0] ?? "")}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
+                      <View
+                        style={{
+                          borderRadius: 999,
+                          overflow: "hidden",
+                          backgroundColor: isDark ? "#1E293B" : "#fff",
+                          borderWidth: 3,
+                          borderColor: isDark ? "#151d2e" : "#FAFBFC",
+                        }}
+                      >
+                        {profile.user.profile_image ? (
+                          <Image
+                            source={{ uri: profile.user.profile_image }}
+                            className="h-[88px] w-[88px]"
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View className="h-[88px] w-[88px] items-center justify-center bg-primary/15">
+                            <Text className="text-[28px] font-bold text-primary">
+                              {(profile.user.first_name?.[0] ?? "") + (profile.user.last_name?.[0] ?? "")}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <View
+                        className="absolute -bottom-0.5 -right-0.5 h-[30px] w-[30px] items-center justify-center rounded-full border-2"
+                        style={{
+                          borderColor: isDark ? "#151d2e" : "#FAFBFC",
+                          backgroundColor: colors.orange[500],
+                          shadowColor: "#000",
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.25,
+                          shadowRadius: 3,
+                          elevation: 4,
+                        }}
+                        pointerEvents="none"
+                      >
+                        <Ionicons name="camera" size={16} color="#FFFFFF" />
+                      </View>
+                    </Pressable>
                   </LinearGradient>
 
                   <View className="flex-row items-center gap-2">
@@ -588,6 +678,25 @@ export default function BasicInformationScreen() {
           </ScrollView>
         )}
       </View>
+
+      <ProfilePhotoSourceSheet
+        visible={sourceSheetOpen}
+        onClose={() => setSourceSheetOpen(false)}
+        onSelect={handlePhotoSource}
+      />
+      <ProfilePhotoPreviewModal
+        visible={previewPicked !== null}
+        imageUri={previewPicked?.uri ?? ""}
+        onCancel={() => {
+          if (!uploadingPhoto) {
+            setPreviewPicked(null);
+            setUploadError(null);
+          }
+        }}
+        onConfirm={handleConfirmPhoto}
+        isSubmitting={uploadingPhoto}
+        errorText={uploadError}
+      />
     </>
   );
 }

@@ -13,6 +13,8 @@ interface HomepageState {
 
 interface HomepageActions {
   fetchHomepage: () => Promise<void>;
+  /** Refetch homepage data without setting `isLoading` (e.g. after profile photo update). */
+  refreshHomepageSilently: () => Promise<void>;
   reset: () => void;
 }
 
@@ -55,6 +57,18 @@ const _useHomepageStore = create<HomepageStore>()((set, get) => ({
         "Unable to load dashboard. Please check your connection and try again.",
       isLoading: false,
     });
+  },
+
+  refreshHomepageSilently: async () => {
+    try {
+      const response = await fetchHomepageDetails();
+      set({
+        data: normalizeHomepageMoneyFields(response.data),
+        error: null,
+      });
+    } catch {
+      // Keep existing dashboard data; avoid disrupting UX when silent refresh fails.
+    }
   },
 
   reset: () => set(initialState),

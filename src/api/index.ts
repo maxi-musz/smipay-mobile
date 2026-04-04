@@ -14,10 +14,12 @@ export {
 export {
   fetchHomepageDetails,
   fetchUserProfile,
+  updateDisplayPicture,
   requestAccountDeletion,
   cancelAccountDeletionRequest,
   type RequestAccountDeletionPayload,
   type AccountDeletionResponseData,
+  type UpdateDisplayPictureResponseData,
 } from "./services/user";
 export {
   registerPushToken,
