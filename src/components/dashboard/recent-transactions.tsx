@@ -7,6 +7,7 @@ import { useAppTheme } from "@/hooks/use-app-theme";
 import { useResponsiveScale } from "@/hooks/use-responsive-scale";
 import { colors } from "@/constants/colors";
 import { getProviderLogo } from "@/lib/provider-logo";
+import { isUnsuccessfulTransactionStatus } from "@/lib/transaction-display";
 import type { TransactionItem } from "@/types";
 
 type TransactionStatus = "success" | "successful" | "pending" | "failed" | "cancelled";
@@ -135,8 +136,13 @@ function TransactionRow({
   const { s } = useResponsiveScale();
   const statusKey = transaction.status as TransactionStatus;
   const status = STATUS_CONFIG[statusKey] ?? STATUS_CONFIG.pending;
+  const isUnsuccessful = isUnsuccessfulTransactionStatus(transaction.status);
   const amountColor =
-    transaction.credit_debit === "credit" ? colors.green[500] : colors.error;
+    isUnsuccessful
+      ? colors.error
+      : transaction.credit_debit === "credit"
+        ? colors.green[500]
+        : colors.error;
 
   const localLogo = getProviderLogo(transaction.description);
   const isCredit = transaction.credit_debit === "credit";
@@ -152,6 +158,7 @@ function TransactionRow({
         remoteIcon={transaction.icon}
         isCredit={isCredit}
         isDark={isDark}
+        isUnsuccessful={isUnsuccessful}
       />
 
       <View className="flex-1">
@@ -213,15 +220,20 @@ function TxIcon({
   remoteIcon,
   isCredit,
   isDark,
+  isUnsuccessful,
 }: {
   localLogo: ReturnType<typeof getProviderLogo>;
   remoteIcon: string | null;
   isCredit: boolean;
   isDark: boolean;
+  isUnsuccessful: boolean;
 }) {
   const { s } = useResponsiveScale();
   const size = s(40);
   const style = { width: size, height: size, marginRight: s(12) };
+  const failureBg = isDark ? "rgba(220, 38, 38, 0.2)" : "#FEE2E2";
+  const creditBg = isDark ? "#052E16" : "#DCFCE7";
+  const debitBg = isDark ? "rgba(255,255,255,0.08)" : colors.gray[100];
 
   if (localLogo) {
     return (
@@ -238,9 +250,13 @@ function TxIcon({
     return (
       <View
         className="items-center justify-center rounded-full"
-        style={[style, { backgroundColor: isDark ? "#052E16" : "#DCFCE7" }]}
+        style={[style, { backgroundColor: isUnsuccessful ? failureBg : creditBg }]}
       >
-        <Ionicons name="arrow-down" size={s(18)} color={colors.green[500]} />
+        <Ionicons
+          name="arrow-down"
+          size={s(18)}
+          color={isUnsuccessful ? colors.error : colors.green[500]}
+        />
       </View>
     );
   }
@@ -262,14 +278,20 @@ function TxIcon({
       style={[
         style,
         {
-          backgroundColor: isDark ? "rgba(255,255,255,0.08)" : colors.gray[100],
+          backgroundColor: isUnsuccessful ? failureBg : debitBg,
         },
       ]}
     >
       <Ionicons
         name="arrow-up"
         size={s(18)}
-        color={isDark ? colors.gray[400] : colors.gray[500]}
+        color={
+          isUnsuccessful
+            ? colors.error
+            : isDark
+              ? colors.gray[400]
+              : colors.gray[500]
+        }
       />
     </View>
   );

@@ -1,4 +1,5 @@
 import { Pressable, TextInput, View } from "react-native";
+import * as Contacts from "expo-contacts";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "@/components/ui/text";
@@ -59,7 +60,6 @@ export function DataPhoneRow({
 
   async function handlePickContact() {
     try {
-      const Contacts = await import("expo-contacts");
       const { status } = await Contacts.requestPermissionsAsync();
       if (status !== "granted") return;
 

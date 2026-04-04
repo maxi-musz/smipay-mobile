@@ -30,6 +30,7 @@ import type {
   HistoryStatus,
 } from "@/types";
 import { handleApiError } from "@/lib/errors";
+import { isUnsuccessfulTransactionStatus } from "@/lib/transaction-display";
 
 type CategoryKey = keyof HistoryCategories;
 
@@ -251,6 +252,7 @@ export default function HistoryScreen() {
   function renderItem({ item, index }: { item: HistoryTransaction; index: number }) {
     const localLogo = getProviderLogo(item.description);
     const isCredit = item.credit_debit === "credit";
+    const isUnsuccessful = isUnsuccessfulTransactionStatus(item.status);
 
     return (
       <Animated.View
@@ -268,6 +270,7 @@ export default function HistoryScreen() {
           remoteIcon={item.icon}
           isCredit={isCredit}
           isDark={isDark}
+          isUnsuccessful={isUnsuccessful}
         />
 
         <View className="flex-1">
@@ -288,7 +291,12 @@ export default function HistoryScreen() {
           <Text
             className="text-[14px] font-semibold"
             style={{
-              color: isCredit ? colors.green[500] : colors.error,
+              color:
+                isUnsuccessful
+                  ? colors.error
+                  : isCredit
+                    ? colors.green[500]
+                    : colors.error,
             }}
           >
             {formatAmount(item.raw_amount, item.credit_debit)}
@@ -375,12 +383,18 @@ function TxIcon({
   remoteIcon,
   isCredit,
   isDark,
+  isUnsuccessful,
 }: {
   localLogo: ReturnType<typeof getProviderLogo>;
   remoteIcon: string | null;
   isCredit: boolean;
   isDark: boolean;
+  isUnsuccessful: boolean;
 }) {
+  const failureBg = isDark ? "rgba(220, 38, 38, 0.2)" : "#FEE2E2";
+  const creditBg = isDark ? "#052E16" : "#DCFCE7";
+  const debitBg = isDark ? "rgba(255,255,255,0.08)" : colors.gray[100];
+
   if (localLogo) {
     return (
       <Image
@@ -395,9 +409,13 @@ function TxIcon({
     return (
       <View
         className="mr-3 h-10 w-10 items-center justify-center rounded-full"
-        style={{ backgroundColor: isDark ? "#052E16" : "#DCFCE7" }}
+        style={{ backgroundColor: isUnsuccessful ? failureBg : creditBg }}
       >
-        <Ionicons name="arrow-down" size={18} color={colors.green[500]} />
+        <Ionicons
+          name="arrow-down"
+          size={18}
+          color={isUnsuccessful ? colors.error : colors.green[500]}
+        />
       </View>
     );
   }
@@ -416,13 +434,19 @@ function TxIcon({
     <View
       className="mr-3 h-10 w-10 items-center justify-center rounded-full"
       style={{
-        backgroundColor: isDark ? "rgba(255,255,255,0.08)" : colors.gray[100],
+        backgroundColor: isUnsuccessful ? failureBg : debitBg,
       }}
     >
       <Ionicons
         name="arrow-up"
         size={18}
-        color={isDark ? colors.gray[400] : colors.gray[500]}
+        color={
+          isUnsuccessful
+            ? colors.error
+            : isDark
+              ? colors.gray[400]
+              : colors.gray[500]
+        }
       />
     </View>
   );

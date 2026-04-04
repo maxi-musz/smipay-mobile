@@ -124,7 +124,7 @@ export function AirtimeInputRow({
         {/* Phone input */}
         <TextInput
           className="flex-1 text-base text-foreground"
-          placeholder="081 4669 4787"
+          placeholder="Phone number"
           placeholderTextColor="#9CA3AF"
           value={phone}
           onChangeText={handlePhoneChange}

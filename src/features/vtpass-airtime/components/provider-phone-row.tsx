@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Image, Pressable, TextInput, View } from "react-native";
+import * as Contacts from "expo-contacts";
 import { Ionicons } from "@expo/vector-icons";
 
 import { BottomSheetModal } from "@/components/ui/modals";
@@ -112,7 +113,6 @@ export function ProviderPhoneRow({
 
   async function handlePickContact() {
     try {
-      const Contacts = await import("expo-contacts");
       const { status } = await Contacts.requestPermissionsAsync();
       if (status !== "granted") {
         return;
@@ -176,7 +176,7 @@ export function ProviderPhoneRow({
         >
           <TextInput
             className="flex-1 text-base font-medium text-foreground min-h-[24px] py-0"
-            placeholder="081 4669 4787"
+            placeholder="Phone number"
             placeholderTextColor="#9CA3AF"
             value={formatDisplayPhone(phone)}
             onChangeText={handlePhoneChange}
