@@ -78,7 +78,8 @@
         {
           "contactsPermission": "Allow SmiPay to access your contacts to select a phone number for airtime/data."
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "runtimeVersion": {
       "policy": "appVersion"

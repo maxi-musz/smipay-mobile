@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -18,6 +19,10 @@ import { getProviderLogo } from "@/lib/provider-logo";
 import { coerceMoneyNumber, formatBalanceForDisplay } from "@/lib/money";
 import { useToastStore } from "@/components/ui/toast/toast-store";
 import type { HistoryStatus, SingleTransaction, TransactionMeta } from "@/types";
+import { TransactionReceiptCard } from "@/components/receipt/transaction-receipt-card";
+import { buildReceiptPayload } from "@/lib/transaction-receipt-data";
+import { shareReceiptAsImage, shareReceiptAsPdf } from "@/lib/share-transaction-receipt";
+
 
 export default function TransactionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -26,6 +31,9 @@ export default function TransactionDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const receiptCaptureRef = useRef<View>(null);
+  const [sharingReceipt, setSharingReceipt] = useState(false);
+
 
   useEffect(() => {
     async function load() {
@@ -71,6 +79,40 @@ export default function TransactionDetailScreen() {
   const walletRows = tx ? walletCashbackRows(tx) : [];
   const walletSectionTitle = tx ? getWalletSectionTitle(tx) : "Wallet";
 
+  async function handleShareChoice(format: "image" | "pdf") {
+    if (!tx || sharingReceipt) return;
+    try {
+      setSharingReceipt(true);
+      const payload = buildReceiptPayload(tx);
+      if (format === "pdf") {
+        await shareReceiptAsPdf(payload, tx);
+      } else {
+        await shareReceiptAsImage(receiptCaptureRef, tx);
+      }
+    } catch {
+      useToastStore.getState().show({
+        variant: "error",
+        title: "Could not share",
+        message: "Please try again.",
+      });
+    } finally {
+      setSharingReceipt(false);
+    }
+  }
+
+  function promptShareReceipt() {
+    if (!tx || sharingReceipt) return;
+    Alert.alert(
+      "Share receipt",
+      "Choose how you want to share this transaction receipt.",
+      [
+        { text: "Image", onPress: () => void handleShareChoice("image") },
+        { text: "PDF", onPress: () => void handleShareChoice("pdf") },
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
+  }
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -100,16 +142,18 @@ export default function TransactionDetailScreen() {
           </View>
           <View className="flex-row items-center gap-0.5">
             <Pressable
-              className="h-9 w-9 items-center justify-center rounded-full"
+              disabled
+              className="h-9 w-9 items-center justify-center rounded-full opacity-40"
               style={{ backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "#F3F4F6" }}
               accessibilityRole="button"
+              accessibilityState={{ disabled: true }}
               accessibilityLabel="Contact support"
               hitSlop={6}
             >
               <Ionicons
                 name="chatbubbles-outline"
                 size={20}
-                color={colors.orange[500]}
+                color="#9CA3AF"
               />
             </Pressable>
             <Pressable
@@ -118,6 +162,8 @@ export default function TransactionDetailScreen() {
               accessibilityRole="button"
               accessibilityLabel="Share receipt"
               hitSlop={6}
+              onPress={promptShareReceipt}
+              disabled={sharingReceipt}
             >
               <Ionicons
                 name="share-outline"
@@ -451,7 +497,7 @@ export default function TransactionDetailScreen() {
                       Token not available
                     </Text>
                     <Text className="mt-1.5 text-xs text-muted-foreground">
-                      If you completed payment, use the support icon at the top of this screen and our team can help.
+                      If you completed payment, contact support through the app and our team can help.
                     </Text>
                   </View>
                 )}
@@ -460,6 +506,16 @@ export default function TransactionDetailScreen() {
 
           </ScrollView>
         )}
+        {tx ? (
+          <View
+            ref={receiptCaptureRef}
+            collapsable={false}
+            pointerEvents="none"
+            style={{ position: "absolute", left: -10000, top: 0 }}
+          >
+            <TransactionReceiptCard payload={buildReceiptPayload(tx)} tx={tx} />
+          </View>
+        ) : null}
       </View>
     </>
   );
