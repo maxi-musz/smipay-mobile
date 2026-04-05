@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   Image,
   Keyboard,
@@ -9,21 +9,40 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { Link, router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  register,
+  registerWithProfilePicture,
   requestEmailVerification,
   verifyEmailForRegistration,
-  register,
 } from "@/api";
+import {
+  ProfilePhotoPickMode,
+  ProfilePhotoPreviewModal,
+  ProfilePhotoSourceSheet,
+} from "@/components/profile";
 import { AuthCenteredForm } from "@/components/auth/auth-centered-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
+import { colors } from "@/constants/colors";
+import { useAppTheme } from "@/hooks/use-app-theme";
+import { useKeyboardVisible } from "@/hooks/use-keyboard-visible";
+import { AUTH_PASSWORD_DIGITS, isAuthPasswordValid } from "@/lib/auth-password";
 import { handleApiError } from "@/lib/errors";
+import {
+  pickFromCamera,
+  pickFromFile,
+  pickFromLibrary,
+  rejectIfProfileImageTooLarge,
+  type PickedProfileImage,
+} from "@/lib/pick-profile-image";
 import { useToastStore } from "@/components/ui/toast";
 import { useAuthStore } from "@/store";
 
@@ -33,6 +52,7 @@ const STEPS: Step[] = ["email", "otp", "profile"];
 const EMAIL_RE = /\S+@\S+\.\S+/;
 
 export default function SignUpScreen() {
+  const { isDark } = useAppTheme();
   const login = useAuthStore.use.login();
   const storeCredentials = useAuthStore.use.storeCredentials();
 
@@ -48,6 +68,10 @@ export default function SignUpScreen() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+
+  const [sourceSheetOpen, setSourceSheetOpen] = useState(false);
+  const [photoPreviewDraft, setPhotoPreviewDraft] = useState<PickedProfileImage | null>(null);
+  const [registrationPhoto, setRegistrationPhoto] = useState<PickedProfileImage | null>(null);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -70,7 +94,7 @@ export default function SignUpScreen() {
     firstName.trim().length > 0 &&
     lastName.trim().length > 0 &&
     phone.trim().length > 0 &&
-    password.length >= 6 &&
+    isAuthPasswordValid(password) &&
     agreedToTerms &&
     !loading;
 
@@ -156,12 +180,23 @@ export default function SignUpScreen() {
     if (!firstName.trim()) next.firstName = "First name is required";
     if (!lastName.trim()) next.lastName = "Last name is required";
     if (!phone.trim()) next.phone = "Phone number is required";
-    if (password.length < 6)
-      next.password = "Password must be at least 6 characters";
+    if (!isAuthPasswordValid(password))
+      next.password = `Use exactly ${AUTH_PASSWORD_DIGITS} digits (0–9)`;
     if (!agreedToTerms) next.terms = "You must accept the terms";
     setErrors(next);
     return Object.keys(next).length === 0;
   }
+
+  const handleRegistrationPhotoSource = useCallback((mode: ProfilePhotoPickMode) => {
+    void (async () => {
+      let picked: PickedProfileImage | null = null;
+      if (mode === "camera") picked = await pickFromCamera();
+      else if (mode === "library") picked = await pickFromLibrary();
+      else picked = await pickFromFile();
+      const ok = picked ? rejectIfProfileImageTooLarge(picked) : null;
+      if (ok) setPhotoPreviewDraft(ok);
+    })();
+  }, []);
 
   async function handleRegister() {
     if (!validateProfile()) return;
@@ -169,7 +204,7 @@ export default function SignUpScreen() {
     Keyboard.dismiss();
     setLoading(true);
     try {
-      const res = await register({
+      const payload = {
         email: email.trim().toLowerCase(),
         password,
         first_name: firstName.trim(),
@@ -177,7 +212,19 @@ export default function SignUpScreen() {
         phone_number: phone.trim(),
         agree_to_terms: true,
         country: "Nigeria",
-      });
+      };
+
+      const res = registrationPhoto
+        ? await registerWithProfilePicture(
+            payload,
+            {
+              uri: registrationPhoto.uri,
+              name: registrationPhoto.fileName,
+              type: registrationPhoto.mimeType,
+            },
+            registrationPhoto.fileSize,
+          )
+        : await register(payload);
 
       const trimmedEmail = email.trim().toLowerCase();
       await login(res.data.user, {
@@ -253,6 +300,8 @@ export default function SignUpScreen() {
 
   // ── Render ────────────────────────────────────────────────────────
 
+  const keyboardVisible = useKeyboardVisible();
+
   return (
     <SafeAreaView className="flex-1 bg-background">
       <KeyboardAvoidingView
@@ -262,13 +311,18 @@ export default function SignUpScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerClassName="flex-grow pb-12"
+          contentContainerClassName={
+            keyboardVisible ? "pb-12" : "flex-grow"
+          }
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+          automaticallyAdjustKeyboardInsets={false}
           showsVerticalScrollIndicator={false}
         >
-          <AuthCenteredForm className="px-6">
+          <AuthCenteredForm
+            layout={keyboardVisible ? "top" : "center"}
+            className="px-6"
+          >
           {/* ── Header ── */}
           <Animated.View
             className={`items-center ${step === "profile" ? "mt-4" : ""}`}
@@ -398,6 +452,66 @@ export default function SignUpScreen() {
               className="mt-6 gap-5"
               entering={FadeInDown.delay(80).duration(220)}
             >
+              <View className="items-center pb-1">
+                <LinearGradient
+                  colors={[colors.orange[400], colors.orange[700], "#9A3412"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    borderRadius: 999,
+                    padding: 3,
+                  }}
+                >
+                  <Pressable
+                    onPress={() => setSourceSheetOpen(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add profile photo"
+                    style={{ position: "relative" }}
+                  >
+                    <View
+                      style={{
+                        borderRadius: 999,
+                        overflow: "hidden",
+                        backgroundColor: isDark ? "#1E293B" : "#F1F5F9",
+                        borderWidth: 3,
+                        borderColor: isDark ? "#0F172A" : "#FFFFFF",
+                      }}
+                    >
+                      {registrationPhoto ? (
+                        <Image
+                          source={{ uri: registrationPhoto.uri }}
+                          style={{ width: 88, height: 88 }}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View className="h-[88px] w-[88px] items-center justify-center bg-muted">
+                          <Ionicons name="person" size={38} color={colors.gray[400]} />
+                        </View>
+                      )}
+                    </View>
+                    <View
+                      className="absolute -bottom-0.5 -right-0.5 h-[30px] w-[30px] items-center justify-center rounded-full border-2 border-background"
+                      style={{ backgroundColor: colors.orange[500] }}
+                      pointerEvents="none"
+                    >
+                      <Ionicons name="camera" size={16} color="#FFFFFF" />
+                    </View>
+                  </Pressable>
+                </LinearGradient>
+                <Text className="mt-3 text-center text-xs text-muted-foreground">
+                  Profile photo (optional)
+                </Text>
+                {registrationPhoto ? (
+                  <Pressable
+                    onPress={() => setRegistrationPhoto(null)}
+                    hitSlop={8}
+                    className="mt-2"
+                  >
+                    <Text className="text-xs font-medium text-primary">Remove photo</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+
               {/* Name — side by side */}
               <View className="flex-row gap-3">
                 <View className="flex-1">
@@ -455,26 +569,33 @@ export default function SignUpScreen() {
               <View className="flex-row items-center gap-3">
                 <View className="h-px flex-1 bg-border" />
                 <Text className="text-xs text-muted-foreground">
-                  Set a password
+                  Password
                 </Text>
                 <View className="h-px flex-1 bg-border" />
               </View>
 
-              <Input
-                ref={passwordRef}
-                label="Password"
-                placeholder="Min. 6 characters"
-                value={password}
-                onChangeText={(v) => {
-                  setPassword(v);
-                  clearError("password");
-                }}
-                error={errors.password}
-                secureTextEntry
-                toggleable
-                returnKeyType="done"
-                onSubmitEditing={canSubmitProfile ? handleRegister : undefined}
-              />
+              <View>
+                <Input
+                  ref={passwordRef}
+                  label="Password"
+                  placeholder="••••••"
+                  value={password}
+                  onChangeText={(v) => {
+                    setPassword(v.replace(/\D/g, "").slice(0, AUTH_PASSWORD_DIGITS));
+                    clearError("password");
+                  }}
+                  error={errors.password}
+                  secureTextEntry
+                  toggleable
+                  keyboardType="number-pad"
+                  maxLength={AUTH_PASSWORD_DIGITS}
+                  returnKeyType="done"
+                  onSubmitEditing={canSubmitProfile ? handleRegister : undefined}
+                />
+                <Text className="mt-1.5 text-xs text-muted-foreground">
+                  Exactly {AUTH_PASSWORD_DIGITS} numbers — your app password
+                </Text>
+              </View>
 
               {/* Terms */}
               <Pressable
@@ -526,6 +647,27 @@ export default function SignUpScreen() {
           </AuthCenteredForm>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ProfilePhotoSourceSheet
+        visible={sourceSheetOpen}
+        onClose={() => setSourceSheetOpen(false)}
+        onSelect={handleRegistrationPhotoSource}
+      />
+      <ProfilePhotoPreviewModal
+        visible={photoPreviewDraft !== null}
+        imageUri={photoPreviewDraft?.uri ?? ""}
+        headline="Your profile photo"
+        description="This is how it will look on your account after you sign up."
+        confirmLabel="Use this photo"
+        onCancel={() => setPhotoPreviewDraft(null)}
+        onConfirm={() => {
+          if (photoPreviewDraft) {
+            setRegistrationPhoto(photoPreviewDraft);
+            setPhotoPreviewDraft(null);
+          }
+        }}
+        isSubmitting={false}
+      />
     </SafeAreaView>
   );
 }

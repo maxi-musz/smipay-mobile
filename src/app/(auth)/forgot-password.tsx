@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   TextInput,
+  View,
 } from "react-native";
 import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -18,13 +19,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
+import { AUTH_PASSWORD_DIGITS, isAuthPasswordValid } from "@/lib/auth-password";
 import { handleApiError } from "@/lib/errors";
 import { useToastStore } from "@/components/ui/toast";
+import { useKeyboardVisible } from "@/hooks/use-keyboard-visible";
 
 type Step = "email" | "reset";
 
 const EMAIL_RE = /\S+@\S+\.\S+/;
-const MIN_PASSWORD = 4;
 
 export default function ForgotPasswordScreen() {
   const [step, setStep] = useState<Step>("email");
@@ -50,9 +52,7 @@ export default function ForgotPasswordScreen() {
 
   const canSubmitEmail = EMAIL_RE.test(email.trim()) && !loading;
   const canSubmitReset =
-    otp.length === 4 &&
-    newPassword.length >= MIN_PASSWORD &&
-    !loading;
+    otp.length === 4 && isAuthPasswordValid(newPassword) && !loading;
 
   function startResendCooldown() {
     setResendCooldown(60);
@@ -117,8 +117,8 @@ export default function ForgotPasswordScreen() {
   async function handleResetPassword() {
     const next: Record<string, string> = {};
     if (otp.length !== 4) next.otp = "Enter the 4-digit code";
-    if (newPassword.length < MIN_PASSWORD)
-      next.newPassword = `Password must be at least ${MIN_PASSWORD} characters`;
+    if (!isAuthPasswordValid(newPassword))
+      next.newPassword = `Use exactly ${AUTH_PASSWORD_DIGITS} digits (0–9)`;
     if (Object.keys(next).length > 0) {
       setErrors(next);
       return;
@@ -148,6 +148,8 @@ export default function ForgotPasswordScreen() {
 
   // ── Render ────────────────────────────────────────────────────────
 
+  const keyboardVisible = useKeyboardVisible();
+
   return (
     <SafeAreaView className="flex-1 bg-background">
       <KeyboardAvoidingView
@@ -157,12 +159,17 @@ export default function ForgotPasswordScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerClassName="flex-grow pb-12"
+          contentContainerClassName={
+            keyboardVisible ? "pb-12" : "flex-grow"
+          }
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+          automaticallyAdjustKeyboardInsets={false}
         >
-          <AuthCenteredForm className="px-6">
+          <AuthCenteredForm
+            layout={keyboardVisible ? "top" : "center"}
+            className="px-6"
+          >
           {/* Header */}
           <Animated.View
             className="items-center"
@@ -248,23 +255,30 @@ export default function ForgotPasswordScreen() {
                 onSubmitEditing={() => passwordRef.current?.focus()}
               />
 
-              <Input
-                ref={passwordRef}
-                label="New Password"
-                placeholder={`Min. ${MIN_PASSWORD} characters`}
-                value={newPassword}
-                onChangeText={(v) => {
-                  setNewPassword(v);
-                  clearError("newPassword");
-                }}
-                error={errors.newPassword}
-                secureTextEntry
-                toggleable
-                returnKeyType="done"
-                onSubmitEditing={
-                  canSubmitReset ? handleResetPassword : undefined
-                }
-              />
+              <View>
+                <Input
+                  ref={passwordRef}
+                  label="New Password"
+                  placeholder="••••••"
+                  value={newPassword}
+                  onChangeText={(v) => {
+                    setNewPassword(v.replace(/\D/g, "").slice(0, AUTH_PASSWORD_DIGITS));
+                    clearError("newPassword");
+                  }}
+                  error={errors.newPassword}
+                  secureTextEntry
+                  toggleable
+                  keyboardType="number-pad"
+                  maxLength={AUTH_PASSWORD_DIGITS}
+                  returnKeyType="done"
+                  onSubmitEditing={
+                    canSubmitReset ? handleResetPassword : undefined
+                  }
+                />
+                <Text className="mt-1.5 text-xs text-muted-foreground">
+                  Exactly {AUTH_PASSWORD_DIGITS} numbers — same as sign-in password
+                </Text>
+              </View>
 
               <Button
                 className="mt-4 h-14 rounded-2xl"

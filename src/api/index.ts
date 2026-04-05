@@ -2,6 +2,7 @@ export {
   requestEmailVerification,
   verifyEmailForRegistration,
   register,
+  registerWithProfilePicture,
   signIn,
   forgotPassword,
   verifyPasswordResetOtp,

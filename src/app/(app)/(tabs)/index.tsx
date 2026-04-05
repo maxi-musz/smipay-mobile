@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
+import { RefreshControl, ScrollView } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -13,7 +13,6 @@ import {
   ServicesGrid,
 } from "@/components/dashboard";
 import { FullPageLoader } from "@/components/ui/loaders";
-import { Text } from "@/components/ui/text";
 import { useToastStore } from "@/components/ui/toast/toast-store";
 import { useAuthStore, useHomepageStore } from "@/store";
 import { colors } from "@/constants/colors";
@@ -123,14 +122,14 @@ export default function HomeScreen() {
         />
         </Animated.View>
         <Animated.View>
+          <ServicesGrid cashbackRates={data?.cashback_rates} />
+        </Animated.View>
+        <Animated.View>
           <RecentTransactions
             transactions={(data?.transaction_history ?? []).slice(0, 2)}
             loadFailed={loadFailed}
             onRetry={fetchHomepage}
           />
-        </Animated.View>
-        <Animated.View>
-          <ServicesGrid cashbackRates={data?.cashback_rates} />
         </Animated.View>
       </ScrollView>
     </SafeAreaView>

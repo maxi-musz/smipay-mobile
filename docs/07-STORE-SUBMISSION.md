@@ -61,7 +61,7 @@ You need at least **3 screenshots** per required size. Take them from your produ
 eas build --profile production --platform ios
 
 # Submit to App Store Connect (after build finishes)
-eas submit --platform ios
+eas submit --profile production --platform ios
 ```
 
 EAS will ask:
@@ -92,7 +92,7 @@ Use this if the UI you see on App Store Connect doesn’t exactly match the scre
 eas build --profile production --platform ios
 
 # 2. Submit that build to App Store Connect
-eas submit --platform ios --profile production
+eas submit --profile production --platform ios
 ```
 
 During `eas submit`, answer:
@@ -194,9 +194,11 @@ When the build finishes:
 After the first manual upload, configure EAS to submit automatically:
 
 ```bash
-# Submit to Play Store
-eas submit --platform android
+# Submit to Play Store (uses submit.production from eas.json)
+eas submit --profile production --platform android
 ```
+
+Optional: set which Play track receives the build under `submit.production.android` in `eas.json` (e.g. `"track": "internal"` | `"alpha"` | `"beta"` | `"production"`). See [Expo: Android submit](https://docs.expo.dev/submit/android/).
 
 EAS will ask:
 | Prompt | Answer |
@@ -336,12 +338,12 @@ Play Store testing builds, as long as they were built with the `staging` profile
 eas build --profile production --platform ios
 eas build --profile production --platform android
 
-# ── Submit to stores ─────────────────────────────────
-eas submit --platform ios
-eas submit --platform android
+# ── Submit to stores (uses submit.production in eas.json) ──────────────
+eas submit --profile production --platform ios
+eas submit --profile production --platform android
 
 # ── Submit both at once ──────────────────────────────
-eas submit --platform all
+eas submit --profile production --platform all
 ```
 
 ### Complete release flow

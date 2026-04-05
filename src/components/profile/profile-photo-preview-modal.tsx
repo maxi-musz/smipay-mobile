@@ -15,6 +15,12 @@ interface ProfilePhotoPreviewModalProps {
   onConfirm: () => void;
   isSubmitting: boolean;
   errorText?: string | null;
+  /** Overrides default "Profile photo" heading */
+  headline?: string;
+  /** Overrides default body copy */
+  description?: string;
+  /** Primary button label (default: "Update profile") */
+  confirmLabel?: string;
 }
 
 export function ProfilePhotoPreviewModal({
@@ -24,6 +30,9 @@ export function ProfilePhotoPreviewModal({
   onConfirm,
   isSubmitting,
   errorText,
+  headline = "Profile photo",
+  description = "This is how your picture will look across SmiPay. You can change it anytime.",
+  confirmLabel = "Update profile",
 }: ProfilePhotoPreviewModalProps) {
   const insets = useSafeAreaInsets();
   const { isDark } = useAppTheme();
@@ -59,9 +68,9 @@ export function ProfilePhotoPreviewModal({
           <Text className="text-center text-[11px] font-bold uppercase tracking-[0.2em] text-white/50">
             Preview
           </Text>
-          <Text className="mt-2 text-center text-xl font-bold text-white">Profile photo</Text>
+          <Text className="mt-2 text-center text-xl font-bold text-white">{headline}</Text>
           <Text className="mt-2 max-w-[280px] text-center text-[14px] leading-5 text-white/65">
-            This is how your picture will look across SmiPay. You can change it anytime.
+            {description}
           </Text>
 
           <View
@@ -123,7 +132,7 @@ export function ProfilePhotoPreviewModal({
             ) : (
               <>
                 <Ionicons name="checkmark-circle" size={22} color="#fff" />
-                <Text className="text-[16px] font-bold text-white">Update profile</Text>
+                <Text className="text-[16px] font-bold text-white">{confirmLabel}</Text>
               </>
             )}
           </Pressable>

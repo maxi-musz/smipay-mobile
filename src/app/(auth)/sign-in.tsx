@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   TextInput,
+  View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Link, router } from "expo-router";
@@ -41,6 +42,7 @@ export default function SignInScreen() {
   const passwordRef = useRef<TextInput>(null);
 
   const isValidEmail = EMAIL_RE.test(email.trim());
+  /** Allow legacy alphanumeric passwords; new accounts use 6-digit PIN (validated on sign-up). */
   const canSubmit = isValidEmail && password.length > 0 && !loading;
 
   function onChangeEmail(v: string) {
@@ -167,19 +169,26 @@ export default function SignInScreen() {
               onSubmitEditing={() => passwordRef.current?.focus()}
             />
 
-            <Input
-              ref={passwordRef}
-              label="Password"
-              placeholder="Enter your password"
-              value={password}
-              onChangeText={onChangePassword}
-              error={errors.password}
-              secureTextEntry
-              toggleable
-              autoComplete="password"
-              returnKeyType="done"
-              onSubmitEditing={canSubmit ? handleSignIn : undefined}
-            />
+            <View>
+              <Input
+                ref={passwordRef}
+                label="Password"
+                placeholder="Enter your password"
+                value={password}
+                onChangeText={onChangePassword}
+                error={errors.password}
+                secureTextEntry
+                toggleable
+                autoComplete="password"
+                textContentType="password"
+                returnKeyType="done"
+                onSubmitEditing={canSubmit ? handleSignIn : undefined}
+              />
+              <Text className="mt-1.5 text-xs text-muted-foreground">
+                New accounts use a 6-digit password. If you registered earlier, use your existing
+                password.
+              </Text>
+            </View>
 
             <Link href="/(auth)/forgot-password" asChild>
               <Text className="self-end text-sm text-primary">

@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { Pressable, View } from "react-native";
+import { InteractionManager, Platform, Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { BottomSheetModal } from "@/components/ui/modals";
@@ -10,6 +10,16 @@ import { useAppTheme } from "@/hooks/use-app-theme";
 export type ProfilePhotoPickMode = "camera" | "library" | "file";
 
 type IonName = ComponentProps<typeof Ionicons>["name"];
+
+/**
+ * iOS will often fail to present the photo library / document picker if we try while this
+ * RN Modal is still dismissing. Close first, then run after interactions + a short delay.
+ */
+function schedulePickerAfterSheetClose(action: () => void) {
+  InteractionManager.runAfterInteractions(() => {
+    setTimeout(action, Platform.OS === "ios" ? 150 : 0);
+  });
+}
 
 interface ProfilePhotoSourceSheetProps {
   visible: boolean;
@@ -77,8 +87,8 @@ export function ProfilePhotoSourceSheet({
           hint="Use your camera now"
           isDark={isDark}
           onPress={() => {
-            onSelect("camera");
             onClose();
+            schedulePickerAfterSheetClose(() => onSelect("camera"));
           }}
         />
         <OptionRow
@@ -87,8 +97,8 @@ export function ProfilePhotoSourceSheet({
           hint="Choose from your gallery"
           isDark={isDark}
           onPress={() => {
-            onSelect("library");
             onClose();
+            schedulePickerAfterSheetClose(() => onSelect("library"));
           }}
         />
         <OptionRow
@@ -97,8 +107,8 @@ export function ProfilePhotoSourceSheet({
           hint="Browse images on your device"
           isDark={isDark}
           onPress={() => {
-            onSelect("file");
             onClose();
+            schedulePickerAfterSheetClose(() => onSelect("file"));
           }}
         />
         <Pressable

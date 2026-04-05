@@ -89,7 +89,7 @@ export function RecentTransactions({
       ) : (
         <View
           className="overflow-hidden rounded-2xl bg-card"
-          style={{ paddingVertical: s(8), gap: s(10) }}
+          style={{ paddingVertical: s(4), gap: s(4) }}
         >
           {transactions.map((tx) => (
             <TransactionRow
@@ -151,7 +151,7 @@ function TransactionRow({
     <Pressable
       onPress={() => router.push(`/(app)/history/${transaction.id}`)}
       className="flex-row items-center active:opacity-80"
-      style={{ paddingHorizontal: s(16), paddingVertical: s(10) }}
+      style={{ paddingHorizontal: s(16), paddingVertical: s(6) }}
     >
       <TxIcon
         localLogo={localLogo}

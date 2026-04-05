@@ -6,16 +6,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { Text } from "@/components/ui/text";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useResponsiveScale } from "@/hooks/use-responsive-scale";
+import { resolveProfileImageUrl } from "@/lib/profile-image-url";
 import { useAuthStore, useHomepageStore } from "@/store";
 
 const SUPPORT_ICON_COLOR = "#2563EB";
-
-function isValidDisplayPictureUrl(url: string | null | undefined): boolean {
-  if (url == null || typeof url !== "string") return false;
-  const t = url.trim();
-  if (!t) return false;
-  return t.startsWith("http://") || t.startsWith("https://");
-}
 
 export function DashboardHeader() {
   const authUser = useAuthStore.use.user();
@@ -26,10 +20,10 @@ export function DashboardHeader() {
   const firstName =
     homepageData?.user?.first_name ?? authUser?.first_name ?? "there";
 
-  const profileImageUrl =
-    homepageData?.user?.profile_image ?? authUser?.profile_image ?? null;
-  const hasValidPicture =
-    isValidDisplayPictureUrl(profileImageUrl) && !avatarLoadFailed;
+  const profileImageUrl = resolveProfileImageUrl(
+    homepageData?.user?.profile_image ?? authUser?.profile_image ?? null,
+  );
+  const hasValidPicture = profileImageUrl !== null && !avatarLoadFailed;
 
   useEffect(() => {
     setAvatarLoadFailed(false);
@@ -51,7 +45,7 @@ export function DashboardHeader() {
       >
         {hasValidPicture && profileImageUrl ? (
           <Image
-            source={{ uri: profileImageUrl.trim() }}
+            source={{ uri: profileImageUrl }}
             style={{
               width: s(40),
               height: s(40),

@@ -29,9 +29,10 @@ import { useAppTheme } from "@/hooks/use-app-theme";
 import { ApiClientError } from "@/lib/api";
 import { authenticate, getBiometricsAvailability, getBiometricLabel } from "@/lib/biometrics";
 import { classifyError } from "@/lib/errors";
+import { resolveProfileImageUrl } from "@/lib/profile-image-url";
 import { secureStorage, SECURE_KEYS } from "@/lib/secure-storage";
 import { resetInactivityTimer } from "@/lib/inactivity";
-import { useAppStore, useAuthStore } from "@/store";
+import { useAppStore, useAuthStore, useHomepageStore, useProfileStore } from "@/store";
 
 function maskEmail(email: string): string {
   const [local, domain] = email.split("@");
@@ -45,6 +46,8 @@ const BIOMETRIC_ICON_SIZE = 48;
 export function LockScreen() {
   const { isDark } = useAppTheme();
   const user = useAuthStore.use.user();
+  const homepageData = useHomepageStore.use.data();
+  const profileData = useProfileStore.use.data();
   const login = useAuthStore.use.login();
   const logout = useAuthStore.use.logout();
   const biometricsEnabled = useAppStore.use.biometricsEnabled();
@@ -57,6 +60,7 @@ export function LockScreen() {
   const [biometricUnlockLoading, setBiometricUnlockLoading] = useState(false);
   /** True after biometric success — show FullPageLoader while signIn runs. */
   const [unlocking, setUnlocking] = useState(false);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   /** Stops auto-trigger after a server/network failure to prevent infinite loop. */
   const serverFailedRef = useRef(false);
   /**
@@ -69,7 +73,19 @@ export function LockScreen() {
 
   const email = user?.email ?? "";
   const firstName = user?.first_name ?? "";
+  /** Prefer homepage / profile (fresh) over persisted auth user — sign-in may omit or stale `profile_image`. */
+  const profileImageUrl = resolveProfileImageUrl(
+    homepageData?.user?.profile_image
+      ?? profileData?.user?.profile_image
+      ?? user?.profile_image
+      ?? null,
+  );
+  const showProfileAvatar = profileImageUrl !== null && !avatarLoadFailed;
   const canSubmit = password.length > 0 && !loading;
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [profileImageUrl]);
 
   useEffect(() => {
     getBiometricsAvailability().then((a) => {
@@ -255,11 +271,22 @@ export function LockScreen() {
         >
           <AuthCenteredForm className="px-8">
           <View className="items-center">
-            <Image
-              source={require("@/assets/images/icon.png")}
-              className="mb-3 h-16 w-16 rounded-2xl"
-              resizeMode="contain"
-            />
+            {showProfileAvatar && profileImageUrl ? (
+              <Image
+                source={{ uri: profileImageUrl }}
+                className="mb-3 h-16 w-16 rounded-full"
+                resizeMode="cover"
+                onError={() => setAvatarLoadFailed(true)}
+                accessibilityLabel="Your profile photo"
+              />
+            ) : (
+              <Image
+                source={require("@/assets/images/icon.png")}
+                className="mb-3 h-16 w-16 rounded-2xl"
+                resizeMode="contain"
+                accessibilityLabel="SmiPay"
+              />
+            )}
 
             {firstName ? (
               <Text className="mt-1 text-lg font-semibold text-foreground">

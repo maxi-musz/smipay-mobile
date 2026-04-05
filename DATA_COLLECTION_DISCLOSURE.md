@@ -15,6 +15,7 @@ This document describes what data the SmiPay mobile app collects, why it is coll
 | **Approximate location** | Only if user grants permission | GPS (foreground only, balanced accuracy ~100m) | Cached in-memory for 5 min | Yes (HTTP headers) |
 | **IP address** | Derived server-side | TCP connection | N/A | Derived automatically |
 | **Email, name, phone** | Yes | User-provided at registration | Encrypted in Keychain / Keystore | Yes |
+| **Profile photo (optional)** | Only if user adds one | Camera, photo library, or file picker | Cached temporarily until upload | Yes (image file to your account) |
 | **Auth tokens** | Yes | Server-issued | Encrypted in Keychain / Keystore | Yes (HTTP headers) |
 
 ---
@@ -30,6 +31,7 @@ All data listed above is collected **exclusively** for the following purposes:
 
 ### App functionality
 - Email, name, and phone number are required to create and manage the user's account.
+- An optional profile picture may be uploaded to display on your account; it is not required to use the app.
 - Auth tokens are required to authenticate API requests.
 
 ---
@@ -66,6 +68,7 @@ All data listed above is collected **exclusively** for the following purposes:
 | Email Address | Yes | Yes | No |
 | Phone Number | Yes | Yes | No |
 | Name | Yes | Yes | No |
+| Photos or Videos | Only if the user adds a profile photo | Yes | No |
 
 **Purpose to select:** "App Functionality", "Analytics" (fraud detection falls under this).
 
@@ -84,6 +87,7 @@ Use this when filling out **Policy → App content → Data safety** in Play Con
 | **Personal info** | Name | Yes | No | Yes | Account management |
 | **Personal info** | Email address | Yes | No | Yes | Account management |
 | **Personal info** | Phone number | Yes | No | Yes | Account management |
+| **Photos and videos** | Photos | Only if user uploads a profile picture | No | No (optional) | App functionality — optional profile photo on your account |
 | **Device or other IDs** | Device or other IDs | Yes | No | Yes | Fraud prevention, account security — app-generated UUID, device model, OS version sent in API headers |
 | **App info** | Push notifications token | Yes | Yes** | No (optional) | App functionality — sent to our backend so we can send transaction/support notifications |
 
@@ -98,7 +102,6 @@ Use this when filling out **Policy → App content → Data safety** in Play Con
 |----------|-----|
 | Health and fitness | Not collected |
 | Messages | Not collected |
-| Photos and videos | Not collected |
 | Audio files | Not collected |
 | Files and docs | Not collected |
 | Calendar | Not collected |
@@ -126,7 +129,9 @@ Include these in your Privacy Policy page/screen:
 
 > **How We Protect Your Data:** Sensitive information such as authentication tokens and your device identifier are stored using your device's secure enclave (iOS Keychain or Android Keystore). All data transmitted to our servers is encrypted using HTTPS/TLS.
 
+> **Profile photo:** You may optionally add a profile picture during sign-up or in account settings. If you do, the image is uploaded to our servers and shown on your account. You can change or remove it in the app. We use the system photo picker and camera only when you choose to add or change your photo.
+
 ---
 
-**Document version:** 1.0
-**Last updated:** 2026-03-03
+**Document version:** 1.1
+**Last updated:** 2026-04-04
