@@ -7,6 +7,8 @@ import { router } from "expo-router";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
+import { useAppTheme } from "@/hooks/use-app-theme";
+import { cn } from "@/lib/utils";
 import { ONBOARDING_SLIDES, type OnboardingSlide } from "./constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -16,8 +18,13 @@ interface OnboardingScreenProps {
 }
 
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
+  const { isDark, theme } = useAppTheme();
   const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  const gradientColors = isDark
+    ? [theme.background, theme.backgroundSecondary]
+    : (["#FFE5D2", "#FFF5EC"] as const);
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = e.nativeEvent.contentOffset.x;
@@ -70,7 +77,12 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             renderItem={({ item }) => <SlideCard slide={item} />}
           />
 
-          <View className="mt-auto rounded-t-[56px] bg-white px-6 pb-10 pt-8 shadow-lg shadow-black/5">
+          <View
+            className={cn(
+              "mt-auto rounded-t-[56px] px-6 pb-10 pt-8 shadow-lg",
+              isDark ? "bg-card shadow-black/40" : "bg-white shadow-black/5",
+            )}
+          >
             <View className="mb-5 flex-row justify-center gap-2">
               {ONBOARDING_SLIDES.map((_, i) => (
                 <View
@@ -79,13 +91,17 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                   style={{
                     width: currentIndex === i ? 24 : 8,
                     backgroundColor:
-                      currentIndex === i ? colors.orange[500] : "#FACCAB",
+                      currentIndex === i
+                        ? colors.orange[500]
+                        : isDark
+                          ? "rgba(255,255,255,0.2)"
+                          : "#FACCAB",
                   }}
                 />
               ))}
             </View>
 
-            <Text variant="h3" className="text-center">
+            <Text variant="h3" className="text-center text-foreground">
               {activeSlide.title}
             </Text>
 
@@ -95,7 +111,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
             <View className="mt-6 flex-row gap-3">
               <Button
-                className="flex-1 rounded-full bg-orange-50"
+                className={cn(
+                  "flex-1 rounded-full border-orange-500/40",
+                  isDark ? "bg-orange-950/50" : "bg-orange-50",
+                )}
                 variant="outline"
                 onPress={handleSkip}
               >
@@ -126,7 +145,12 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             </View>
 
             <View className="mt-5 items-center">
-              <View className="h-1 w-24 rounded-full bg-black/10" />
+              <View
+                className={cn(
+                  "h-1 w-24 rounded-full",
+                  isDark ? "bg-white/15" : "bg-black/10",
+                )}
+              />
             </View>
           </View>
         </View>
