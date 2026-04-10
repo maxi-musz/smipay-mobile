@@ -19,7 +19,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
-import { AUTH_PASSWORD_DIGITS, isAuthPasswordValid } from "@/lib/auth-password";
+import {
+  AUTH_OTP_DIGITS,
+  AUTH_PASSWORD_DIGITS,
+  isAuthPasswordValid,
+} from "@/lib/auth-password";
 import { handleApiError } from "@/lib/errors";
 import { useToastStore } from "@/components/ui/toast";
 import { useKeyboardVisible } from "@/hooks/use-keyboard-visible";
@@ -52,7 +56,9 @@ export default function ForgotPasswordScreen() {
 
   const canSubmitEmail = EMAIL_RE.test(email.trim()) && !loading;
   const canSubmitReset =
-    otp.length === 4 && isAuthPasswordValid(newPassword) && !loading;
+    otp.length === AUTH_OTP_DIGITS &&
+    isAuthPasswordValid(newPassword) &&
+    !loading;
 
   function startResendCooldown() {
     setResendCooldown(60);
@@ -116,7 +122,8 @@ export default function ForgotPasswordScreen() {
 
   async function handleResetPassword() {
     const next: Record<string, string> = {};
-    if (otp.length !== 4) next.otp = "Enter the 4-digit code";
+    if (otp.length !== AUTH_OTP_DIGITS)
+      next.otp = `Enter the ${AUTH_OTP_DIGITS}-digit code`;
     if (!isAuthPasswordValid(newPassword))
       next.newPassword = `Use exactly ${AUTH_PASSWORD_DIGITS} digits (0–9)`;
     if (Object.keys(next).length > 0) {
@@ -242,15 +249,15 @@ export default function ForgotPasswordScreen() {
             >
               <Input
                 label="Reset Code"
-                placeholder="0000"
+                placeholder="000000"
                 value={otp}
                 onChangeText={(t) => {
-                  setOtp(t.replace(/\D/g, "").slice(0, 4));
+                  setOtp(t.replace(/\D/g, "").slice(0, AUTH_OTP_DIGITS));
                   clearError("otp");
                 }}
                 error={errors.otp}
                 keyboardType="number-pad"
-                maxLength={4}
+                maxLength={AUTH_OTP_DIGITS}
                 returnKeyType="next"
                 onSubmitEditing={() => passwordRef.current?.focus()}
               />

@@ -2,6 +2,17 @@
 
 This doc covers everything you need to submit SmiPay to the Apple App Store and Google Play Store. You only need this when you're ready to release to real users.
 
+### Short rule: rebuild vs submit-only
+
+| Situation | New `eas build`? |
+|-----------|-------------------|
+| Changes under **`eas.json` → `submit`** (e.g. Play `track`, submit paths) | **No** — only affects `eas submit`; run submit again. |
+| Changes under **`eas.json` → `build`** (especially **`env`** / `EXPO_PUBLIC_*`, channels, `developmentClient`) | **Yes** — those values are baked into the release binary. |
+| New **native** dependencies in `package.json`, or **`app.json`** / plugins / permissions / icons / splash | **Yes**. |
+| **JS/TS-only** app changes | Often **no** — use **`eas update`** (OTA) when no native change is required. |
+
+**Rule of thumb:** `submit` = no rebuild; `build` profile / native stack = rebuild (or confirm OTA is enough).
+
 ---
 
 ## 1. Prerequisites

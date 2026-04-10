@@ -17,6 +17,8 @@ interface AmountSectionProps {
   amountStr: string;
   amountMin: number;
   amountMax: number;
+  /** Caps quick amounts and placeholder hint to wallet + cashback (optional). */
+  maxAffordable?: number;
   error?: string;
   onAmountChange: (text: string) => void;
   onClearAmountError: () => void;
@@ -30,6 +32,7 @@ export function AmountSection({
   amountStr,
   amountMin,
   amountMax,
+  maxAffordable,
   error,
   onAmountChange,
   onClearAmountError,
@@ -45,6 +48,11 @@ export function AmountSection({
     rewardBanners,
   );
 
+  const effectiveMax =
+    maxAffordable != null && maxAffordable >= 0
+      ? Math.min(amountMax, maxAffordable)
+      : amountMax;
+
   function selectQuickAmount(value: number) {
     Keyboard.dismiss();
     onAmountChange(String(value));
@@ -52,7 +60,7 @@ export function AmountSection({
   }
 
   const validQuickAmounts = QUICK_AMOUNTS.filter(
-    (v) => v >= amountMin && v <= amountMax,
+    (v) => v >= amountMin && v <= effectiveMax,
   );
 
   const row1 = validQuickAmounts.slice(0, 3);
@@ -140,7 +148,7 @@ export function AmountSection({
         <Text className="text-base font-medium text-muted-foreground">₦</Text>
         <TextInput
           className="flex-1 text-base font-medium text-foreground min-h-[24px] py-0"
-          placeholder={`${amountMin} - ${amountMax.toLocaleString()}`}
+          placeholder={`${amountMin} - ${effectiveMax.toLocaleString()}`}
           placeholderTextColor="#9CA3AF"
           value={amountStr}
           onChangeText={onAmountChange}

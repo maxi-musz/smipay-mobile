@@ -126,7 +126,7 @@ export default function HomeScreen() {
         </Animated.View>
         <Animated.View>
           <RecentTransactions
-            transactions={(data?.transaction_history ?? []).slice(0, 2)}
+            transactions={(data?.transaction_history ?? []).slice(0, 3)}
             loadFailed={loadFailed}
             onRetry={fetchHomepage}
           />

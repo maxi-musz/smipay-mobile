@@ -22,8 +22,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const mode = useAppStore.use.themeMode();
   const setThemeMode = useAppStore.use.setThemeMode();
 
+  // Only treat "system" as light when the OS explicitly reports "light". `useColorScheme()`
+  // often returns `null` briefly (or on some Expo Go / dev setups), and `null === "dark"` is
+  // false — that incorrectly forced light UI and broke the app's default dark theme.
   const resolvedDark =
-    mode === "system" ? deviceScheme === "dark" : mode === "dark";
+    mode === "system" ? deviceScheme !== "light" : mode === "dark";
 
   const theme = resolvedDark ? darkTheme : lightTheme;
 

@@ -34,7 +34,11 @@ import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useKeyboardVisible } from "@/hooks/use-keyboard-visible";
-import { AUTH_PASSWORD_DIGITS, isAuthPasswordValid } from "@/lib/auth-password";
+import {
+  AUTH_OTP_DIGITS,
+  AUTH_PASSWORD_DIGITS,
+  isAuthPasswordValid,
+} from "@/lib/auth-password";
 import { handleApiError } from "@/lib/errors";
 import {
   pickFromCamera,
@@ -89,7 +93,7 @@ export default function SignUpScreen() {
   }
 
   const canSubmitEmail = EMAIL_RE.test(email.trim()) && !loading;
-  const canSubmitOtp = otp.length === 4 && !loading;
+  const canSubmitOtp = otp.length === AUTH_OTP_DIGITS && !loading;
   const canSubmitProfile =
     firstName.trim().length > 0 &&
     lastName.trim().length > 0 &&
@@ -156,8 +160,8 @@ export default function SignUpScreen() {
   }
 
   async function handleVerifyOtp() {
-    if (otp.length !== 4) {
-      setErrors({ otp: "Enter the 4-digit code" });
+    if (otp.length !== AUTH_OTP_DIGITS) {
+      setErrors({ otp: `Enter the ${AUTH_OTP_DIGITS}-digit code` });
       return;
     }
 
@@ -408,15 +412,15 @@ export default function SignUpScreen() {
             >
               <Input
                 label="Verification Code"
-                placeholder="0000"
+                placeholder="000000"
                 value={otp}
                 onChangeText={(t) => {
-                  setOtp(t.replace(/\D/g, "").slice(0, 4));
+                  setOtp(t.replace(/\D/g, "").slice(0, AUTH_OTP_DIGITS));
                   clearError("otp");
                 }}
                 error={errors.otp}
                 keyboardType="number-pad"
-                maxLength={4}
+                maxLength={AUTH_OTP_DIGITS}
                 returnKeyType="done"
                 onSubmitEditing={canSubmitOtp ? handleVerifyOtp : undefined}
               />

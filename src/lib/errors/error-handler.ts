@@ -30,6 +30,10 @@ function isNetworkError(error: unknown): boolean {
   return NETWORK_PATTERNS.some((p) => msg.includes(p));
 }
 
+function isAxiosGenericStatusMessage(msg: string): boolean {
+  return /^Request failed with status code \d+$/i.test(msg);
+}
+
 const SAFE_MESSAGES: Record<number, { title: string; message: string }> = {
   401: {
     title: "Session Expired",
@@ -95,6 +99,19 @@ export function classifyError(error: unknown): ClassifiedError {
         statusCode: code,
         handled: false,
       };
+    }
+
+    if (code >= 500) {
+      const msg = (error.message ?? "").trim();
+      if (msg && !isAxiosGenericStatusMessage(msg)) {
+        return {
+          title: code === 503 ? "Temporarily Unavailable" : "Server Error",
+          message: msg,
+          variant: "error",
+          statusCode: code,
+          handled: false,
+        };
+      }
     }
 
     const safe = SAFE_MESSAGES[code];

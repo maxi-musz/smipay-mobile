@@ -22,9 +22,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const gradientColors = isDark
+  const gradientColors: [string, string] = isDark
     ? [theme.background, theme.backgroundSecondary]
-    : (["#FFE5D2", "#FFF5EC"] as const);
+    : ["#FFE5D2", "#FFF5EC"];
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = e.nativeEvent.contentOffset.x;
@@ -56,9 +56,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   };
 
   return (
-    <SafeAreaView className="flex-1" edges={["bottom"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <LinearGradient
-        colors={["#FFE5D2", "#FFF5EC"]}
+        colors={gradientColors}
         style={{ flex: 1 }}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -78,10 +78,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           />
 
           <View
-            className={cn(
-              "mt-auto rounded-t-[56px] px-6 pb-10 pt-8 shadow-lg",
-              isDark ? "bg-card shadow-black/40" : "bg-white shadow-black/5",
-            )}
+            className={cn("mt-auto rounded-t-[56px] px-6 pb-10 pt-8 shadow-lg", isDark ? "shadow-black/40" : "shadow-black/5")}
+            style={{ backgroundColor: isDark ? theme.card : "#FFFFFF" }}
           >
             <View className="mb-5 flex-row justify-center gap-2">
               {ONBOARDING_SLIDES.map((_, i) => (
@@ -101,11 +99,14 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               ))}
             </View>
 
-            <Text variant="h3" className="text-center text-foreground">
+            <Text variant="h3" className="text-center" style={{ color: theme.text }}>
               {activeSlide.title}
             </Text>
 
-            <Text className="mt-3 text-center text-sm leading-6 text-muted-foreground">
+            <Text
+              className="mt-3 text-center text-sm leading-6"
+              style={{ color: theme.textSecondary }}
+            >
               {activeSlide.description}
             </Text>
 
@@ -124,7 +125,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 className="flex-1 rounded-full"
                 onPress={handleNext}
               >
-                <Text>
+                <Text style={{ color: "#FFFFFF" }}>
                   {currentIndex === ONBOARDING_SLIDES.length - 1
                     ? "Create my account"
                     : "Next"}
@@ -133,7 +134,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             </View>
 
             <View className="mt-5 flex-row justify-center">
-              <Text className="text-sm text-muted-foreground">
+              <Text className="text-sm" style={{ color: theme.textSecondary }}>
                 Already have an account?{" "}
               </Text>
               <Text

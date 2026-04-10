@@ -275,6 +275,8 @@ export default function ElectricityPurchaseScreen() {
       amount,
       phone: phone.trim(),
       use_cashback: useCashback,
+      ...(verifyData?.Customer_Name ? { customer_name: verifyData.Customer_Name } : {}),
+      ...(verifyData?.Address ? { customer_address: verifyData.Address } : {}),
     };
 
     setPurchasing(true);

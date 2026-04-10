@@ -19,6 +19,7 @@ import {
   parseMinMax,
   getAirtimeCashbackRate,
   computeCashbackToEarn,
+  parseBalanceToNumber,
 } from "@/features/vtpass-airtime";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
@@ -108,10 +109,14 @@ export default function VtpassAirtimeScreen() {
   const amount = parseInt(amountStr.replace(/\D/g, ""), 10) || 0;
   const amountValid = amount >= amountMin && amount <= amountMax;
   const phoneValid = PHONE_REGEX.test(phone.replace(/\s/g, ""));
+  const maxPayable =
+    parseBalanceToNumber(walletBalance) + parseBalanceToNumber(cashbackBalance);
+  const amountWithinFunds = amount <= maxPayable + 1e-9;
   const canSubmit =
     selectedProvider &&
     phoneValid &&
     amountValid &&
+    amountWithinFunds &&
     !purchasing &&
     !loadingProviders;
 
@@ -158,6 +163,16 @@ export default function VtpassAirtimeScreen() {
       setFieldErrors((e) => ({
         ...e,
         amount: `Amount must be between ₦${amountMin} and ₦${amountMax.toLocaleString()}`,
+      }));
+      return;
+    }
+    if (amount > maxPayable + 1e-9) {
+      setFieldErrors((e) => ({
+        ...e,
+        amount:
+          maxPayable <= 0
+            ? "Insufficient wallet and cashback balance"
+            : `Maximum ₦${maxPayable.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (wallet + cashback)`,
       }));
       return;
     }
@@ -290,7 +305,17 @@ export default function VtpassAirtimeScreen() {
           amountStr={amountStr}
           amountMin={amountMin}
           amountMax={amountMax}
-          error={fieldErrors.amount}
+          maxAffordable={maxPayable}
+          error={
+            fieldErrors.amount ??
+            (amount > 0 &&
+            amountValid &&
+            !amountWithinFunds
+              ? maxPayable <= 0
+                ? "Insufficient wallet and cashback balance"
+                : `Maximum ₦${maxPayable.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (wallet + cashback)`
+              : undefined)
+          }
           onAmountChange={handleAmountChange}
           onClearAmountError={() =>
             setFieldErrors((e) => ({ ...e, amount: undefined }))
