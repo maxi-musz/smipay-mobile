@@ -79,9 +79,11 @@ const _useAuthStore = create<AuthStore>()(
         const { useHomepageStore } = await import("./homepage.store");
         const { useProfileStore } = await import("./profile.store");
         const { useInboxStore } = await import("./inbox.store");
+        const { clearPendingNotificationNavigation } = await import("@/lib/push-notifications");
         useHomepageStore.getState().reset();
         useProfileStore.getState().reset();
         useInboxStore.getState().reset();
+        clearPendingNotificationNavigation();
         set(initialState);
       },
 

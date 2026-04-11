@@ -26,6 +26,7 @@ export default function NotificationInboxScreen() {
   const fetchInboxFirstPage = useInboxStore.use.fetchInboxFirstPage();
   const fetchNextPage = useInboxStore.use.fetchNextPage();
   const markAllReadStore = useInboxStore.use.markAllRead();
+  const unreadCount = useInboxStore.use.unreadCount();
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -154,8 +155,30 @@ export default function NotificationInboxScreen() {
               Notifications
             </Text>
           </View>
-          <Pressable onPress={handleMarkAllRead} hitSlop={10}>
-            <Text style={{ fontSize: 12, fontWeight: "600", color: colors.orange[500] }}>
+          <Pressable
+            onPress={handleMarkAllRead}
+            hitSlop={10}
+            disabled={unreadCount === 0}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: unreadCount === 0 }}
+            accessibilityLabel={
+              unreadCount === 0
+                ? "No unread notifications"
+                : `Mark all ${unreadCount} unread as read`
+            }
+          >
+            <Text
+              style={{
+                fontSize: 12,
+                fontWeight: "600",
+                color:
+                  unreadCount === 0
+                    ? isDark
+                      ? "#475569"
+                      : "#CBD5E1"
+                    : colors.orange[500],
+              }}
+            >
               Mark all read
             </Text>
           </Pressable>

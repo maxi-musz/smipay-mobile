@@ -1,6 +1,6 @@
 import "../global.css";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, View } from "react-native";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -21,9 +21,12 @@ import {
   stopInactivityTracking,
 } from "@/lib/inactivity";
 import { getDeviceId } from "@/lib/device";
+import * as Notifications from "expo-notifications";
 import {
   didRegisterRecently,
+  flushPendingNotificationNavigation,
   markRegistrationDone,
+  processNotificationResponse,
   registerForPushNotificationsAsync,
   setLastRegisteredToken,
 } from "@/lib/push-notifications";
@@ -41,6 +44,36 @@ function InnerLayout() {
   const isHydrated = useAppStore.use.isHydrated();
   const isAuthenticated = useAuthStore.use.isAuthenticated();
   const isLocked = useAuthStore.use.isLocked();
+
+  const hadLockedRef = useRef(false);
+  useEffect(() => {
+    if (isLocked) hadLockedRef.current = true;
+  }, [isLocked]);
+
+  /** After unlock, do not show the splash overlay — it resets UX and drops deep links (e.g. push → notification). */
+  useEffect(() => {
+    if (!isLocked && hadLockedRef.current) {
+      setShowSplash(false);
+    }
+  }, [isLocked]);
+
+  const prevLockedRef = useRef(isLocked);
+  useEffect(() => {
+    if (prevLockedRef.current && !isLocked && isAuthenticated) {
+      flushPendingNotificationNavigation();
+    }
+    prevLockedRef.current = isLocked;
+  }, [isLocked, isAuthenticated]);
+
+  const initialNotificationHandledRef = useRef(false);
+  useEffect(() => {
+    if (!isHydrated || !isAuthenticated) return;
+    if (initialNotificationHandledRef.current) return;
+    initialNotificationHandledRef.current = true;
+    void Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response) processNotificationResponse(response);
+    });
+  }, [isHydrated, isAuthenticated]);
 
   useEffect(() => {
     setColorScheme(isDark ? "dark" : "light");

@@ -12,7 +12,9 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
-import { router } from "expo-router";
+import { type Href, router } from "expo-router";
+
+import { useAuthStore } from "@/store";
 
 const ANDROID_DEFAULT_CHANNEL_ID = "default";
 /** Custom sound filename (no path). Backend should use this in the push payload for custom sound. */
@@ -170,29 +172,96 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   return token;
 }
 
-/**
- * Navigate when user taps a notification. Override this or the data shape to match your backend.
- */
-function handleNotificationResponse(response: Notifications.NotificationResponse) {
-  const data = response.notification.request.content.data as Record<string, unknown> | undefined;
-  if (!data) return;
+/** Deferred until app unlock — `router.push` under the lock overlay is unreliable. */
+let pendingNotificationHref: Href | null = null;
 
+/**
+ * Call after successful unlock (`isLocked` → false) so push taps open the right screen.
+ */
+export function flushPendingNotificationNavigation() {
+  if (!pendingNotificationHref) return;
+  const target = pendingNotificationHref;
+  pendingNotificationHref = null;
+  requestAnimationFrame(() => {
+    try {
+      router.push(target);
+    } catch (e) {
+      if (__DEV__) console.warn("[Push] Deferred navigation failed:", e);
+    }
+  });
+}
+
+/** Clear when signing out so a stale tap cannot navigate after a new session. */
+export function clearPendingNotificationNavigation() {
+  pendingNotificationHref = null;
+}
+
+let lastProcessedNotificationIdentifier: string | null = null;
+
+function notificationResponseDedupKey(response: Notifications.NotificationResponse): string {
+  return response.notification.request.identifier;
+}
+
+function buildHrefFromNotificationData(
+  data: Record<string, unknown>,
+): Href | null {
   const screen = data.screen as string | undefined;
   const id = data.id as string | undefined;
 
   if (screen === "support" && id) {
-    router.push({ pathname: "/(app)/support/chat", params: { id } });
-  } else if (screen === "support") {
-    router.push("/(app)/support");
-  } else if (screen === "transaction" && id) {
-    router.push(`/(app)/history/${id}`);
-  } else if (screen === "transaction") {
-    router.push("/(app)/(tabs)/history");
-  } else if (screen === "notification" && id) {
-    router.push(`/(app)/notifications/${id}`);
-  } else if (screen === "notification") {
-    router.push("/(app)/notifications");
+    return { pathname: "/(app)/support/chat", params: { id } };
   }
+  if (screen === "support") {
+    return "/(app)/support";
+  }
+  if (screen === "transaction" && id) {
+    return `/(app)/history/${id}`;
+  }
+  if (screen === "transaction") {
+    return "/(app)/(tabs)/history";
+  }
+  if (screen === "notification" && id) {
+    return `/(app)/notifications/${id}`;
+  }
+  if (screen === "notification") {
+    return "/(app)/notifications";
+  }
+  return null;
+}
+
+/**
+ * Navigate when user taps a notification (or on cold start via getLastNotificationResponseAsync).
+ * If the app is locked, stores the target and {@link flushPendingNotificationNavigation} runs after unlock.
+ */
+export function processNotificationResponse(response: Notifications.NotificationResponse) {
+  const dedupKey = notificationResponseDedupKey(response);
+  if (dedupKey && lastProcessedNotificationIdentifier === dedupKey) {
+    return;
+  }
+  if (dedupKey) {
+    lastProcessedNotificationIdentifier = dedupKey;
+  }
+
+  const data = response.notification.request.content.data as Record<string, unknown> | undefined;
+  if (!data) return;
+
+  const href = buildHrefFromNotificationData(data);
+  if (!href) return;
+
+  const { isAuthenticated, isLocked } = useAuthStore.getState();
+  if (!isAuthenticated) {
+    return;
+  }
+
+  if (isLocked) {
+    pendingNotificationHref = href;
+    if (__DEV__) {
+      console.log("[Push] App locked — deferring navigation until unlock:", href);
+    }
+    return;
+  }
+
+  router.push(href);
 }
 
 let listenersAttached = false;
@@ -218,11 +287,11 @@ export function setupNotificationListeners(): void {
   );
 
   const response = Notifications.addNotificationResponseReceivedListener(
-    (response: Notifications.NotificationResponse) => {
+    (notificationResponse: Notifications.NotificationResponse) => {
       if (__DEV__) {
-        console.log("[Push] Response:", response.notification.request.content.data);
+        console.log("[Push] Response:", notificationResponse.notification.request.content.data);
       }
-      handleNotificationResponse(response);
+      processNotificationResponse(notificationResponse);
     },
   );
 
