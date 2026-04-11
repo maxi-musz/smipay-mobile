@@ -42,7 +42,7 @@ export function CustomerInfoCard({
 
     return (
       <Animated.View
-        entering={FadeInDown.duration(300).springify().damping(15)}
+        entering={FadeInDown.duration(300)}
         className="mt-4 rounded-2xl border border-border bg-card overflow-hidden"
       >
         <View
@@ -86,7 +86,7 @@ export function CustomerInfoCard({
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(300).springify().damping(15)}
+      entering={FadeInDown.duration(300)}
       className="mt-4 rounded-2xl border border-border bg-card overflow-hidden"
     >
       <View

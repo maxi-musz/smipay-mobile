@@ -119,7 +119,7 @@ export function AmountSection({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(50).duration(300).springify().damping(15)}
+      entering={FadeInDown.delay(50).duration(220)}
       className="mt-6"
     >
       <Text className="mb-3 text-base font-semibold text-foreground">
@@ -159,10 +159,28 @@ export function AmountSection({
           <Pressable
             onPress={onPay}
             disabled={!canSubmit}
-            className="rounded-lg px-4 py-2 active:opacity-80"
-            style={{ backgroundColor: colors.green[500] }}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !canSubmit }}
+            className={cn(
+              "rounded-lg px-4 py-2",
+              canSubmit && "active:opacity-80",
+            )}
+            style={{
+              backgroundColor: canSubmit
+                ? colors.green[500]
+                : isDark
+                  ? "#4b5563"
+                  : "#9ca3af",
+            }}
           >
-            <Text className="text-sm font-semibold text-white">Pay</Text>
+            <Text
+              className={cn(
+                "text-sm font-semibold",
+                canSubmit ? "text-white" : "text-gray-200",
+              )}
+            >
+              Pay
+            </Text>
           </Pressable>
         )}
       </View>

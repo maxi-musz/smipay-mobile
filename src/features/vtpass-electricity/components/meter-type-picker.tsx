@@ -15,7 +15,7 @@ interface MeterTypePickerProps {
 export function MeterTypePicker({ selected, onSelect }: MeterTypePickerProps) {
   return (
     <Animated.View
-      entering={FadeInDown.delay(50).duration(300).springify().damping(15)}
+      entering={FadeInDown.delay(50).duration(300)}
       className="mt-6"
     >
       <Text className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">

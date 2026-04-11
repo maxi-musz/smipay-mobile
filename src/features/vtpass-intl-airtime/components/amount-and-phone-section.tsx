@@ -50,7 +50,7 @@ export function AmountAndPhoneSection({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(50).duration(300).springify().damping(15)}
+      entering={FadeInDown.delay(50).duration(300)}
       className="mt-6"
     >
       <Text className="mb-3 text-base font-semibold text-foreground">

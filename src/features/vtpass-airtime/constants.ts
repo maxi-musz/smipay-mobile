@@ -4,6 +4,18 @@ import type { AirtimeServiceItem } from "@/types/vtpass-airtime";
 export const PHONE_REGEX = /^0[789]\d{9}$/;
 
 /**
+ * Strips non-digits, caps length, and prepends `0` when the user typed 10 digits
+ * starting with 7/8/9 without the leading 0 (common UX issue).
+ */
+export function normalizeNgMobileDigits(input: string): string {
+  let d = input.replace(/\D/g, "").slice(0, 11);
+  if (d.length === 10 && /^[789]/.test(d)) {
+    d = ("0" + d).slice(0, 11);
+  }
+  return d;
+}
+
+/**
  * Formats a raw phone number from contacts (e.g. +2348012345678, 081 234 5678)
  * to Nigerian format: 0XXXXXXXXXX (11 digits).
  */

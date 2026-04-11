@@ -11,6 +11,11 @@ import {
   PlanList,
   FAVOURITES_CATEGORY,
 } from "@/features/vtpass-data/components";
+import {
+  formatNaira,
+  isDataPlanAffordable,
+  parseBalanceToNumber,
+} from "@/features/vtpass-data/lib/constants";
 import { useDataFavourites } from "@/features/vtpass-data/lib/data-favourites";
 import { useDataStore } from "@/features/vtpass-data/lib/store";
 import { useHomepageStore } from "@/store";
@@ -22,6 +27,15 @@ export default function DataScreen() {
   const homepageData = useHomepageStore.use.data();
   const walletBalance =
     homepageData?.wallet_card?.current_balance ?? "₦0.00";
+  const cashbackBalance =
+    homepageData?.cashback_wallet?.current_balance ?? "₦0.00";
+
+  const maxPayable = useMemo(
+    () =>
+      parseBalanceToNumber(walletBalance) +
+      parseBalanceToNumber(cashbackBalance),
+    [walletBalance, cashbackBalance],
+  );
 
   const providers = useDataStore.use.providers();
   const selectedProvider = useDataStore.use.selectedProvider();
@@ -119,6 +133,7 @@ export default function DataScreen() {
   }
 
   function handleSelectPlan(plan: DataVariation) {
+    if (!isDataPlanAffordable(plan, maxPayable)) return;
     setSelectedVariation(plan);
     router.push("/(app)/vtpass/data/amount");
   }
@@ -144,7 +159,11 @@ export default function DataScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerClassName="px-5 pb-10"
       >
-        <DataBalanceCard walletBalance={walletBalance} />
+        <DataBalanceCard
+          walletBalance={walletBalance}
+          cashbackBalance={cashbackBalance}
+          availableForPurchases={formatNaira(maxPayable)}
+        />
 
         <ProviderRow
           providers={providers}
@@ -178,6 +197,7 @@ export default function DataScreen() {
                 <PlanList
                   serviceID={selectedProvider.serviceID}
                   plans={plansForCategory}
+                  maxPayable={maxPayable}
                   onSelectPlan={handleSelectPlan}
                   isFavourite={(plan) =>
                     isFavourite(selectedProvider.serviceID, plan.variation_code)
