@@ -182,12 +182,15 @@ export function flushPendingNotificationNavigation() {
   if (!pendingNotificationHref) return;
   const target = pendingNotificationHref;
   pendingNotificationHref = null;
+  // Wait until after lock overlay is gone and the root navigator has committed (avoids dropped routes).
   requestAnimationFrame(() => {
-    try {
-      router.push(target);
-    } catch (e) {
-      if (__DEV__) console.warn("[Push] Deferred navigation failed:", e);
-    }
+    queueMicrotask(() => {
+      try {
+        router.push(target);
+      } catch (e) {
+        if (__DEV__) console.warn("[Push] Deferred navigation failed:", e);
+      }
+    });
   });
 }
 
@@ -202,11 +205,19 @@ function notificationResponseDedupKey(response: Notifications.NotificationRespon
   return response.notification.request.identifier;
 }
 
+/** Expo/APNs often deliver `data` values as strings; normalize for deep links. */
+function dataString(data: Record<string, unknown>, key: string): string | undefined {
+  const v = data[key];
+  if (typeof v === "string" && v.length > 0) return v;
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return undefined;
+}
+
 function buildHrefFromNotificationData(
   data: Record<string, unknown>,
 ): Href | null {
-  const screen = data.screen as string | undefined;
-  const id = data.id as string | undefined;
+  const screen = dataString(data, "screen");
+  const id = dataString(data, "id");
 
   if (screen === "support" && id) {
     return { pathname: "/(app)/support/chat", params: { id } };
@@ -220,6 +231,7 @@ function buildHrefFromNotificationData(
   if (screen === "transaction") {
     return "/(app)/(tabs)/history";
   }
+  // Prefer inbox row id (backend sends this for broadcasts). Legacy payloads had only broadcast_id → list.
   if (screen === "notification" && id) {
     return `/(app)/notifications/${id}`;
   }
@@ -242,10 +254,18 @@ export function processNotificationResponse(response: Notifications.Notification
     lastProcessedNotificationIdentifier = dedupKey;
   }
 
-  const data = response.notification.request.content.data as Record<string, unknown> | undefined;
-  if (!data) return;
+  let data = response.notification.request.content.data as Record<string, unknown> | string | undefined;
+  if (data == null) return;
+  if (typeof data === "string") {
+    try {
+      data = JSON.parse(data) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+  }
+  if (typeof data !== "object") return;
 
-  const href = buildHrefFromNotificationData(data);
+  const href = buildHrefFromNotificationData(data as Record<string, unknown>);
   if (!href) return;
 
   const { isAuthenticated, isLocked } = useAuthStore.getState();

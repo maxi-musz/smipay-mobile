@@ -23,6 +23,8 @@ export default function NotificationInboxScreen() {
   const isLoadingList = useInboxStore.use.isLoadingList();
   const isLoadingMore = useInboxStore.use.isLoadingMore();
   const hasMore = useInboxStore.use.hasMore();
+  const lastListFetchedAt = useInboxStore.use.lastListFetchedAt();
+  const listError = useInboxStore.use.error();
   const fetchInboxFirstPage = useInboxStore.use.fetchInboxFirstPage();
   const fetchNextPage = useInboxStore.use.fetchNextPage();
   const markAllReadStore = useInboxStore.use.markAllRead();
@@ -49,6 +51,12 @@ export default function NotificationInboxScreen() {
     if (!hasMore || isLoadingList || refreshing || isLoadingMore) return;
     void fetchNextPage();
   };
+
+  /** Avoid "No notifications yet" on first paint before useFocusEffect starts fetch (e.g. cold start / push → inbox). */
+  const awaitingFirstInboxLoad =
+    items.length === 0 &&
+    !listError &&
+    (isLoadingList || lastListFetchedAt === null);
 
   const handleMarkAllRead = async () => {
     try {
@@ -120,7 +128,7 @@ export default function NotificationInboxScreen() {
     );
   };
 
-  if (isLoadingList && items.length === 0) {
+  if (awaitingFirstInboxLoad) {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
@@ -195,10 +203,10 @@ export default function NotificationInboxScreen() {
           onEndReached={onEndReached}
           onEndReachedThreshold={0.3}
           ListEmptyComponent={
-            <View style={{ alignItems: "center", paddingTop: 60 }}>
+            <View style={{ alignItems: "center", paddingTop: 60, paddingHorizontal: 24 }}>
               <Ionicons name="notifications-off-outline" size={48} color={isDark ? "#475569" : "#CBD5E1"} />
-              <Text style={{ fontSize: 14, color: isDark ? "#64748B" : "#94A3B8", marginTop: 12 }}>
-                No notifications yet
+              <Text style={{ fontSize: 14, color: isDark ? "#64748B" : "#94A3B8", marginTop: 12, textAlign: "center" }}>
+                {listError ? listError : "No notifications yet"}
               </Text>
             </View>
           }
