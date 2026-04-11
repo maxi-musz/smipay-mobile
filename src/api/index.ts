@@ -30,6 +30,13 @@ export {
   type PushTokenMeta,
 } from "./services/notifications";
 export {
+  fetchInbox,
+  fetchInboxItem,
+  markAllInboxRead,
+  type InboxItem,
+  type InboxListData,
+} from "./services/inbox";
+export {
   fetchConversations,
   fetchConversationById,
   sendSupportMessage,

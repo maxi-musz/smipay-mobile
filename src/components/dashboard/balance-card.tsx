@@ -172,19 +172,21 @@ export function BalanceCard({
           />
         </Pressable>
 
+        {/* Add Money button — disabled while funding is suspended */}
         <Pressable
           className="flex-row items-center gap-1 rounded-lg"
           style={{
-            backgroundColor: colors.green[500],
+            backgroundColor: colors.gray[600],
             paddingHorizontal: s(16),
             paddingVertical: s(8),
+            opacity: 0.5,
           }}
-          onPress={onAddMoneyPress}
+          disabled
         >
-          <Ionicons name="add" size={s(14)} color="#fff" />
+          <Ionicons name="add" size={s(14)} color="rgba(255,255,255,0.5)" />
           <Text
-            className="font-semibold text-white"
-            style={{ fontSize: s(12) }}
+            className="font-semibold"
+            style={{ fontSize: s(12), color: "rgba(255,255,255,0.5)" }}
           >
             Add Money
           </Text>

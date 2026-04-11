@@ -188,8 +188,11 @@ function handleNotificationResponse(response: Notifications.NotificationResponse
     router.push(`/(app)/history/${id}`);
   } else if (screen === "transaction") {
     router.push("/(app)/(tabs)/history");
+  } else if (screen === "notification" && id) {
+    router.push(`/(app)/notifications/${id}`);
+  } else if (screen === "notification") {
+    router.push("/(app)/notifications");
   }
-  // Add more screens as needed.
 }
 
 let listenersAttached = false;

@@ -63,18 +63,18 @@ export default function HomeScreen() {
         <BalanceCard
           walletBalance={data?.wallet_card?.current_balance ?? "₦0.00"}
           cashbackBalance={data?.cashback_wallet?.current_balance ?? "₦0.00"}
-          onAddMoneyPress={() => setAddMoneyModalVisible(true)}
+          // onAddMoneyPress={() => setAddMoneyModalVisible(true)} // temporarily hidden while funding is suspended
           loadFailed={loadFailed}
           onRetry={fetchHomepage}
         />
       </Animated.View>
 
-      <AddMoneyModal
+      {/* Funding modals — temporarily hidden while funding is suspended */}
+      {/* <AddMoneyModal
         visible={addMoneyModalVisible}
         onClose={() => setAddMoneyModalVisible(false)}
         onFundWithCard={() => {
           setAddMoneyModalVisible(false);
-          // Delay so the Add Money sheet can unmount before showing Fund with Card (avoids modal stack conflict)
           setTimeout(() => setFundWithCardModalVisible(true), 350);
         }}
         onFundViaTag={() => {
@@ -90,7 +90,7 @@ export default function HomeScreen() {
       <FundWithCardFlow
         visible={fundWithCardModalVisible}
         onClose={() => setFundWithCardModalVisible(false)}
-      />
+      /> */}
 
       <ScrollView
         className="flex-1"
