@@ -78,8 +78,10 @@ const _useAuthStore = create<AuthStore>()(
         useAppStore.getState().setBiometricsEnabled(false);
         const { useHomepageStore } = await import("./homepage.store");
         const { useProfileStore } = await import("./profile.store");
+        const { useInboxStore } = await import("./inbox.store");
         useHomepageStore.getState().reset();
         useProfileStore.getState().reset();
+        useInboxStore.getState().reset();
         set(initialState);
       },
 

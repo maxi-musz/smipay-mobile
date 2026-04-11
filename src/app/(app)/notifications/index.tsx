@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -6,65 +6,52 @@ import {
   View,
 } from "react-native";
 import { Stack, router } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { fetchInbox, markAllInboxRead, type InboxItem } from "@/api";
+import type { InboxItem } from "@/api";
 import { Text } from "@/components/ui/text";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { colors } from "@/constants/colors";
 import { useToastStore } from "@/components/ui/toast/toast-store";
+import { useInboxStore } from "@/store";
 
 export default function NotificationInboxScreen() {
   const { isDark } = useAppTheme();
-  const [items, setItems] = useState<InboxItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const items = useInboxStore.use.items();
+  const isLoadingList = useInboxStore.use.isLoadingList();
+  const isLoadingMore = useInboxStore.use.isLoadingMore();
+  const hasMore = useInboxStore.use.hasMore();
+  const fetchInboxFirstPage = useInboxStore.use.fetchInboxFirstPage();
+  const fetchNextPage = useInboxStore.use.fetchNextPage();
+  const markAllReadStore = useInboxStore.use.markAllRead();
+
   const [refreshing, setRefreshing] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
 
   const bg = isDark ? "#020617" : "#F8F9FB";
   const cardBg = isDark ? "#111827" : "#FFFFFF";
 
-  const load = useCallback(async (p = 1, append = false) => {
-    try {
-      const data = await fetchInbox(p, 20);
-      if (append) {
-        setItems((prev) => [...prev, ...data.items]);
-      } else {
-        setItems(data.items);
-      }
-      setHasMore(p < data.pages);
-      setPage(p);
-    } catch {
-      useToastStore.getState().show({
-        variant: "error",
-        title: "Error",
-        message: "Could not load notifications.",
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    setLoading(true);
-    load(1).finally(() => setLoading(false));
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void fetchInboxFirstPage();
+    }, [fetchInboxFirstPage]),
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await load(1);
+    await fetchInboxFirstPage({ force: true });
     setRefreshing(false);
   };
 
   const onEndReached = () => {
-    if (!hasMore || loading || refreshing) return;
-    load(page + 1, true);
+    if (!hasMore || isLoadingList || refreshing || isLoadingMore) return;
+    void fetchNextPage();
   };
 
   const handleMarkAllRead = async () => {
     try {
-      await markAllInboxRead();
-      setItems((prev) => prev.map((item) => ({ ...item, is_read: true })));
+      await markAllReadStore();
       useToastStore.getState().show({
         variant: "success",
         title: "Done",
@@ -98,7 +85,7 @@ export default function NotificationInboxScreen() {
           marginHorizontal: 16,
           marginBottom: 10,
           borderLeftWidth: item.is_read ? 0 : 3,
-          borderLeftColor: item.is_read ? "transparent" : colors.primary,
+          borderLeftColor: item.is_read ? "transparent" : colors.orange[500],
         }}
       >
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -132,7 +119,7 @@ export default function NotificationInboxScreen() {
     );
   };
 
-  if (loading && items.length === 0) {
+  if (isLoadingList && items.length === 0) {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
@@ -168,7 +155,7 @@ export default function NotificationInboxScreen() {
             </Text>
           </View>
           <Pressable onPress={handleMarkAllRead} hitSlop={10}>
-            <Text style={{ fontSize: 12, fontWeight: "600", color: colors.primary }}>
+            <Text style={{ fontSize: 12, fontWeight: "600", color: colors.orange[500] }}>
               Mark all read
             </Text>
           </Pressable>
@@ -180,7 +167,7 @@ export default function NotificationInboxScreen() {
           renderItem={renderItem}
           contentContainerStyle={{ paddingTop: 12, paddingBottom: 32 }}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.orange[500]} />
           }
           onEndReached={onEndReached}
           onEndReachedThreshold={0.3}

@@ -3,17 +3,21 @@ import { Pressable, ScrollView, View } from "react-native";
 import { Stack, useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
-import { fetchInboxItem, type InboxItem } from "@/api";
+import type { InboxItem } from "@/api";
 import { Text } from "@/components/ui/text";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { colors } from "@/constants/colors";
+import { useInboxStore } from "@/store";
 
 export default function NotificationDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id: idParam } = useLocalSearchParams<{ id: string }>();
+  const id = idParam ? String(idParam) : "";
   const { isDark } = useAppTheme();
-  const [item, setItem] = useState<InboxItem | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  const ensureInboxItem = useInboxStore.use.ensureInboxItem();
+
+  const [fetchFinished, setFetchFinished] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const bg = isDark ? "#020617" : "#F8F9FB";
@@ -21,16 +25,25 @@ export default function NotificationDetailScreen() {
 
   useEffect(() => {
     if (!id) return;
-    setLoading(true);
     setError(null);
-    fetchInboxItem(String(id))
-      .then((data) => {
-        if (!data) setError("Notification not found.");
-        else setItem(data);
-      })
-      .catch(() => setError("Could not load notification."))
-      .finally(() => setLoading(false));
-  }, [id]);
+    setFetchFinished(false);
+    let cancelled = false;
+    void (async () => {
+      const data = await ensureInboxItem(id);
+      if (cancelled) return;
+      setFetchFinished(true);
+      if (!data) setError("Could not load notification.");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, ensureInboxItem]);
+
+  const displayItem: InboxItem | null = useInboxStore((s) =>
+    id ? (s.detailById[id] ?? s.items.find((i) => i.id === id) ?? null) : null,
+  );
+
+  const loading = !displayItem && !fetchFinished;
 
   if (loading) {
     return (
@@ -41,21 +54,24 @@ export default function NotificationDetailScreen() {
     );
   }
 
-  if (error || !item) {
+  if (error || !displayItem) {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={{ flex: 1, backgroundColor: bg, alignItems: "center", justifyContent: "center", padding: 32 }}>
-          <Text style={{ fontSize: 14, color: colors.error, textAlign: "center" }}>{error}</Text>
+          <Text style={{ fontSize: 14, color: colors.error, textAlign: "center" }}>
+            {error ?? "Notification not found."}
+          </Text>
           <Pressable onPress={() => router.back()} style={{ marginTop: 20 }}>
-            <Text style={{ fontSize: 14, color: colors.primary, fontWeight: "600" }}>Go back</Text>
+            <Text style={{ fontSize: 14, color: colors.orange[500], fontWeight: "600" }}>Go back</Text>
           </Pressable>
         </View>
       </>
     );
   }
 
-  const date = new Date(item.createdAt).toLocaleDateString("en-NG", {
+  const row = displayItem;
+  const date = new Date(row.createdAt).toLocaleDateString("en-NG", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -89,7 +105,7 @@ export default function NotificationDetailScreen() {
             style={{ fontSize: 16, fontWeight: "700", color: isDark ? "#F1F5F9" : "#0F172A", flex: 1 }}
             numberOfLines={1}
           >
-            {item.title}
+            {row.title}
           </Text>
         </View>
 
@@ -112,7 +128,7 @@ export default function NotificationDetailScreen() {
             }}
           >
             <Text style={{ fontSize: 18, fontWeight: "700", color: isDark ? "#F1F5F9" : "#0F172A" }}>
-              {item.title}
+              {row.title}
             </Text>
             <Text
               style={{
@@ -122,12 +138,12 @@ export default function NotificationDetailScreen() {
                 lineHeight: 20,
               }}
             >
-              {item.body}
+              {row.body}
             </Text>
           </View>
 
           {/* Full message */}
-          {item.message ? (
+          {row.message ? (
             <View
               style={{
                 backgroundColor: cardBg,
@@ -142,7 +158,7 @@ export default function NotificationDetailScreen() {
                   lineHeight: 22,
                 }}
               >
-                {item.message}
+                {row.message}
               </Text>
             </View>
           ) : null}

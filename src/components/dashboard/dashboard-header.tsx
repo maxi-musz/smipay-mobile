@@ -7,15 +7,23 @@ import { Text } from "@/components/ui/text";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useResponsiveScale } from "@/hooks/use-responsive-scale";
 import { resolveProfileImageUrl } from "@/lib/profile-image-url";
-import { useAuthStore, useHomepageStore } from "@/store";
+import { colors } from "@/constants/colors";
+import { useAuthStore, useHomepageStore, useInboxStore } from "@/store";
 
 const SUPPORT_ICON_COLOR = "#2563EB";
+const NOTIFICATION_ICON_COLOR = colors.orange[500];
 
 export function DashboardHeader() {
   const authUser = useAuthStore.use.user();
   const homepageData = useHomepageStore.use.data();
+  const unreadCount = useInboxStore.use.unreadCount();
+  const fetchInboxFirstPage = useInboxStore.use.fetchInboxFirstPage();
   const { s } = useResponsiveScale();
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+
+  useEffect(() => {
+    void fetchInboxFirstPage();
+  }, [fetchInboxFirstPage]);
 
   const firstName =
     homepageData?.user?.first_name ?? authUser?.first_name ?? "there";
@@ -85,6 +93,51 @@ export function DashboardHeader() {
             size={s(18)}
             color={SUPPORT_ICON_COLOR}
           />
+        </Pressable>
+        <Pressable
+          style={{ padding: s(6) }}
+          onPress={() => router.push("/(app)/notifications")}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={
+            unreadCount > 0
+              ? `Notifications, ${unreadCount} unread`
+              : "Notifications"
+          }
+        >
+          <View>
+            <Ionicons
+              name="notifications-outline"
+              size={s(18)}
+              color={NOTIFICATION_ICON_COLOR}
+            />
+            {unreadCount > 0 ? (
+              <View
+                style={{
+                  position: "absolute",
+                  right: -2,
+                  top: -2,
+                  minWidth: s(14),
+                  height: s(14),
+                  borderRadius: s(7),
+                  backgroundColor: colors.error,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  paddingHorizontal: s(3),
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: s(9),
+                    fontWeight: "700",
+                    color: colors.white,
+                  }}
+                >
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </Pressable>
         <ThemeToggle size={s(18)} />
       </View>
