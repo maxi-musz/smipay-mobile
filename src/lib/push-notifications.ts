@@ -14,7 +14,7 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { type Href, router } from "expo-router";
 
-import { useAuthStore } from "@/store";
+import { useAuthStore, useInboxStore } from "@/store";
 
 const ANDROID_DEFAULT_CHANNEL_ID = "default";
 /** Custom sound filename (no path). Backend should use this in the push payload for custom sound. */
@@ -231,10 +231,7 @@ function buildHrefFromNotificationData(
   if (screen === "transaction") {
     return "/(app)/(tabs)/history";
   }
-  // Prefer inbox row id (backend sends this for broadcasts). Legacy payloads had only broadcast_id → list.
-  if (screen === "notification" && id) {
-    return `/(app)/notifications/${id}`;
-  }
+  // Always open the inbox list — detail deep links were flaky (cold start / lock / id timing); list is reliable.
   if (screen === "notification") {
     return "/(app)/notifications";
   }
@@ -265,8 +262,13 @@ export function processNotificationResponse(response: Notifications.Notification
   }
   if (typeof data !== "object") return;
 
-  const href = buildHrefFromNotificationData(data as Record<string, unknown>);
+  const dataRecord = data as Record<string, unknown>;
+  const href = buildHrefFromNotificationData(dataRecord);
   if (!href) return;
+
+  if (dataString(dataRecord, "screen") === "notification") {
+    void useInboxStore.getState().fetchInboxFirstPage({ force: true });
+  }
 
   const { isAuthenticated, isLocked } = useAuthStore.getState();
   if (!isAuthenticated) {
