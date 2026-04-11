@@ -58,7 +58,7 @@ async function clearAllSecureData() {
 
 const _useAuthStore = create<AuthStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...initialState,
 
       setUser: (user) => set({ user, isAuthenticated: true }),
@@ -93,6 +93,10 @@ const _useAuthStore = create<AuthStore>()(
         })),
 
       hydrateTokens: async () => {
+        const { tokens: existing } = get();
+        if (existing?.accessToken && existing?.refreshToken) {
+          return;
+        }
         const [accessToken, refreshToken] = await Promise.all([
           secureStorage.get<string>(SECURE_KEYS.ACCESS_TOKEN),
           secureStorage.get<string>(SECURE_KEYS.REFRESH_TOKEN),

@@ -14,7 +14,7 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { type Href, router } from "expo-router";
 
-import { useAuthStore, useInboxStore } from "@/store";
+import { useAuthStore } from "@/store";
 
 const ANDROID_DEFAULT_CHANNEL_ID = "default";
 /** Custom sound filename (no path). Backend should use this in the push payload for custom sound. */
@@ -266,9 +266,9 @@ export function processNotificationResponse(response: Notifications.Notification
   const href = buildHrefFromNotificationData(dataRecord);
   if (!href) return;
 
-  if (dataString(dataRecord, "screen") === "notification") {
-    void useInboxStore.getState().fetchInboxFirstPage({ force: true });
-  }
+  // Do not prefetch inbox here: tokens may not be hydrated from SecureStore yet (cold start),
+  // and this also ran while the app was still locked — both caused "Could not load notifications."
+  // The notifications screen loads the list on focus after hydrateTokens (see inbox store).
 
   const { isAuthenticated, isLocked } = useAuthStore.getState();
   if (!isAuthenticated) {

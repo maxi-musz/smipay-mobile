@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { fetchInbox, fetchInboxItem, markAllInboxRead, type InboxItem } from "@/api";
+import { useAuthStore } from "./auth.store";
 import { createSelectors } from "./create-selectors";
 
 /** Skip list refetch when revisiting inbox within this window (pull-to-refresh still forces). */
@@ -71,6 +72,8 @@ const _useInboxStore = create<InboxStore>()((set, get) => ({
 
   fetchInboxFirstPage: async (opts) => {
     const force = opts?.force === true;
+    await useAuthStore.getState().hydrateTokens();
+
     const { lastListFetchedAt, items } = get();
     const now = Date.now();
     if (
