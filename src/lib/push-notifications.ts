@@ -14,9 +14,32 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { router } from "expo-router";
 
+import { useHomepageStore } from "@/store/homepage.store";
+import { useToastStore } from "@/components/ui/toast/toast-store";
+
 const ANDROID_DEFAULT_CHANNEL_ID = "default";
 /** Custom sound filename (no path). Backend should use this in the push payload for custom sound. */
 export const NOTIFICATION_SOUND_NAME = "notification_1";
+
+/** References just verified in-app; the matching webhook push skips its toast. */
+const suppressedFundingReferences = new Set<string>();
+const suppressionTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const FUNDING_PUSH_SUPPRESSION_MS = 90_000;
+
+export function suppressFundingPush(
+  reference: string | null | undefined,
+  ttlMs: number = FUNDING_PUSH_SUPPRESSION_MS,
+): void {
+  if (!reference) return;
+  suppressedFundingReferences.add(reference);
+  const existing = suppressionTimers.get(reference);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    suppressedFundingReferences.delete(reference);
+    suppressionTimers.delete(reference);
+  }, ttlMs);
+  suppressionTimers.set(reference, timer);
+}
 
 /** Last token we successfully sent to the backend; used to call remove on logout. */
 let lastRegisteredToken: string | null = null;
@@ -170,6 +193,52 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   return token;
 }
 
+function handleForegroundNotificationData(
+  data: Record<string, unknown> | undefined,
+  title: string | null,
+  body: string | null,
+): void {
+  if (!data) return;
+
+  const type = String(data.type ?? "").toLowerCase();
+  const transactionType = String(data.transaction_type ?? "").toLowerCase();
+  const status = String(data.status ?? "").toLowerCase();
+
+  const isFunding =
+    type === "transaction" &&
+    transactionType === "deposit" &&
+    (status === "success" || status === "failed");
+
+  if (!isFunding) return;
+
+  useHomepageStore.getState().refreshHomepageSilently().catch(() => {});
+
+  const reference = String(data.reference ?? "");
+  if (reference && suppressedFundingReferences.has(reference)) {
+    suppressedFundingReferences.delete(reference);
+    const timer = suppressionTimers.get(reference);
+    if (timer) {
+      clearTimeout(timer);
+      suppressionTimers.delete(reference);
+    }
+    return;
+  }
+
+  if (status === "success") {
+    useToastStore.getState().show({
+      variant: "success",
+      title: title ?? "Payment received",
+      message: body ?? "Your wallet has been updated.",
+    });
+  } else if (status === "failed") {
+    useToastStore.getState().show({
+      variant: "error",
+      title: title ?? "Funding failed",
+      message: body ?? "Your funding didn't go through.",
+    });
+  }
+}
+
 /**
  * Navigate when user taps a notification. Override this or the data shape to match your backend.
  */
@@ -211,6 +280,11 @@ export function setupNotificationListeners(): void {
           notification.request.content.data,
         );
       }
+      handleForegroundNotificationData(
+        notification.request.content.data as Record<string, unknown> | undefined,
+        notification.request.content.title ?? null,
+        notification.request.content.body ?? null,
+      );
     },
   );
 

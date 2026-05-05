@@ -15,6 +15,7 @@ import { SplashOverlay } from "@/components/splash-overlay";
 import { ToastContainer } from "@/components/ui/toast";
 import { SupportSocketProvider } from "@/context/support-socket";
 import { ThemeProvider } from "@/context/theme-context";
+import { WebhookEventsSocketProvider } from "@/context/webhook-events-socket";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import {
   startInactivityTracking,
@@ -145,7 +146,9 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ThemeProvider>
         <SupportSocketProvider>
-          <InnerLayout />
+          <WebhookEventsSocketProvider>
+            <InnerLayout />
+          </WebhookEventsSocketProvider>
         </SupportSocketProvider>
       </ThemeProvider>
     </SafeAreaProvider>

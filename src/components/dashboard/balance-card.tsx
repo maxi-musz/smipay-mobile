@@ -1,7 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeOut,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
@@ -47,6 +56,24 @@ export function BalanceCard({
   const parsed = parseBalance(walletBalance);
   const cashbackParsed = parseBalance(cashbackBalance);
 
+  const glow = useSharedValue(0);
+  const previousBalanceRef = useRef(walletBalance);
+
+  useEffect(() => {
+    const previous = previousBalanceRef.current;
+    if (previous && previous !== walletBalance && walletBalance !== "₦0.00") {
+      glow.value = withSequence(
+        withTiming(0.18, { duration: 220, easing: Easing.out(Easing.quad) }),
+        withTiming(0, { duration: 900, easing: Easing.in(Easing.quad) }),
+      );
+    }
+    previousBalanceRef.current = walletBalance;
+  }, [walletBalance, glow]);
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: glow.value,
+  }));
+
   return (
     <View
       className="overflow-hidden rounded-2xl"
@@ -57,6 +84,20 @@ export function BalanceCard({
         paddingVertical: s(14),
       }}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          {
+            position: "absolute",
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+            backgroundColor: colors.green[500],
+          },
+          glowStyle,
+        ]}
+      />
       <Text
         className="font-medium uppercase tracking-wide text-white/50"
         style={{ fontSize: s(10) }}
@@ -87,7 +128,12 @@ export function BalanceCard({
             </Text>
           </Pressable>
         ) : balanceVisible ? (
-          <View className="flex-row items-baseline">
+          <Animated.View
+            key={`bal-${walletBalance}`}
+            entering={FadeIn.duration(260)}
+            exiting={FadeOut.duration(180)}
+            className="flex-row items-baseline"
+          >
             <Text
               className="font-semibold"
               style={{ color: NAIRA_GREEN, fontSize: s(24) }}
@@ -106,7 +152,7 @@ export function BalanceCard({
             >
               {parsed.decimal}
             </Text>
-          </View>
+          </Animated.View>
         ) : (
           <Text
             className="font-semibold text-white"

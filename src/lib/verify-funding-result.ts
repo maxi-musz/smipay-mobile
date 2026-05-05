@@ -5,6 +5,7 @@ import {
   getPendingFundingReference,
   clearPendingFundingReference,
 } from "@/lib/pending-funding";
+import { suppressFundingPush } from "@/lib/push-notifications";
 import { useHomepageStore } from "@/store";
 import type { VerifyPaystackSuccessData } from "@/types/banking";
 
@@ -21,6 +22,7 @@ export type FundingVerifyResult =
 export async function verifyFundingAndGetResult(
   reference: string,
 ): Promise<FundingVerifyResult> {
+  suppressFundingPush(reference);
   try {
     const response = await verifyPaystackFunding(reference);
     await clearPendingFundingReference();
@@ -62,6 +64,8 @@ export async function verifyPendingFundingAndHandleResult(
   const { onCloseModal, reference: refOption } = options;
   const reference = refOption ?? (await getPendingFundingReference());
   if (!reference) return false;
+
+  suppressFundingPush(reference);
 
   try {
     const response = await verifyPaystackFunding(reference);

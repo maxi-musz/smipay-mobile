@@ -4,16 +4,17 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
-  AddMoneyModal,
+  // AddMoneyModal,
+  AccountDetailsModal,
   BalanceCard,
   DashboardHeader,
-  FundWithCardFlow,
+  // FundWithCardFlow,
   PromoBanner,
   RecentTransactions,
   ServicesGrid,
 } from "@/components/dashboard";
 import { FullPageLoader } from "@/components/ui/loaders";
-import { useToastStore } from "@/components/ui/toast/toast-store";
+// import { useToastStore } from "@/components/ui/toast/toast-store";
 import { useAuthStore, useHomepageStore } from "@/store";
 import { colors } from "@/constants/colors";
 
@@ -26,7 +27,7 @@ export default function HomeScreen() {
   const wasLockedRef = useRef(isLocked);
 
   const [addMoneyModalVisible, setAddMoneyModalVisible] = useState(false);
-  const [fundWithCardModalVisible, setFundWithCardModalVisible] = useState(false);
+  // const [fundWithCardModalVisible, setFundWithCardModalVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Fetch on mount only.
@@ -69,27 +70,10 @@ export default function HomeScreen() {
         />
       </Animated.View>
 
-      <AddMoneyModal
+      <AccountDetailsModal
         visible={addMoneyModalVisible}
         onClose={() => setAddMoneyModalVisible(false)}
-        onFundWithCard={() => {
-          setAddMoneyModalVisible(false);
-          // Delay so the Add Money sheet can unmount before showing Fund with Card (avoids modal stack conflict)
-          setTimeout(() => setFundWithCardModalVisible(true), 350);
-        }}
-        onFundViaTag={() => {
-          setAddMoneyModalVisible(false);
-          useToastStore.getState().show({
-            variant: "info",
-            title: "Coming soon",
-            message: "Fund Via Tag will be available soon.",
-          });
-        }}
-      />
-
-      <FundWithCardFlow
-        visible={fundWithCardModalVisible}
-        onClose={() => setFundWithCardModalVisible(false)}
+        accounts={data?.accounts ?? []}
       />
 
       <ScrollView

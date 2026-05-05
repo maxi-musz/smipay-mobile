@@ -1,3 +1,4 @@
+export { AccountDetailsModal } from "./account-details-modal";
 export { AddMoneyModal } from "./add-money-modal";
 export { DashboardHeader } from "./dashboard-header";
 export { BalanceCard } from "./balance-card";

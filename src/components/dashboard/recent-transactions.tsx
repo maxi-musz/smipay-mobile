@@ -1,6 +1,7 @@
 import { Image, Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import Animated, { FadeInUp, Layout } from "react-native-reanimated";
 
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
@@ -87,18 +88,25 @@ export function RecentTransactions({
       ) : transactions.length === 0 ? (
         <EmptyState isDark={isDark} />
       ) : (
-        <View
+        <Animated.View
+          layout={Layout.springify().damping(18).stiffness(180)}
           className="overflow-hidden rounded-2xl bg-card"
           style={{ paddingVertical: s(4), gap: s(4) }}
         >
-          {transactions.map((tx) => (
-            <TransactionRow
+          {transactions.map((tx, idx) => (
+            <Animated.View
               key={tx.id}
-              transaction={tx}
-              isDark={isDark}
-            />
+              entering={
+                idx === 0
+                  ? FadeInUp.duration(320).delay(40)
+                  : FadeInUp.duration(280)
+              }
+              layout={Layout.springify().damping(18).stiffness(180)}
+            >
+              <TransactionRow transaction={tx} isDark={isDark} />
+            </Animated.View>
           ))}
-        </View>
+        </Animated.View>
       )}
     </View>
   );
