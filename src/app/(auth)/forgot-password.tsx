@@ -52,7 +52,7 @@ export default function ForgotPasswordScreen() {
 
   const canSubmitEmail = EMAIL_RE.test(email.trim()) && !loading;
   const canSubmitReset =
-    otp.length === 4 && isAuthPasswordValid(newPassword) && !loading;
+    otp.length === 6 && isAuthPasswordValid(newPassword) && !loading;
 
   function startResendCooldown() {
     setResendCooldown(60);
@@ -116,7 +116,7 @@ export default function ForgotPasswordScreen() {
 
   async function handleResetPassword() {
     const next: Record<string, string> = {};
-    if (otp.length !== 4) next.otp = "Enter the 4-digit code";
+    if (otp.length !== 6) next.otp = "Enter the 6-digit code";
     if (!isAuthPasswordValid(newPassword))
       next.newPassword = `Use exactly ${AUTH_PASSWORD_DIGITS} digits (0–9)`;
     if (Object.keys(next).length > 0) {
@@ -242,15 +242,15 @@ export default function ForgotPasswordScreen() {
             >
               <Input
                 label="Reset Code"
-                placeholder="0000"
+                placeholder="000000"
                 value={otp}
                 onChangeText={(t) => {
-                  setOtp(t.replace(/\D/g, "").slice(0, 4));
+                  setOtp(t.replace(/\D/g, "").slice(0, 6));
                   clearError("otp");
                 }}
                 error={errors.otp}
                 keyboardType="number-pad"
-                maxLength={4}
+                maxLength={6}
                 returnKeyType="next"
                 onSubmitEditing={() => passwordRef.current?.focus()}
               />

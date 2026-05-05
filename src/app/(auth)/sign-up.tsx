@@ -67,6 +67,8 @@ export default function SignUpScreen() {
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [referralCode, setReferralCode] = useState("");
+  const [hasReferralCode, setHasReferralCode] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const [sourceSheetOpen, setSourceSheetOpen] = useState(false);
@@ -89,7 +91,7 @@ export default function SignUpScreen() {
   }
 
   const canSubmitEmail = EMAIL_RE.test(email.trim()) && !loading;
-  const canSubmitOtp = otp.length === 4 && !loading;
+  const canSubmitOtp = otp.length === 6 && !loading;
   const canSubmitProfile =
     firstName.trim().length > 0 &&
     lastName.trim().length > 0 &&
@@ -156,8 +158,8 @@ export default function SignUpScreen() {
   }
 
   async function handleVerifyOtp() {
-    if (otp.length !== 4) {
-      setErrors({ otp: "Enter the 4-digit code" });
+    if (otp.length !== 6) {
+      setErrors({ otp: "Enter the 6-digit code" });
       return;
     }
 
@@ -204,6 +206,7 @@ export default function SignUpScreen() {
     Keyboard.dismiss();
     setLoading(true);
     try {
+      const trimmedReferral = hasReferralCode ? referralCode.trim() : "";
       const payload = {
         email: email.trim().toLowerCase(),
         password,
@@ -212,6 +215,9 @@ export default function SignUpScreen() {
         phone_number: phone.trim(),
         agree_to_terms: true,
         country: "Nigeria",
+        ...(trimmedReferral.length > 0
+          ? { referral_code: trimmedReferral }
+          : {}),
       };
 
       const res = registrationPhoto
@@ -408,15 +414,15 @@ export default function SignUpScreen() {
             >
               <Input
                 label="Verification Code"
-                placeholder="0000"
+                placeholder="000000"
                 value={otp}
                 onChangeText={(t) => {
-                  setOtp(t.replace(/\D/g, "").slice(0, 4));
+                  setOtp(t.replace(/\D/g, "").slice(0, 6));
                   clearError("otp");
                 }}
                 error={errors.otp}
                 keyboardType="number-pad"
-                maxLength={4}
+                maxLength={6}
                 returnKeyType="done"
                 onSubmitEditing={canSubmitOtp ? handleVerifyOtp : undefined}
               />
@@ -595,6 +601,59 @@ export default function SignUpScreen() {
                 <Text className="mt-1.5 text-xs text-muted-foreground">
                   Exactly {AUTH_PASSWORD_DIGITS} numbers — your app password
                 </Text>
+              </View>
+
+              <View>
+                <Pressable
+                  className="flex-row items-start gap-3"
+                  onPress={() => {
+                    setHasReferralCode((v) => {
+                      const next = !v;
+                      if (!next) {
+                        setReferralCode("");
+                        clearError("referralCode");
+                      }
+                      return next;
+                    });
+                  }}
+                >
+                  <View
+                    className={`mt-0.5 h-5 w-5 items-center justify-center rounded border ${
+                      hasReferralCode
+                        ? "border-primary bg-primary"
+                        : "border-input bg-background"
+                    }`}
+                  >
+                    {hasReferralCode && (
+                      <Text className="text-xs text-primary-foreground">✓</Text>
+                    )}
+                  </View>
+                  <Text className="flex-1 text-xs text-muted-foreground">
+                    I have a referral code
+                  </Text>
+                </Pressable>
+
+                {hasReferralCode && (
+                  <View className="mt-3">
+                    <Input
+                      label="Referral Code"
+                      placeholder="e.g. @janedoe"
+                      value={referralCode}
+                      onChangeText={(v) => {
+                        setReferralCode(v.replace(/\s+/g, ""));
+                        clearError("referralCode");
+                      }}
+                      error={errors.referralCode}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="done"
+                      autoFocus
+                    />
+                    <Text className="mt-1.5 text-xs text-muted-foreground">
+                      Got invited? Enter your friend&apos;s code so you both get a welcome bonus.
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {/* Terms */}
