@@ -7,6 +7,7 @@ import { router } from "expo-router";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
+import { useAppTheme } from "@/hooks/use-app-theme";
 import { ONBOARDING_SLIDES, type OnboardingSlide } from "./constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -18,6 +19,7 @@ interface OnboardingScreenProps {
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const { theme, isDark } = useAppTheme();
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = e.nativeEvent.contentOffset.x;
@@ -48,10 +50,14 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     router.push("/(auth)/sign-in");
   };
 
+  const gradientColors: [string, string] = isDark
+    ? [theme.background, theme.backgroundSecondary]
+    : ["#FFE5D2", "#FFF5EC"];
+
   return (
-    <SafeAreaView className="flex-1" edges={["bottom"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <LinearGradient
-        colors={["#FFE5D2", "#FFF5EC"]}
+        colors={gradientColors}
         style={{ flex: 1 }}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -70,7 +76,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             renderItem={({ item }) => <SlideCard slide={item} />}
           />
 
-          <View className="mt-auto rounded-t-[56px] bg-white px-6 pb-10 pt-8 shadow-lg shadow-black/5">
+          <View
+            className="mt-auto rounded-t-[56px] px-6 pb-10 pt-8 shadow-lg shadow-black/5"
+            style={{ backgroundColor: theme.card }}
+          >
             <View className="mb-5 flex-row justify-center gap-2">
               {ONBOARDING_SLIDES.map((_, i) => (
                 <View
@@ -85,21 +94,28 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
               ))}
             </View>
 
-            <Text variant="h3" className="text-center">
+            <Text variant="h3" className="text-center" style={{ color: theme.text }}>
               {activeSlide.title}
             </Text>
 
-            <Text className="mt-3 text-center text-sm leading-6 text-muted-foreground">
+            <Text
+              className="mt-3 text-center text-sm leading-6"
+              style={{ color: theme.textSecondary }}
+            >
               {activeSlide.description}
             </Text>
 
             <View className="mt-6 flex-row gap-3">
               <Button
-                className="flex-1 rounded-full bg-orange-50"
+                className="flex-1 rounded-full"
                 variant="outline"
+                style={{
+                  backgroundColor: isDark ? theme.backgroundSecondary : colors.orange[50],
+                  borderColor: theme.borderStrong,
+                }}
                 onPress={handleSkip}
               >
-                <Text className="text-orange-500">Skip</Text>
+                <Text style={{ color: theme.primary }}>Skip</Text>
               </Button>
               <Button
                 className="flex-1 rounded-full"
@@ -114,11 +130,12 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             </View>
 
             <View className="mt-5 flex-row justify-center">
-              <Text className="text-sm text-muted-foreground">
+              <Text className="text-sm" style={{ color: theme.textSecondary }}>
                 Already have an account?{" "}
               </Text>
               <Text
-                className="text-sm font-semibold text-orange-500"
+                className="text-sm font-semibold"
+                style={{ color: theme.primary }}
                 onPress={handleSignIn}
               >
                 Sign in
@@ -126,7 +143,12 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             </View>
 
             <View className="mt-5 items-center">
-              <View className="h-1 w-24 rounded-full bg-black/10" />
+              <View
+                className="h-1 w-24 rounded-full"
+                style={{
+                  backgroundColor: isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.12)",
+                }}
+              />
             </View>
           </View>
         </View>

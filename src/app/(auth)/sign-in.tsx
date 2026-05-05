@@ -184,10 +184,10 @@ export default function SignInScreen() {
                 returnKeyType="done"
                 onSubmitEditing={canSubmit ? handleSignIn : undefined}
               />
-              <Text className="mt-1.5 text-xs text-muted-foreground">
+              {/* <Text className="mt-1.5 text-xs text-muted-foreground">
                 New accounts use a 6-digit password. If you registered earlier, use your existing
                 password.
-              </Text>
+              </Text> */}
             </View>
 
             <Link href="/(auth)/forgot-password" asChild>
