@@ -53,6 +53,11 @@ eas build --profile staging --platform android
 eas build --profile staging --platform all
 ```
 
+One-time prerequisite: your iPhone's UDID must be registered to the Apple Developer team's provisioning profile. If you've never done it on this device, run once:
+```bash
+eas device:create
+
+
 ### Production
 
 Production channel and API. Use for store builds.

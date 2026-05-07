@@ -18,13 +18,11 @@ interface FullPageLoaderProps {
 const BREATHE_IN = 1;
 const BREATHE_OUT = 0.6;
 const BREATHE_DURATION = 900;
-const ROTATION_DURATION = 1600;
 const FACE_SIZE = 96;
 
 export function FullPageLoader({ message }: FullPageLoaderProps) {
   const scale = useSharedValue(BREATHE_IN);
   const opacity = useSharedValue(1);
-  const rotation = useSharedValue(0);
 
   useEffect(() => {
     scale.value = withRepeat(
@@ -54,21 +52,10 @@ export function FullPageLoader({ message }: FullPageLoaderProps) {
       ),
       -1,
     );
-
-    rotation.value = withRepeat(
-      withTiming(360, {
-        duration: ROTATION_DURATION,
-        easing: Easing.linear,
-      }),
-      -1,
-    );
-  }, [scale, opacity, rotation]);
+  }, [scale, opacity]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: scale.value },
-      { rotate: `${rotation.value}deg` },
-    ],
+    transform: [{ scale: scale.value }],
     opacity: opacity.value,
   }));
 
