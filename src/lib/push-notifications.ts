@@ -303,7 +303,7 @@ function buildHrefFromNotificationData(
   }
   // Always open the inbox list — detail deep links were flaky (cold start / lock / id timing); list is reliable.
   if (screen === "notification") {
-    return "/(app)/profile/notifications";
+    return "/(app)/notifications";
   }
   return null;
 }
