@@ -64,7 +64,7 @@ export default function HomeScreen() {
         <BalanceCard
           walletBalance={data?.wallet_card?.current_balance ?? "₦0.00"}
           cashbackBalance={data?.cashback_wallet?.current_balance ?? "₦0.00"}
-          // onAddMoneyPress={() => setAddMoneyModalVisible(true)} // temporarily hidden while funding is suspended
+          onAddMoneyPress={() => setAddMoneyModalVisible(true)}
           loadFailed={loadFailed}
           onRetry={fetchHomepage}
         />
@@ -111,6 +111,11 @@ export default function HomeScreen() {
           />
         </Animated.View>
       </ScrollView>
+      <AccountDetailsModal
+        visible={addMoneyModalVisible}
+        onClose={() => setAddMoneyModalVisible(false)}
+        accounts={data?.accounts ?? []}
+      />
     </SafeAreaView>
   );
 }

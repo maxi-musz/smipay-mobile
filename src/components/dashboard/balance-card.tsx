@@ -218,25 +218,49 @@ export function BalanceCard({
           />
         </Pressable>
 
-        {/* Add Money button — disabled while funding is suspended */}
-        <Pressable
-          className="flex-row items-center gap-1 rounded-lg"
-          style={{
-            backgroundColor: colors.gray[600],
-            paddingHorizontal: s(16),
-            paddingVertical: s(8),
-            opacity: 0.5,
-          }}
-          disabled
-        >
-          <Ionicons name="add" size={s(14)} color="rgba(255,255,255,0.5)" />
-          <Text
-            className="font-semibold"
-            style={{ fontSize: s(12), color: "rgba(255,255,255,0.5)" }}
+        {onAddMoneyPress ? (
+          <Pressable
+            className="flex-row items-center gap-1 rounded-lg"
+            style={{
+              backgroundColor: KOBO_ORANGE,
+              paddingHorizontal: s(16),
+              paddingVertical: s(8),
+            }}
+            onPress={onAddMoneyPress}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Add money, show bank transfer details"
           >
-            Add Money
-          </Text>
-        </Pressable>
+            <Ionicons name="add" size={s(14)} color={colors.white} />
+            <Text
+              className="font-semibold"
+              style={{ fontSize: s(12), color: colors.white }}
+            >
+              Add Money
+            </Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            className="flex-row items-center gap-1 rounded-lg"
+            style={{
+              backgroundColor: colors.gray[600],
+              paddingHorizontal: s(16),
+              paddingVertical: s(8),
+              opacity: 0.5,
+            }}
+            disabled
+            accessibilityRole="button"
+            accessibilityLabel="Add money unavailable"
+          >
+            <Ionicons name="add" size={s(14)} color="rgba(255,255,255,0.5)" />
+            <Text
+              className="font-semibold"
+              style={{ fontSize: s(12), color: "rgba(255,255,255,0.5)" }}
+            >
+              Add Money
+            </Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
