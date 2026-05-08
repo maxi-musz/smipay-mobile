@@ -12,7 +12,9 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
-import { router } from "expo-router";
+import { type Href, router } from "expo-router";
+
+import { useAuthStore } from "@/store";
 
 import { useHomepageStore } from "@/store/homepage.store";
 import { useToastStore } from "@/components/ui/toast/toast-store";
@@ -193,6 +195,9 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   return token;
 }
 
+/** Deferred until app unlock — `router.push` under the lock overlay is unreliable. */
+let pendingNotificationHref: Href | null = null;
+
 function handleForegroundNotificationData(
   data: Record<string, unknown> | undefined,
   title: string | null,
@@ -239,26 +244,116 @@ function handleForegroundNotificationData(
   }
 }
 
-/**
- * Navigate when user taps a notification. Override this or the data shape to match your backend.
- */
-function handleNotificationResponse(response: Notifications.NotificationResponse) {
-  const data = response.notification.request.content.data as Record<string, unknown> | undefined;
-  if (!data) return;
 
-  const screen = data.screen as string | undefined;
-  const id = data.id as string | undefined;
+/**
+ * Call after successful unlock (`isLocked` → false) so push taps open the right screen.
+ */
+export function flushPendingNotificationNavigation() {
+  if (!pendingNotificationHref) return;
+  const target = pendingNotificationHref;
+  pendingNotificationHref = null;
+  // Wait until after lock overlay is gone and the root navigator has committed (avoids dropped routes).
+  requestAnimationFrame(() => {
+    queueMicrotask(() => {
+      try {
+        router.push(target);
+      } catch (e) {
+        if (__DEV__) console.warn("[Push] Deferred navigation failed:", e);
+      }
+    });
+  });
+}
+
+/** Clear when signing out so a stale tap cannot navigate after a new session. */
+export function clearPendingNotificationNavigation() {
+  pendingNotificationHref = null;
+}
+
+let lastProcessedNotificationIdentifier: string | null = null;
+
+function notificationResponseDedupKey(response: Notifications.NotificationResponse): string {
+  return response.notification.request.identifier;
+}
+
+/** Expo/APNs often deliver `data` values as strings; normalize for deep links. */
+function dataString(data: Record<string, unknown>, key: string): string | undefined {
+  const v = data[key];
+  if (typeof v === "string" && v.length > 0) return v;
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return undefined;
+}
+
+function buildHrefFromNotificationData(
+  data: Record<string, unknown>,
+): Href | null {
+  const screen = dataString(data, "screen");
+  const id = dataString(data, "id");
 
   if (screen === "support" && id) {
-    router.push({ pathname: "/(app)/support/chat", params: { id } });
-  } else if (screen === "support") {
-    router.push("/(app)/support");
-  } else if (screen === "transaction" && id) {
-    router.push(`/(app)/history/${id}`);
-  } else if (screen === "transaction") {
-    router.push("/(app)/(tabs)/history");
+    return { pathname: "/(app)/support/chat", params: { id } };
   }
-  // Add more screens as needed.
+  if (screen === "support") {
+    return "/(app)/support";
+  }
+  if (screen === "transaction" && id) {
+    return `/(app)/history/${id}`;
+  }
+  if (screen === "transaction") {
+    return "/(app)/(tabs)/history";
+  }
+  // Always open the inbox list — detail deep links were flaky (cold start / lock / id timing); list is reliable.
+  if (screen === "notification") {
+    return "/(app)/profile/notifications";
+  }
+  return null;
+}
+
+/**
+ * Navigate when user taps a notification (or on cold start via getLastNotificationResponseAsync).
+ * If the app is locked, stores the target and {@link flushPendingNotificationNavigation} runs after unlock.
+ */
+export function processNotificationResponse(response: Notifications.NotificationResponse) {
+  const dedupKey = notificationResponseDedupKey(response);
+  if (dedupKey && lastProcessedNotificationIdentifier === dedupKey) {
+    return;
+  }
+  if (dedupKey) {
+    lastProcessedNotificationIdentifier = dedupKey;
+  }
+
+  let data = response.notification.request.content.data as Record<string, unknown> | string | undefined;
+  if (data == null) return;
+  if (typeof data === "string") {
+    try {
+      data = JSON.parse(data) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+  }
+  if (typeof data !== "object") return;
+
+  const dataRecord = data as Record<string, unknown>;
+  const href = buildHrefFromNotificationData(dataRecord);
+  if (!href) return;
+
+  // Do not prefetch inbox here: tokens may not be hydrated from SecureStore yet (cold start),
+  // and this also ran while the app was still locked — both caused "Could not load notifications."
+  // The notifications screen loads the list on focus after hydrateTokens (see inbox store).
+
+  const { isAuthenticated, isLocked } = useAuthStore.getState();
+  if (!isAuthenticated) {
+    return;
+  }
+
+  if (isLocked) {
+    pendingNotificationHref = href;
+    if (__DEV__) {
+      console.log("[Push] App locked — deferring navigation until unlock:", href);
+    }
+    return;
+  }
+
+  router.push(href);
 }
 
 let listenersAttached = false;
@@ -289,11 +384,11 @@ export function setupNotificationListeners(): void {
   );
 
   const response = Notifications.addNotificationResponseReceivedListener(
-    (response: Notifications.NotificationResponse) => {
+    (notificationResponse: Notifications.NotificationResponse) => {
       if (__DEV__) {
-        console.log("[Push] Response:", response.notification.request.content.data);
+        console.log("[Push] Response:", notificationResponse.notification.request.content.data);
       }
-      handleNotificationResponse(response);
+      processNotificationResponse(notificationResponse);
     },
   );
 

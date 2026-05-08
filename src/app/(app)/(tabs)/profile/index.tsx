@@ -17,6 +17,10 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useToastStore } from "@/components/ui/toast";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { colors } from "@/constants/colors";
+import {
+  isOtaDebugUser,
+  OTA_DEBUG_BUILD_MARKER,
+} from "@/constants/ota-debug-marker";
 import { useAuthStore, useHomepageStore, useProfileStore } from "@/store";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
@@ -230,6 +234,21 @@ export default function ProfileScreen() {
               {phone}
             </Text>
           )}
+
+          {isOtaDebugUser(email) ? (
+            <Text
+              className="mt-2 text-center"
+              style={{
+                fontSize: 9,
+                lineHeight: 12,
+                color: isDark ? "#64748B" : "#94A3B8",
+                opacity: 0.9,
+              }}
+              selectable
+            >
+              OTA marker: {OTA_DEBUG_BUILD_MARKER}
+            </Text>
+          ) : null}
         </Animated.View>
 
         {/* Wallet & Tier info */}

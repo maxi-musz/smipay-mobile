@@ -27,7 +27,7 @@ export function SubscriptionTypePicker({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(50).duration(300).springify().damping(15)}
+      entering={FadeInDown.delay(50).duration(300)}
       className="mt-6 gap-3"
     >
       <Text className="text-xs font-medium text-muted-foreground uppercase tracking-wider">

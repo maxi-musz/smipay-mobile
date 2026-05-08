@@ -332,7 +332,7 @@ export default function EducationPurchaseScreen() {
 
         {/* Order Summary */}
         <Animated.View
-          entering={FadeInDown.delay(50).duration(300).springify().damping(15)}
+          entering={FadeInDown.delay(50).duration(300)}
         >
           <Text className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
             Order summary
@@ -386,7 +386,7 @@ export default function EducationPurchaseScreen() {
         {/* Quantity (WAEC only) */}
         {traits.hasQuantity && (
           <Animated.View
-            entering={FadeInDown.delay(100).duration(300).springify().damping(15)}
+            entering={FadeInDown.delay(100).duration(300)}
             className="mt-6"
           >
             <Text className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -429,7 +429,7 @@ export default function EducationPurchaseScreen() {
 
         {/* Phone number */}
         <Animated.View
-          entering={FadeInDown.delay(150).duration(300).springify().damping(15)}
+          entering={FadeInDown.delay(150).duration(300)}
           className="mt-6"
         >
           <Text className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">

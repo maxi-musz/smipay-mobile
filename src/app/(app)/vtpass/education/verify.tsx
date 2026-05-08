@@ -71,7 +71,7 @@ export default function EducationVerifyScreen() {
       >
         {/* Selected plan summary */}
         <Animated.View
-          entering={FadeInDown.duration(300).springify().damping(15)}
+          entering={FadeInDown.duration(300)}
           className="mt-4"
         >
           <View className="mb-2 rounded-xl border border-border bg-card px-4 py-3">
@@ -95,7 +95,7 @@ export default function EducationVerifyScreen() {
 
         {/* JAMB Profile ID input + verify */}
         <Animated.View
-          entering={FadeInDown.delay(50).duration(300).springify().damping(15)}
+          entering={FadeInDown.delay(50).duration(300)}
           className="mt-6"
         >
           <JambVerifyInput
@@ -117,7 +117,7 @@ export default function EducationVerifyScreen() {
         {verified && verifyData && (
           <>
             <Animated.View
-              entering={FadeInDown.duration(300).springify().damping(15)}
+              entering={FadeInDown.duration(300)}
               className="mt-4 rounded-2xl border border-border bg-card overflow-hidden"
             >
               <View
@@ -150,7 +150,7 @@ export default function EducationVerifyScreen() {
             </Animated.View>
 
             <Animated.View
-              entering={FadeInDown.delay(100).duration(300).springify().damping(15)}
+              entering={FadeInDown.delay(100).duration(300)}
               className="mt-8"
             >
               <Button

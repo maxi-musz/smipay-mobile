@@ -104,7 +104,7 @@ export default function ReferralScreen() {
                   borderWidth: 1,
                   borderColor: colors.orange[200],
                 }}
-                entering={FadeInDown.duration(320).springify().damping(15)}
+                entering={FadeInDown.duration(320)}
               >
                 <Text className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                   Your Referral Code
@@ -135,7 +135,7 @@ export default function ReferralScreen() {
               <Animated.View
                 className="mt-4 overflow-hidden rounded-2xl px-4 py-5"
                 style={{ backgroundColor: cardBg }}
-                entering={FadeInDown.duration(320).springify().damping(15)}
+                entering={FadeInDown.duration(320)}
               >
                 <Text className="text-sm text-muted-foreground">
                   Your referral code will appear here once your account is set up.
@@ -148,7 +148,7 @@ export default function ReferralScreen() {
               <Animated.View
                 className="mt-4 overflow-hidden rounded-2xl px-4 py-4"
                 style={{ backgroundColor: cardBg }}
-                entering={FadeInDown.delay(60).duration(320).springify().damping(15)}
+                entering={FadeInDown.delay(60).duration(320)}
               >
                 <Text className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                   Your Stats
@@ -212,7 +212,7 @@ export default function ReferralScreen() {
               <Animated.View
                 className="mt-4 overflow-hidden rounded-2xl px-4 py-4"
                 style={{ backgroundColor: cardBg }}
-                entering={FadeInDown.delay(120).duration(320).springify().damping(15)}
+                entering={FadeInDown.delay(120).duration(320)}
               >
                 <Text className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                   How It Works

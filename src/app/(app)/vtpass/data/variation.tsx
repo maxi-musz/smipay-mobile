@@ -1,14 +1,31 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { DataHeader, VariationPicker } from "@/features/vtpass-data/components";
+import {
+  isDataPlanAffordable,
+  parseBalanceToNumber,
+} from "@/features/vtpass-data/lib/constants";
 import { useDataStore } from "@/features/vtpass-data/lib/store";
+import { useHomepageStore } from "@/store";
 import { FullPageLoader } from "@/components/ui/loaders";
 import type { DataVariation } from "@/types/vtpass-data";
 
 export default function DataVariationScreen() {
+  const homepageData = useHomepageStore.use.data();
+  const walletBalance =
+    homepageData?.wallet_card?.current_balance ?? "₦0.00";
+  const cashbackBalance =
+    homepageData?.cashback_wallet?.current_balance ?? "₦0.00";
+  const maxPayable = useMemo(
+    () =>
+      parseBalanceToNumber(walletBalance) +
+      parseBalanceToNumber(cashbackBalance),
+    [walletBalance, cashbackBalance],
+  );
+
   const selectedProvider = useDataStore.use.selectedProvider();
   const variationsCategorized = useDataStore.use.variationsCategorized();
   const variations = useDataStore.use.variations();
@@ -40,6 +57,7 @@ export default function DataVariationScreen() {
   ]);
 
   function handleSelect(v: DataVariation) {
+    if (!isDataPlanAffordable(v, maxPayable)) return;
     setSelectedVariation(v);
     router.push("/(app)/vtpass/data/amount");
   }
@@ -69,6 +87,7 @@ export default function DataVariationScreen() {
         <VariationPicker
           variationsCategorized={variationsCategorized}
           selectedCode={null}
+          maxPayable={maxPayable}
           onSelect={handleSelect}
           loading={isLoadingVariations}
           error={variationsError}

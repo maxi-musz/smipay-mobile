@@ -17,6 +17,7 @@ import {
   formatNaira,
   getIntlAirtimeCashbackRate,
   computeCashbackToEarn,
+  parseBalanceToNumber,
   POLL_FIRST_DELAY_MS,
   POLL_INTERVAL_MS,
   POLL_MAX_ELAPSED_MS,
@@ -162,6 +163,9 @@ export default function IntlAirtimeAmountScreen() {
   }, [processingModal.requestId, pollStatus]);
 
   const amount = parseInt(amountStr.replace(/\D/g, ""), 10) || 0;
+  const maxPayable =
+    parseBalanceToNumber(walletBalance) + parseBalanceToNumber(cashbackBalance);
+  const amountWithinFunds = amount <= maxPayable + 1e-9;
   const billersCodeTrimmed = billersCode.replace(/\s/g, "").replace(/\D/g, "");
   const billersCodeValid = billersCodeTrimmed.length >= 10;
   const phoneTrimmed = phone.replace(/\s/g, "").replace(/\D/g, "");
@@ -177,6 +181,7 @@ export default function IntlAirtimeAmountScreen() {
     !!selectedOperator &&
     !!selectedVariation &&
     amountValid &&
+    amountWithinFunds &&
     billersCodeValid &&
     phoneValid &&
     !purchasing;
@@ -214,6 +219,16 @@ export default function IntlAirtimeAmountScreen() {
       setFieldErrors((e) => ({
         ...e,
         phone: "Enter a valid phone number for notifications",
+      }));
+      return;
+    }
+    if (amount > maxPayable + 1e-9) {
+      setFieldErrors((e) => ({
+        ...e,
+        amount:
+          maxPayable <= 0
+            ? "Insufficient wallet and cashback balance"
+            : `Maximum ${formatNaira(maxPayable)} (wallet + cashback)`,
       }));
       return;
     }
@@ -373,7 +388,14 @@ export default function IntlAirtimeAmountScreen() {
             setFieldErrors((e) => ({ ...e, amount: undefined }));
           }}
           countryPrefix={selectedCountry.prefix}
-          amountError={fieldErrors.amount}
+          amountError={
+            fieldErrors.amount ??
+            (amount > 0 && !amountWithinFunds
+              ? maxPayable <= 0
+                ? "Insufficient wallet and cashback balance"
+                : `Maximum ${formatNaira(maxPayable)} (wallet + cashback)`
+              : undefined)
+          }
           billersCodeError={fieldErrors.billersCode}
           phoneError={fieldErrors.phone}
           onClearAmountError={() =>

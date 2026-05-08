@@ -8,11 +8,19 @@ import { colors } from "@/constants/colors";
 
 interface DataBalanceCardProps {
   walletBalance: string;
+  /** When set, shows cashback and total available (wallet + cashback) for buying plans. */
+  cashbackBalance?: string;
+  /** Pre-formatted, e.g. "₦9,145.50" — max you can spend on data. */
+  availableForPurchases?: string;
 }
 
 const HIDDEN_LABEL = "••••••";
 
-export function DataBalanceCard({ walletBalance }: DataBalanceCardProps) {
+export function DataBalanceCard({
+  walletBalance,
+  cashbackBalance,
+  availableForPurchases,
+}: DataBalanceCardProps) {
   const { isDark } = useAppTheme();
   const [visible, setVisible] = useState(true);
 
@@ -22,12 +30,12 @@ export function DataBalanceCard({ walletBalance }: DataBalanceCardProps) {
       style={{ backgroundColor: isDark ? "#1A2332" : "#1E293B" }}
     >
       <View className="flex-row items-center justify-between">
-        <View>
+        <View className="flex-1 min-w-0">
           <Text
             className="text-xs font-semibold uppercase tracking-wider"
             style={{ color: "rgba(255,255,255,0.6)" }}
           >
-            Balance
+            Wallet
           </Text>
           <Text
             className="mt-1 text-2xl font-bold"
@@ -35,6 +43,30 @@ export function DataBalanceCard({ walletBalance }: DataBalanceCardProps) {
           >
             {visible ? walletBalance : HIDDEN_LABEL}
           </Text>
+          {cashbackBalance != null && cashbackBalance !== "" && (
+            <View className="mt-3">
+              <Text
+                className="text-xs font-semibold uppercase tracking-wider"
+                style={{ color: "rgba(255,255,255,0.6)" }}
+              >
+                Cashback
+              </Text>
+              <Text className="mt-0.5 text-base font-semibold" style={{ color: "#fff" }}>
+                {visible ? cashbackBalance : HIDDEN_LABEL}
+              </Text>
+            </View>
+          )}
+          {availableForPurchases != null && availableForPurchases !== "" && (
+            <Text
+              className="mt-3 text-xs leading-snug"
+              style={{ color: "rgba(255,255,255,0.75)" }}
+            >
+              Available for data purchases (wallet + cashback):{" "}
+              <Text style={{ fontWeight: "700", color: "#fff" }}>
+                {visible ? availableForPurchases : HIDDEN_LABEL}
+              </Text>
+            </Text>
+          )}
         </View>
         <Pressable
           onPress={() => setVisible((v) => !v)}

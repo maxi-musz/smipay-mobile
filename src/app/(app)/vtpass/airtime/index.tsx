@@ -16,9 +16,11 @@ import {
   addRecentAirtime,
   getRecentEntryDisplay,
   PHONE_REGEX,
+  normalizeNgMobileDigits,
   parseMinMax,
   getAirtimeCashbackRate,
   computeCashbackToEarn,
+  parseBalanceToNumber,
 } from "@/features/vtpass-airtime";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
@@ -97,7 +99,9 @@ export default function VtpassAirtimeScreen() {
     const provider = providers.find((p) => p.serviceID === first.serviceID);
     if (provider) {
       setSelectedProvider(provider);
-      setPhone(getRecentEntryDisplay(first).replace(/\D/g, "").slice(0, 11));
+      setPhone(
+        normalizeNgMobileDigits(getRecentEntryDisplay(first).replace(/\D/g, "")),
+      );
       setHasPreFilled(true);
     }
   }, [recentList, providers, hasPreFilled]);
@@ -107,11 +111,16 @@ export default function VtpassAirtimeScreen() {
     : { min: 50, max: 100000 };
   const amount = parseInt(amountStr.replace(/\D/g, ""), 10) || 0;
   const amountValid = amount >= amountMin && amount <= amountMax;
-  const phoneValid = PHONE_REGEX.test(phone.replace(/\s/g, ""));
+  const phoneNormForValidation = normalizeNgMobileDigits(phone);
+  const phoneValid = PHONE_REGEX.test(phoneNormForValidation);
+  const maxPayable =
+    parseBalanceToNumber(walletBalance) + parseBalanceToNumber(cashbackBalance);
+  const amountWithinFunds = amount <= maxPayable + 1e-9;
   const canSubmit =
     selectedProvider &&
     phoneValid &&
     amountValid &&
+    amountWithinFunds &&
     !purchasing &&
     !loadingProviders;
 
@@ -132,8 +141,7 @@ export default function VtpassAirtimeScreen() {
   );
 
   function handlePhoneChange(text: string) {
-    const digits = text.replace(/\D/g, "").slice(0, 11);
-    setPhone(digits);
+    setPhone(normalizeNgMobileDigits(text));
     if (fieldErrors.phone) setFieldErrors((e) => ({ ...e, phone: undefined }));
   }
 
@@ -146,7 +154,7 @@ export default function VtpassAirtimeScreen() {
   function handleOpenConfirmModal() {
     if (!selectedProvider || !canSubmit) return;
 
-    const phoneNorm = phone.startsWith("0") ? phone : `0${phone}`;
+    const phoneNorm = normalizeNgMobileDigits(phone);
     if (!PHONE_REGEX.test(phoneNorm)) {
       setFieldErrors((e) => ({
         ...e,
@@ -161,6 +169,16 @@ export default function VtpassAirtimeScreen() {
       }));
       return;
     }
+    if (amount > maxPayable + 1e-9) {
+      setFieldErrors((e) => ({
+        ...e,
+        amount:
+          maxPayable <= 0
+            ? "Insufficient wallet and cashback balance"
+            : `Maximum ₦${maxPayable.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (wallet + cashback)`,
+      }));
+      return;
+    }
 
     setFieldErrors({});
     if (hasCashback) setUseCashback(true);
@@ -170,7 +188,7 @@ export default function VtpassAirtimeScreen() {
   async function handleConfirmPurchase() {
     if (!selectedProvider) return;
 
-    const phoneNorm = phone.startsWith("0") ? phone : `0${phone}`;
+    const phoneNorm = normalizeNgMobileDigits(phone);
     setPurchasing(true);
     try {
       const res = await purchaseAirtime({
@@ -230,7 +248,9 @@ export default function VtpassAirtimeScreen() {
   function handleSelectRecent(entry: { phone: string; serviceID: string }) {
     const provider = providers.find((p) => p.serviceID === entry.serviceID);
     if (provider) setSelectedProvider(provider);
-    setPhone(getRecentEntryDisplay(entry).replace(/\D/g, "").slice(0, 11));
+    setPhone(
+      normalizeNgMobileDigits(getRecentEntryDisplay(entry).replace(/\D/g, "")),
+    );
     if (fieldErrors.phone) setFieldErrors((e) => ({ ...e, phone: undefined }));
   }
 
@@ -262,7 +282,7 @@ export default function VtpassAirtimeScreen() {
         />
 
         <Animated.View
-          entering={FadeInDown.delay(50).duration(300).springify().damping(15)}
+          entering={FadeInDown.delay(50).duration(220)}
           className="mt-6"
         >
           <ProviderPhoneRow
@@ -290,7 +310,17 @@ export default function VtpassAirtimeScreen() {
           amountStr={amountStr}
           amountMin={amountMin}
           amountMax={amountMax}
-          error={fieldErrors.amount}
+          maxAffordable={maxPayable}
+          error={
+            fieldErrors.amount ??
+            (amount > 0 &&
+            amountValid &&
+            !amountWithinFunds
+              ? maxPayable <= 0
+                ? "Insufficient wallet and cashback balance"
+                : `Maximum ₦${maxPayable.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (wallet + cashback)`
+              : undefined)
+          }
           onAmountChange={handleAmountChange}
           onClearAmountError={() =>
             setFieldErrors((e) => ({ ...e, amount: undefined }))

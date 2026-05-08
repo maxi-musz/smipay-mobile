@@ -17,7 +17,7 @@ export function CashbackToggle({
 }: CashbackToggleProps) {
   return (
     <Animated.View
-      entering={FadeInDown.delay(200).duration(300).springify().damping(15)}
+      entering={FadeInDown.delay(200).duration(220)}
       className="mt-6 flex-row items-center justify-between rounded-2xl border border-border bg-card px-4 py-3"
     >
       <View className="flex-1">

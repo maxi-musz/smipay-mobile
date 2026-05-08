@@ -17,11 +17,13 @@ import {
   formatNaira,
   getDataCashbackRate,
   computeCashbackToEarn,
+  parseBalanceToNumber,
   DATA_PHONE_REGEX,
   POLL_FIRST_DELAY_MS,
   POLL_INTERVAL_MS,
   POLL_MAX_ELAPSED_MS,
 } from "@/features/vtpass-data/lib/constants";
+import { normalizeNgMobileDigits } from "@/features/vtpass-airtime/constants";
 import {
   getRecentData,
   addRecentData,
@@ -75,6 +77,10 @@ export default function DataAmountScreen() {
   const amount = selectedVariation?.variation_amount
     ? parseFloat(String(selectedVariation.variation_amount))
     : 0;
+
+  const maxPayable =
+    parseBalanceToNumber(walletBalance) + parseBalanceToNumber(cashbackBalance);
+  const amountWithinFunds = amount <= maxPayable + 1e-9;
 
   useEffect(() => {
     if (!selectedProvider || !selectedVariation) {
@@ -185,8 +191,8 @@ export default function DataAmountScreen() {
     pollStatus(requestId, true);
   }, [processingModal.requestId, pollStatus]);
 
-  const phoneNorm = phone.startsWith("0") ? phone : phone.length === 10 ? `0${phone}` : phone;
-  const phoneValid = DATA_PHONE_REGEX.test(phoneNorm.replace(/\s/g, ""));
+  const phoneNorm = normalizeNgMobileDigits(phone);
+  const phoneValid = DATA_PHONE_REGEX.test(phoneNorm);
   const hasCashback =
     !!cashbackBalance &&
     cashbackBalance !== "₦0.00" &&
@@ -207,6 +213,7 @@ export default function DataAmountScreen() {
     !!selectedProvider &&
     !!selectedVariation &&
     amount > 0 &&
+    amountWithinFunds &&
     phoneValid &&
     !purchasing;
 
@@ -214,6 +221,9 @@ export default function DataAmountScreen() {
     if (!canSubmit) return;
     if (!phoneValid) {
       setPhoneError("Enter a valid 11-digit phone number (e.g. 08012345678)");
+      return;
+    }
+    if (amount > maxPayable + 1e-9) {
       return;
     }
     setPhoneError(null);
@@ -315,7 +325,7 @@ export default function DataAmountScreen() {
 
   function handleSelectRecent(entry: DataRecentEntry) {
     setPhone(
-      getRecentDataEntryDisplay(entry).replace(/\D/g, "").slice(0, 11),
+      normalizeNgMobileDigits(getRecentDataEntryDisplay(entry).replace(/\D/g, "")),
     );
     setPhoneError(null);
     setShowContactMatchDisclaimer(false);
@@ -340,7 +350,7 @@ export default function DataAmountScreen() {
         />
 
         <Animated.View
-          entering={FadeInDown.delay(50).duration(300).springify().damping(15)}
+          entering={FadeInDown.delay(50).duration(300)}
           className="mt-8"
         >
           <Text className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -353,7 +363,7 @@ export default function DataAmountScreen() {
         </Animated.View>
 
         <Animated.View
-          entering={FadeInDown.delay(100).duration(300).springify().damping(15)}
+          entering={FadeInDown.delay(100).duration(300)}
           className="mt-8"
         >
           <Text className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -380,6 +390,14 @@ export default function DataAmountScreen() {
         {cashbackToEarn > 0 && (
           <Text className="mt-5 text-sm text-muted-foreground">
             {`You'll earn ₦${cashbackToEarn} cashback on this purchase`}
+          </Text>
+        )}
+
+        {amount > 0 && !amountWithinFunds && (
+          <Text className="mt-5 text-sm text-destructive">
+            {maxPayable <= 0
+              ? "Insufficient wallet and cashback balance for this plan."
+              : `This plan costs ${formatNaira(amount)}. Maximum you can pay is ${formatNaira(maxPayable)} (wallet + cashback).`}
           </Text>
         )}
 

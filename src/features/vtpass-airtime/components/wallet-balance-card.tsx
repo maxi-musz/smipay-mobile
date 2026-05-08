@@ -20,7 +20,7 @@ export function WalletBalanceCard({
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(300).springify().damping(15)}
+      entering={FadeInDown.duration(220)}
       className="mb-6 overflow-hidden rounded-2xl px-4 py-3"
       style={{ backgroundColor: isDark ? "#1A2332" : "#F0FDF4" }}
     >

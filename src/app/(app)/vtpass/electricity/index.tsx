@@ -149,7 +149,7 @@ export default function ElectricityIndexScreen() {
             />
 
             <Animated.View
-              entering={FadeInDown.delay(100).duration(300).springify().damping(15)}
+              entering={FadeInDown.delay(100).duration(300)}
               className="mt-6"
             >
               <MeterInput
@@ -173,7 +173,7 @@ export default function ElectricityIndexScreen() {
                 <CustomerInfoCard content={verifyData} />
 
                 <Animated.View
-                  entering={FadeInDown.delay(100).duration(300).springify().damping(15)}
+                  entering={FadeInDown.delay(100).duration(300)}
                   className="mt-8"
                 >
                   <Button

@@ -5,7 +5,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import { formatPhoneFromContact } from "@/features/vtpass-airtime/constants";
+import {
+  formatPhoneFromContact,
+  normalizeNgMobileDigits,
+} from "@/features/vtpass-airtime/constants";
 import { phoneMatchesProvider } from "@/features/vtpass-airtime/phone-network";
 import { cn } from "@/lib/utils";
 import type { DataServiceItem } from "@/types/vtpass-data";
@@ -43,12 +46,7 @@ export function DataPhoneRow({
   const showDisclaimer = possibleMismatch || showContactMatchDisclaimer;
 
   function handlePhoneChange(text: string) {
-    const digits = text.replace(/\D/g, "").slice(0, 11);
-    const normalized =
-      digits.length === 10 && !digits.startsWith("0")
-        ? "0" + digits
-        : digits;
-    onPhoneChange(normalized);
+    onPhoneChange(normalizeNgMobileDigits(text));
   }
 
   function formatDisplayPhone(value: string): string {

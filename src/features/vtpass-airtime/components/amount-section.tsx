@@ -17,6 +17,8 @@ interface AmountSectionProps {
   amountStr: string;
   amountMin: number;
   amountMax: number;
+  /** Caps quick amounts and placeholder hint to wallet + cashback (optional). */
+  maxAffordable?: number;
   error?: string;
   onAmountChange: (text: string) => void;
   onClearAmountError: () => void;
@@ -30,6 +32,7 @@ export function AmountSection({
   amountStr,
   amountMin,
   amountMax,
+  maxAffordable,
   error,
   onAmountChange,
   onClearAmountError,
@@ -45,6 +48,11 @@ export function AmountSection({
     rewardBanners,
   );
 
+  const effectiveMax =
+    maxAffordable != null && maxAffordable >= 0
+      ? Math.min(amountMax, maxAffordable)
+      : amountMax;
+
   function selectQuickAmount(value: number) {
     Keyboard.dismiss();
     onAmountChange(String(value));
@@ -52,7 +60,7 @@ export function AmountSection({
   }
 
   const validQuickAmounts = QUICK_AMOUNTS.filter(
-    (v) => v >= amountMin && v <= amountMax,
+    (v) => v >= amountMin && v <= effectiveMax,
   );
 
   const row1 = validQuickAmounts.slice(0, 3);
@@ -111,7 +119,7 @@ export function AmountSection({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(50).duration(300).springify().damping(15)}
+      entering={FadeInDown.delay(50).duration(220)}
       className="mt-6"
     >
       <Text className="mb-3 text-base font-semibold text-foreground">
@@ -140,7 +148,7 @@ export function AmountSection({
         <Text className="text-base font-medium text-muted-foreground">₦</Text>
         <TextInput
           className="flex-1 text-base font-medium text-foreground min-h-[24px] py-0"
-          placeholder={`${amountMin} - ${amountMax.toLocaleString()}`}
+          placeholder={`${amountMin} - ${effectiveMax.toLocaleString()}`}
           placeholderTextColor="#9CA3AF"
           value={amountStr}
           onChangeText={onAmountChange}
@@ -151,10 +159,28 @@ export function AmountSection({
           <Pressable
             onPress={onPay}
             disabled={!canSubmit}
-            className="rounded-lg px-4 py-2 active:opacity-80"
-            style={{ backgroundColor: colors.green[500] }}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !canSubmit }}
+            className={cn(
+              "rounded-lg px-4 py-2",
+              canSubmit && "active:opacity-80",
+            )}
+            style={{
+              backgroundColor: canSubmit
+                ? colors.green[500]
+                : isDark
+                  ? "#4b5563"
+                  : "#9ca3af",
+            }}
           >
-            <Text className="text-sm font-semibold text-white">Pay</Text>
+            <Text
+              className={cn(
+                "text-sm font-semibold",
+                canSubmit ? "text-white" : "text-gray-200",
+              )}
+            >
+              Pay
+            </Text>
           </Pressable>
         )}
       </View>

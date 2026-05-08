@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { cn } from "@/lib/utils";
 import { ONBOARDING_SLIDES, type OnboardingSlide } from "./constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -17,9 +18,13 @@ interface OnboardingScreenProps {
 }
 
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
+  const { isDark, theme } = useAppTheme();
   const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const { theme, isDark } = useAppTheme();
+
+  const gradientColors: [string, string] = isDark
+    ? [theme.background, theme.backgroundSecondary]
+    : ["#FFE5D2", "#FFF5EC"];
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = e.nativeEvent.contentOffset.x;
@@ -50,10 +55,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     router.push("/(auth)/sign-in");
   };
 
-  const gradientColors: [string, string] = isDark
-    ? [theme.background, theme.backgroundSecondary]
-    : ["#FFE5D2", "#FFF5EC"];
-
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <LinearGradient
@@ -77,8 +78,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
           />
 
           <View
-            className="mt-auto rounded-t-[56px] px-6 pb-10 pt-8 shadow-lg shadow-black/5"
-            style={{ backgroundColor: theme.card }}
+            className={cn(
+              "mt-auto rounded-t-[56px] px-6 pb-10 pt-8 shadow-lg",
+              isDark ? "shadow-black/40" : "shadow-black/5",
+            )}
+            style={{ backgroundColor: isDark ? theme.card : "#FFFFFF" }}
           >
             <View className="mb-5 flex-row justify-center gap-2">
               {ONBOARDING_SLIDES.map((_, i) => (
@@ -88,7 +92,11 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                   style={{
                     width: currentIndex === i ? 24 : 8,
                     backgroundColor:
-                      currentIndex === i ? colors.orange[500] : "#FACCAB",
+                      currentIndex === i
+                        ? colors.orange[500]
+                        : isDark
+                          ? "rgba(255,255,255,0.2)"
+                          : "#FACCAB",
                   }}
                 />
               ))}
@@ -107,7 +115,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
             <View className="mt-6 flex-row gap-3">
               <Button
-                className="flex-1 rounded-full"
+                className={cn(
+                  "flex-1 rounded-full border-orange-500/40",
+                  isDark ? "bg-orange-950/50" : "bg-orange-50",
+                )}
                 variant="outline"
                 style={{
                   backgroundColor: isDark ? theme.backgroundSecondary : colors.orange[50],
@@ -121,7 +132,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 className="flex-1 rounded-full"
                 onPress={handleNext}
               >
-                <Text>
+                <Text style={{ color: "#FFFFFF" }}>
                   {currentIndex === ONBOARDING_SLIDES.length - 1
                     ? "Create my account"
                     : "Next"}
@@ -144,10 +155,10 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
             <View className="mt-5 items-center">
               <View
-                className="h-1 w-24 rounded-full"
-                style={{
-                  backgroundColor: isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.12)",
-                }}
+                className={cn(
+                  "h-1 w-24 rounded-full",
+                  isDark ? "bg-white/15" : "bg-black/10",
+                )}
               />
             </View>
           </View>

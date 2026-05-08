@@ -1,4 +1,5 @@
 import type { CashbackRate, RewardBanner } from "@/types/homepage";
+import type { DataVariation } from "@/types/vtpass-data";
 
 const NAIRA_SYMBOL = "₦";
 
@@ -51,3 +52,19 @@ export const POLL_MAX_ELAPSED_MS = 5 * 60 * 1000;
 
 /** Nigerian phone: 11 digits, leading 0 (e.g. 08012345678). */
 export const DATA_PHONE_REGEX = /^0[789]\d{9}$/;
+
+export function dataPlanPriceNgn(plan: DataVariation): number {
+  if (plan.variation_amount == null || plan.variation_amount === "") return 0;
+  const n = parseFloat(String(plan.variation_amount));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Selectable when price is unknown (0) or within wallet + cashback. */
+export function isDataPlanAffordable(
+  plan: DataVariation,
+  maxPayable: number,
+): boolean {
+  const price = dataPlanPriceNgn(plan);
+  if (price <= 0) return true;
+  return price <= maxPayable + 1e-9;
+}

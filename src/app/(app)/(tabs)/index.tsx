@@ -64,17 +64,12 @@ export default function HomeScreen() {
         <BalanceCard
           walletBalance={data?.wallet_card?.current_balance ?? "₦0.00"}
           cashbackBalance={data?.cashback_wallet?.current_balance ?? "₦0.00"}
-          onAddMoneyPress={() => setAddMoneyModalVisible(true)}
+          // onAddMoneyPress={() => setAddMoneyModalVisible(true)} // temporarily hidden while funding is suspended
           loadFailed={loadFailed}
           onRetry={fetchHomepage}
         />
       </Animated.View>
 
-      <AccountDetailsModal
-        visible={addMoneyModalVisible}
-        onClose={() => setAddMoneyModalVisible(false)}
-        accounts={data?.accounts ?? []}
-      />
 
       <ScrollView
         className="flex-1"
@@ -110,7 +105,7 @@ export default function HomeScreen() {
         </Animated.View>
         <Animated.View>
           <RecentTransactions
-            transactions={(data?.transaction_history ?? []).slice(0, 2)}
+            transactions={(data?.transaction_history ?? []).slice(0, 3)}
             loadFailed={loadFailed}
             onRetry={fetchHomepage}
           />

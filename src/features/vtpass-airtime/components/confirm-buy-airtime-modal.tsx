@@ -84,6 +84,7 @@ export function ConfirmBuyAirtimeModal({
   const cashbackToApply =
     useCashback && hasCashback ? Math.min(cashbackNum, amount) : 0;
   const amountToPay = amount - cashbackToApply;
+  const walletNum = parseBalanceToNumber(walletBalance);
 
   return (
     <BottomSheetModal
@@ -194,9 +195,7 @@ export function ConfirmBuyAirtimeModal({
             Balance after purchase
           </Text>
           <Text className="text-sm font-semibold text-foreground">
-            {formatNaira(
-              Math.max(0, parseBalanceToNumber(walletBalance) - amountToPay),
-            )}
+            {formatNaira(Math.max(0, walletNum - amountToPay))}
           </Text>
         </View>
 
@@ -206,7 +205,7 @@ export function ConfirmBuyAirtimeModal({
           className="w-full rounded-xl"
           style={{ backgroundColor: colors.green[500] }}
           onPress={onConfirm}
-          disabled={purchasing}
+          disabled={purchasing || walletNum + 1e-9 < amountToPay}
         >
           {purchasing ? (
             <Spinner color="#fff" size="small" />

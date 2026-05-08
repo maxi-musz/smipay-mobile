@@ -7,7 +7,7 @@ import { BottomSheetModal } from "@/components/ui/modals";
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
 import { getNetworkProviderLogo } from "@/lib/network-provider-logo";
-import { formatPhoneFromContact } from "../constants";
+import { formatPhoneFromContact, normalizeNgMobileDigits } from "../constants";
 import { getServiceIdFromPhone, phoneMatchesProvider } from "../phone-network";
 import { cn } from "@/lib/utils";
 import type { AirtimeServiceItem } from "@/types/vtpass-airtime";
@@ -100,8 +100,7 @@ export function ProviderPhoneRow({
   const showDisclaimer = possibleMismatch || showContactMatchDisclaimer;
 
   function handlePhoneChange(text: string) {
-    const digits = text.replace(/\D/g, "").slice(0, 11);
-    onPhoneChange(digits);
+    onPhoneChange(normalizeNgMobileDigits(text));
   }
 
   function formatDisplayPhone(value: string): string {
@@ -176,7 +175,7 @@ export function ProviderPhoneRow({
         >
           <TextInput
             className="flex-1 text-base font-medium text-foreground min-h-[24px] py-0"
-            placeholder="Phone number"
+            placeholder="08012345678"
             placeholderTextColor="#9CA3AF"
             value={formatDisplayPhone(phone)}
             onChangeText={handlePhoneChange}

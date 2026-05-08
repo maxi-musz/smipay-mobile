@@ -275,6 +275,8 @@ export default function ElectricityPurchaseScreen() {
       amount,
       phone: phone.trim(),
       use_cashback: useCashback,
+      ...(verifyData?.Customer_Name ? { customer_name: verifyData.Customer_Name } : {}),
+      ...(verifyData?.Address ? { customer_address: verifyData.Address } : {}),
     };
 
     setPurchasing(true);
@@ -397,7 +399,7 @@ export default function ElectricityPurchaseScreen() {
 
         {/* Order Summary */}
         <Animated.View
-          entering={FadeInDown.delay(50).duration(300).springify().damping(15)}
+          entering={FadeInDown.delay(50).duration(300)}
         >
           <Text className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
             Order summary
@@ -446,7 +448,7 @@ export default function ElectricityPurchaseScreen() {
 
         {/* Amount */}
         <Animated.View
-          entering={FadeInDown.delay(100).duration(300).springify().damping(15)}
+          entering={FadeInDown.delay(100).duration(300)}
           className="mt-6"
         >
           <Text className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -507,7 +509,7 @@ export default function ElectricityPurchaseScreen() {
 
         {/* Phone */}
         <Animated.View
-          entering={FadeInDown.delay(150).duration(300).springify().damping(15)}
+          entering={FadeInDown.delay(150).duration(300)}
           className="mt-6"
         >
           <Text className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">

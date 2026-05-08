@@ -26,9 +26,13 @@ if (__DEV__) {
   console.log(`[API] Base URL: ${API_BASE_URL}`);
 }
 
+const DEFAULT_TIMEOUT_MS = Number(
+  process.env.EXPO_PUBLIC_API_TIMEOUT_MS ?? 120_000,
+);
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30_000,
+  timeout: DEFAULT_TIMEOUT_MS,
   headers: { "Content-Type": "application/json" },
 });
 
@@ -174,6 +178,19 @@ api.interceptors.response.use(
     }
 
     if (axios.isAxiosError(error)) {
+      if (
+        !error.response &&
+        (error.code === "ECONNABORTED" ||
+          (error.message || "").toLowerCase().includes("timeout"))
+      ) {
+        return Promise.reject(
+          new ApiClientError(
+            "This request took too long. Your payment may still be processing — check your transaction history before trying again.",
+            408,
+          ),
+        );
+      }
+
       const status = error.response?.status;
       const responseData = error.response?.data as
         | { message?: string }

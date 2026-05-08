@@ -13,6 +13,7 @@ export {
   parseMinMax,
   parseBalanceToNumber,
   formatPhoneFromContact,
+  normalizeNgMobileDigits,
   getAirtimeCashbackRate,
   computeCashbackToEarn,
 } from "./constants";
