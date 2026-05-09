@@ -23,7 +23,6 @@ import {
   parseBalanceToNumber,
 } from "@/features/vtpass-airtime";
 import { FullPageLoader } from "@/components/ui/loaders";
-import { Text } from "@/components/ui/text";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { useAirtimeStore, useHomepageStore } from "@/store";
 import { handleApiError } from "@/lib/errors";
