@@ -20,7 +20,9 @@ import Animated, {
 
 import {
   requestTransactionPinSetupOtp,
+  requestTransactionPinUpdateOtp,
   verifyTransactionPinSetupOtp,
+  verifyTransactionPinUpdateOtp,
   type TransactionPinOtpErrorData,
 } from "@/api";
 import { Spinner } from "@/components/ui/loaders";
@@ -31,8 +33,29 @@ import { useAppTheme } from "@/hooks/use-app-theme";
 import { ApiClientError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+/**
+ * Modal that powers the OTP-gated 4-digit transaction PIN flow.
+ *
+ * Supports two modes:
+ *   - `"set"`     → first-time setup. Used compulsorily on the dashboard
+ *                   when `is_four_digit_pin_set === false`.
+ *   - `"update"`  → change an existing PIN. Triggered from Profile → Security.
+ *
+ * Each mode hits its own backend endpoints but shares the entire UI, error
+ * handling, and cooldown logic. `dismissable` controls whether the user can
+ * close the modal (compulsory dashboard usage stays non-dismissable).
+ */
 interface SetTransactionPinModalProps {
   visible: boolean;
+  /** Defaults to `"set"` to preserve the legacy dashboard behaviour. */
+  mode?: "set" | "update";
+  /**
+   * When `true`, the user can dismiss via close button / backdrop / hardware
+   * back. Defaults to `false` for the mandatory dashboard flow.
+   */
+  dismissable?: boolean;
+  /** Called when the user dismisses the modal (only when `dismissable`). */
+  onClose?: () => void;
   /** Called once the PIN has been verified and persisted server-side. */
   onSuccess?: () => void | Promise<void>;
 }
@@ -55,10 +78,24 @@ function readPinOtpErrorData(
 
 export function SetTransactionPinModal({
   visible,
+  mode = "set",
+  dismissable = false,
+  onClose,
   onSuccess,
 }: SetTransactionPinModalProps) {
   const { isDark } = useAppTheme();
   const showToast = useToastStore((s) => s.show);
+
+  const isUpdate = mode === "update";
+
+  // Pick the matching backend endpoints once per render. Both pairs share
+  // the exact same response/error shapes so no other branching is needed.
+  const requestOtpFn = isUpdate
+    ? requestTransactionPinUpdateOtp
+    : requestTransactionPinSetupOtp;
+  const verifyOtpFn = isUpdate
+    ? verifyTransactionPinUpdateOtp
+    : verifyTransactionPinSetupOtp;
 
   const [step, setStep] = useState<Step>("pin");
   const [pin, setPin] = useState("");
@@ -181,7 +218,7 @@ export function SetTransactionPinModal({
     setError(null);
     setAttemptsRemaining(null);
     try {
-      const res = await requestTransactionPinSetupOtp();
+      const res = await requestOtpFn();
       const expires = res.data?.expires_at
         ? new Date(res.data.expires_at).getTime()
         : Date.now() + (res.data?.ttl_ms ?? 5 * 60 * 1000);
@@ -208,11 +245,13 @@ export function SetTransactionPinModal({
     setVerifying(true);
     setError(null);
     try {
-      await verifyTransactionPinSetupOtp({ pin, otp });
+      await verifyOtpFn({ pin, otp });
       showToast({
         variant: "success",
-        title: "Transaction PIN set",
-        message: "Your purchases are now protected by your 4-digit PIN.",
+        title: isUpdate ? "Transaction PIN updated" : "Transaction PIN set",
+        message: isUpdate
+          ? "Your new 4-digit PIN is now active."
+          : "Your purchases are now protected by your 4-digit PIN.",
       });
       setAttemptsRemaining(null);
       await onSuccess?.();
@@ -272,7 +311,7 @@ export function SetTransactionPinModal({
     setError(null);
     setAttemptsRemaining(null);
     try {
-      const res = await requestTransactionPinSetupOtp();
+      const res = await requestOtpFn();
       const expires = res.data?.expires_at
         ? new Date(res.data.expires_at).getTime()
         : Date.now() + (res.data?.ttl_ms ?? 5 * 60 * 1000);
@@ -298,24 +337,46 @@ export function SetTransactionPinModal({
   const slotActive = colors.orange[500];
   const subtleText = isDark ? "#94A3B8" : "#6B7280";
 
+  /**
+   * Closing is only allowed when explicitly opted-in via `dismissable`. The
+   * dashboard usage stays mandatory, while the security-screen usage is
+   * cancellable from any of: hardware back, backdrop press, or the close (X)
+   * button. While a network call is in flight, dismissal is ignored to keep
+   * the request → response cycle consistent.
+   */
+  function handleDismiss() {
+    if (!dismissable) return;
+    if (requesting || verifying) return;
+    Keyboard.dismiss();
+    onClose?.();
+  }
+
   return (
     <Modal
       visible={visible}
       transparent
       animationType="none"
       statusBarTranslucent
-      // Hardware back / Esc cannot dismiss — the PIN setup is required.
-      onRequestClose={() => {}}
+      onRequestClose={dismissable ? handleDismiss : () => {}}
     >
       <Animated.View
         entering={FadeIn.duration(200)}
         exiting={FadeOut.duration(150)}
         className="flex-1 bg-black/70"
       >
+        {dismissable ? (
+          <Pressable
+            className="absolute inset-0"
+            onPress={handleDismiss}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          />
+        ) : null}
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           className="flex-1 items-center justify-center px-6"
           style={{ flex: 1 }}
+          pointerEvents="box-none"
         >
         <Animated.View
           style={[cardStyle, { backgroundColor: cardBg }]}
@@ -330,29 +391,54 @@ export function SetTransactionPinModal({
               />
             </View>
             <View className="flex-1">
-              <View
-                className="self-start rounded-full px-2 py-0.5"
+              {!dismissable ? (
+                <View
+                  className="self-start rounded-full px-2 py-0.5"
+                  style={{
+                    backgroundColor: isDark
+                      ? "rgba(245,131,32,0.16)"
+                      : "rgba(245,131,32,0.12)",
+                  }}
+                >
+                  <Text
+                    className="text-[10px] font-bold uppercase tracking-wider"
+                    style={{ color: colors.orange[500] }}
+                  >
+                    Required
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            {dismissable ? (
+              <Pressable
+                onPress={handleDismiss}
+                disabled={requesting || verifying}
+                hitSlop={10}
+                className="h-9 w-9 items-center justify-center rounded-full active:opacity-70"
                 style={{
                   backgroundColor: isDark
-                    ? "rgba(245,131,32,0.16)"
-                    : "rgba(245,131,32,0.12)",
+                    ? "rgba(255,255,255,0.06)"
+                    : "rgba(15,23,42,0.06)",
                 }}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
               >
-                <Text
-                  className="text-[10px] font-bold uppercase tracking-wider"
-                  style={{ color: colors.orange[500] }}
-                >
-                  Required
-                </Text>
-              </View>
-            </View>
+                <Ionicons
+                  name="close"
+                  size={18}
+                  color={isDark ? "#E5E7EB" : "#1F2937"}
+                />
+              </Pressable>
+            ) : null}
           </View>
 
           <Text className="mt-4 text-xl font-semibold text-foreground">
             {changePinConfirmOpen
               ? "Change your PIN?"
               : step === "pin"
-                ? "Add a security layer to your account"
+                ? isUpdate
+                  ? "Update your transaction PIN"
+                  : "Add a security layer to your account"
                 : "Verify it's you"}
           </Text>
           <Text
@@ -362,8 +448,12 @@ export function SetTransactionPinModal({
             {changePinConfirmOpen
               ? "We'll send you a new 6-digit code so you can confirm a different PIN. The code we just emailed will no longer be needed."
               : step === "pin"
-                ? "Set a 4-digit transaction PIN to protect every purchase, transfer and withdrawal on your SmiPay account. This is required before you can continue."
-                : "We sent a 6-digit code to your email. Enter it below to confirm your new PIN."}
+                ? isUpdate
+                  ? "Choose a new 4-digit transaction PIN. Your current PIN stays active until you finish verification."
+                  : "Set a 4-digit transaction PIN to protect every purchase, transfer and withdrawal on your SmiPay account. This is required before you can continue."
+                : isUpdate
+                  ? "We sent a 6-digit code to your email. Enter it below to confirm your new PIN."
+                  : "We sent a 6-digit code to your email. Enter it below to confirm your new PIN."}
           </Text>
 
           {/* PIN — full slot UI on step 1, hidden on step 2 / confirm view. */}

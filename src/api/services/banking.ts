@@ -99,3 +99,29 @@ export async function verifyTransactionPinSetupOtp(payload: {
   );
   return data;
 }
+
+/**
+ * Step 1 of the transaction PIN *update* flow (security screen → "Update
+ * transaction PIN"). Returns the same shape as the setup OTP request so the
+ * mobile modal can drive the countdown + cooldown UI off a single contract.
+ */
+export async function requestTransactionPinUpdateOtp(): Promise<
+  ApiResponse<RequestTransactionPinOtpData>
+> {
+  const { data } = await api.post<ApiResponse<RequestTransactionPinOtpData>>(
+    `${BANKING}/user-wallet/transaction-pin/update/request-otp`,
+  );
+  return data;
+}
+
+/** Step 2 of the update flow: verify the OTP and replace the stored PIN hash. */
+export async function verifyTransactionPinUpdateOtp(payload: {
+  pin: string;
+  otp: string;
+}): Promise<ApiResponse<VerifyTransactionPinOtpData>> {
+  const { data } = await api.post<ApiResponse<VerifyTransactionPinOtpData>>(
+    `${BANKING}/user-wallet/transaction-pin/update/verify-and-set`,
+    payload,
+  );
+  return data;
+}

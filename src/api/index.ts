@@ -53,6 +53,8 @@ export {
   fetchUserWallet,
   requestTransactionPinSetupOtp,
   verifyTransactionPinSetupOtp,
+  requestTransactionPinUpdateOtp,
+  verifyTransactionPinUpdateOtp,
   type RequestTransactionPinOtpData,
   type VerifyTransactionPinOtpData,
   type TransactionPinOtpErrorData,
