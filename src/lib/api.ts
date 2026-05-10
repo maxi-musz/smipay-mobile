@@ -193,13 +193,13 @@ api.interceptors.response.use(
 
       const status = error.response?.status;
       const responseData = error.response?.data as
-        | { message?: string }
+        | (Record<string, unknown> & { message?: string })
         | undefined;
 
       const message =
         responseData?.message ?? error.message ?? "Something went wrong";
 
-      return Promise.reject(new ApiClientError(message, status));
+      return Promise.reject(new ApiClientError(message, status, responseData));
     }
 
     return Promise.reject(
@@ -212,6 +212,12 @@ export class ApiClientError extends Error {
   constructor(
     message: string,
     public statusCode?: number,
+    /**
+     * The full JSON body returned by the server (when present). Useful for
+     * structured error payloads — e.g. `{ retry_after_seconds, attempts_remaining }`
+     * — that callers want to react to in the UI.
+     */
+    public data?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "ApiClientError";

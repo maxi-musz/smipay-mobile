@@ -3,6 +3,8 @@ export interface HomepageUser {
   smipay_tag: string;
   name: string;
   isTransactionPinSetup: boolean;
+  /** True when the user has set their 4-digit transaction PIN. */
+  is_four_digit_pin_set?: boolean;
   phone_number: string;
   first_name: string;
   last_name: string;

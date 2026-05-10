@@ -8,3 +8,4 @@ export { FundingResultSheet } from "./funding-result-sheet";
 export { PromoBanner } from "./promo-banner";
 export { ServicesGrid } from "./services-grid";
 export { RecentTransactions } from "./recent-transactions";
+export { SetTransactionPinModal } from "./set-transaction-pin-modal";

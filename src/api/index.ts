@@ -51,6 +51,11 @@ export {
   verifyPaystackFunding,
   cancelPaystackFunding,
   fetchUserWallet,
+  requestTransactionPinSetupOtp,
+  verifyTransactionPinSetupOtp,
+  type RequestTransactionPinOtpData,
+  type VerifyTransactionPinOtpData,
+  type TransactionPinOtpErrorData,
 } from "./services/banking";
 export {
   fetchAirtimeServiceIds,
