@@ -4,9 +4,19 @@ import type {
   InitialisePaystackData,
   VerifyPaystackData,
   CancelPaystackData,
+  UserWalletSnapshotData,
 } from "@/types/banking";
 
 const BANKING = "/banking";
+
+export async function fetchUserWallet(): Promise<
+  ApiResponse<UserWalletSnapshotData>
+> {
+  const { data } = await api.get<ApiResponse<UserWalletSnapshotData>>(
+    `${BANKING}/user-wallet`,
+  );
+  return data;
+}
 
 export async function initialisePaystackFunding(
   amount: number,

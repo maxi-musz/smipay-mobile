@@ -48,6 +48,8 @@ export interface ProfileUser {
   smipay_tag?: string;
   /** True if user has requested account deletion; show pending state and cancel option. */
   requested_account_deletion?: boolean;
+  /** From fetch-user-profile: whether a 4-digit transaction PIN exists on the account. */
+  is_four_digit_pin_set?: boolean;
 }
 
 export interface ProfileAddress {

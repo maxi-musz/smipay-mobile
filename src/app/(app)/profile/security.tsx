@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Keyboard, Modal, Pressable, ScrollView, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { Stack, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -13,7 +14,7 @@ import { useToastStore } from "@/components/ui/toast";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { authenticate, getBiometricsAvailability, getBiometricLabel } from "@/lib/biometrics";
 import { canUseRequireAuthentication } from "@/lib/secure-storage";
-import { useAppStore, useAuthStore } from "@/store";
+import { useAppStore, useAuthStore, useProfileStore } from "@/store";
 import type { LockTimeout } from "@/store/app.store";
 
 const LOCK_OPTIONS: { value: LockTimeout; label: string; description: string }[] = [
@@ -38,6 +39,11 @@ export default function SecurityScreen() {
   const [enablePassword, setEnablePassword] = useState("");
   const [enableLoading, setEnableLoading] = useState(false);
   const [enableError, setEnableError] = useState("");
+  const [appLockExpanded, setAppLockExpanded] = useState(false);
+
+  const profileData = useProfileStore.use.data();
+  const fetchProfile = useProfileStore.use.fetchProfile();
+  const profileLoading = useProfileStore.use.isLoading();
 
   const email = user?.email ?? "";
   const cardBg = isDark ? "#1E293B" : "#F5F6F8";
@@ -51,6 +57,16 @@ export default function SecurityScreen() {
       setBiometricLabel(getBiometricLabel(a));
     });
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchProfile();
+    }, [fetchProfile]),
+  );
+
+  const selectedLock =
+    LOCK_OPTIONS.find((o) => o.value === lockTimeout) ?? LOCK_OPTIONS[0];
+  const pinSet = profileData?.user?.is_four_digit_pin_set === true;
 
   async function handleBiometricsSwitch(value: boolean) {
     if (value) {
@@ -121,45 +137,81 @@ export default function SecurityScreen() {
         >
           {/* App Lock */}
           <View className="mt-4 overflow-hidden rounded-2xl" style={{ backgroundColor: cardBg }}>
-            <Text className="px-4 pt-4 text-sm font-semibold text-muted-foreground">
-              App Lock
-            </Text>
-            {LOCK_OPTIONS.map((option, index) => {
-              const isSelected = lockTimeout === option.value;
-              return (
-                <View key={option.value}>
-                  {index > 0 && <View style={{ height: 1, backgroundColor: dividerColor }} />}
-                  <Pressable
-                    className="flex-row items-center px-4 py-3.5 active:opacity-70"
-                    onPress={() => setLockTimeout(option.value)}
-                    style={isSelected ? { backgroundColor: isDark ? "#1E3A5F" : "#FFF3E8" } : undefined}
-                  >
-                    <View className="flex-1">
-                      <Text
-                        className="text-[15px] text-foreground"
-                        style={isSelected ? { fontWeight: "600" } : undefined}
-                      >
-                        {option.label}
-                      </Text>
-                      <Text className="mt-0.5 text-xs text-muted-foreground">
-                        {option.description}
-                      </Text>
-                    </View>
-                    <View
-                      className="ml-3 h-5 w-5 items-center justify-center rounded-full"
-                      style={{
-                        borderWidth: 2,
-                        borderColor: isSelected ? "#F4831F" : chevronColor,
-                      }}
+            <Pressable
+              onPress={() => setAppLockExpanded((e) => !e)}
+              className="flex-row items-center px-4 pt-4 pb-3 active:opacity-70"
+              accessibilityRole="button"
+              accessibilityState={{ expanded: appLockExpanded }}
+              accessibilityHint="Shows options for when the app locks automatically"
+            >
+              <View className="flex-1">
+                <Text className="text-sm font-semibold text-muted-foreground">App Lock</Text>
+                {!appLockExpanded ? (
+                  <>
+                    <Text
+                      className="mt-1 text-[15px] text-foreground"
+                      style={{ fontWeight: "600" }}
                     >
-                      {isSelected && (
-                        <View className="h-2.5 w-2.5 rounded-full bg-primary" />
-                      )}
+                      {selectedLock.label}
+                    </Text>
+                    <Text className="mt-0.5 text-xs text-muted-foreground" numberOfLines={2}>
+                      {selectedLock.description}
+                    </Text>
+                  </>
+                ) : (
+                  <Text className="mt-1 text-xs text-muted-foreground">
+                    Choose when the app should require unlock
+                  </Text>
+                )}
+              </View>
+              <Ionicons
+                name={appLockExpanded ? "chevron-up" : "chevron-down"}
+                size={22}
+                color={chevronColor}
+              />
+            </Pressable>
+            {appLockExpanded
+              ? LOCK_OPTIONS.map((option) => {
+                  const isSelected = lockTimeout === option.value;
+                  return (
+                    <View key={option.value}>
+                      <View style={{ height: 1, backgroundColor: dividerColor }} />
+                      <Pressable
+                        className="flex-row items-center px-4 py-3.5 active:opacity-70"
+                        onPress={() => setLockTimeout(option.value)}
+                        style={
+                          isSelected
+                            ? { backgroundColor: isDark ? "#1E3A5F" : "#FFF3E8" }
+                            : undefined
+                        }
+                      >
+                        <View className="flex-1">
+                          <Text
+                            className="text-[15px] text-foreground"
+                            style={isSelected ? { fontWeight: "600" } : undefined}
+                          >
+                            {option.label}
+                          </Text>
+                          <Text className="mt-0.5 text-xs text-muted-foreground">
+                            {option.description}
+                          </Text>
+                        </View>
+                        <View
+                          className="ml-3 h-5 w-5 items-center justify-center rounded-full"
+                          style={{
+                            borderWidth: 2,
+                            borderColor: isSelected ? "#F4831F" : chevronColor,
+                          }}
+                        >
+                          {isSelected && (
+                            <View className="h-2.5 w-2.5 rounded-full bg-primary" />
+                          )}
+                        </View>
+                      </Pressable>
                     </View>
-                  </Pressable>
-                </View>
-              );
-            })}
+                  );
+                })
+              : null}
           </View>
 
           {/* Biometrics */}
@@ -187,6 +239,37 @@ export default function SecurityScreen() {
               onValueChange={handleBiometricsSwitch}
               disabled={!biometricsAvailable}
             />
+          </View>
+
+          {/* Transaction PIN */}
+          <View className="mt-6 overflow-hidden rounded-2xl px-4 py-4" style={{ backgroundColor: cardBg }}>
+            <Text className="text-sm font-semibold text-muted-foreground">Transaction PIN</Text>
+            {profileLoading && !profileData ? (
+              <Text className="mt-3 text-sm text-muted-foreground">Loading…</Text>
+            ) : pinSet ? (
+              <Button
+                variant="outline"
+                className="mt-3 rounded-xl"
+                onPress={() => {
+                  /* PIN update flow — to be implemented */
+                }}
+              >
+                <Text className="font-semibold text-foreground">Update transaction PIN</Text>
+              </Button>
+            ) : (
+              <Pressable
+                className="mt-3 active:opacity-70"
+                onPress={() => {
+                  /* PIN setup flow — to be implemented */
+                }}
+                accessibilityRole="button"
+              >
+                <Text className="text-sm leading-5 text-muted-foreground">
+                  You haven&apos;t set your four digit transaction PIN.{" "}
+                  <Text className="font-semibold text-primary">Set it now</Text>
+                </Text>
+              </Pressable>
+            )}
           </View>
         </ScrollView>
       </View>

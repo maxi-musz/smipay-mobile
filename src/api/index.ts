@@ -50,6 +50,7 @@ export {
   initialisePaystackFunding,
   verifyPaystackFunding,
   cancelPaystackFunding,
+  fetchUserWallet,
 } from "./services/banking";
 export {
   fetchAirtimeServiceIds,

@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
+import { fetchUserWallet } from "@/api";
 import { purchaseAirtime } from "@/api/services/vtpass-airtime";
 import {
   AirtimeHeader,
@@ -25,6 +26,7 @@ import {
 import { FullPageLoader } from "@/components/ui/loaders";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { useAirtimeStore, useHomepageStore } from "@/store";
+import { ApiClientError } from "@/lib/api";
 import { handleApiError } from "@/lib/errors";
 import type { AirtimeServiceItem } from "@/types/vtpass-airtime";
 
@@ -47,6 +49,14 @@ export default function VtpassAirtimeScreen() {
   const [amountStr, setAmountStr] = useState("");
   const [useCashback, setUseCashback] = useState(false);
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [confirmSnapshot, setConfirmSnapshot] = useState<{
+    wallet: string;
+    cashback: string;
+  } | null>(null);
+  const [confirmWalletLoading, setConfirmWalletLoading] = useState(false);
+  const [confirmWalletError, setConfirmWalletError] = useState<string | null>(
+    null,
+  );
   const [recentList, setRecentList] = useState<
     { phone: string; serviceID: string }[]
   >([]);
@@ -114,12 +124,11 @@ export default function VtpassAirtimeScreen() {
   const phoneValid = PHONE_REGEX.test(phoneNormForValidation);
   const maxPayable =
     parseBalanceToNumber(walletBalance) + parseBalanceToNumber(cashbackBalance);
-  const amountWithinFunds = amount <= maxPayable + 1e-9;
+  /** Stale homepage hint only (quick amounts); Pay uses fresh /banking/user-wallet in the modal */
   const canSubmit =
     selectedProvider &&
     phoneValid &&
     amountValid &&
-    amountWithinFunds &&
     !purchasing &&
     !loadingProviders;
 
@@ -138,6 +147,44 @@ export default function VtpassAirtimeScreen() {
     percentage,
     maxPerTransaction,
   );
+
+  useLayoutEffect(() => {
+    if (confirmModalVisible) {
+      setUseCashback(false);
+    }
+  }, [confirmModalVisible]);
+
+  const refreshConfirmBalances = useCallback(async () => {
+    setConfirmWalletError(null);
+    setConfirmWalletLoading(true);
+    try {
+      const res = await fetchUserWallet();
+      if (!res.success || !res.data) {
+        setConfirmWalletError(
+          res.message ?? "Could not load your wallet. Try again.",
+        );
+        setConfirmSnapshot(null);
+        return;
+      }
+      const cashback =
+        res.data.cashback_wallet?.current_balance ?? "₦0.00";
+      setConfirmSnapshot({
+        wallet: res.data.wallet.current_balance,
+        cashback,
+      });
+    } catch (e) {
+      const message =
+        e instanceof ApiClientError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : "Could not load your wallet. Try again.";
+      setConfirmWalletError(message);
+      setConfirmSnapshot(null);
+    } finally {
+      setConfirmWalletLoading(false);
+    }
+  }, []);
 
   function handlePhoneChange(text: string) {
     setPhone(normalizeNgMobileDigits(text));
@@ -168,20 +215,21 @@ export default function VtpassAirtimeScreen() {
       }));
       return;
     }
-    if (amount > maxPayable + 1e-9) {
-      setFieldErrors((e) => ({
-        ...e,
-        amount:
-          maxPayable <= 0
-            ? "Insufficient wallet and cashback balance"
-            : `Maximum ₦${maxPayable.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (wallet + cashback)`,
-      }));
-      return;
-    }
 
     setFieldErrors({});
-    if (hasCashback) setUseCashback(true);
+    setConfirmSnapshot(null);
+    setConfirmWalletError(null);
     setConfirmModalVisible(true);
+    setConfirmWalletLoading(true);
+    void refreshConfirmBalances();
+  }
+
+  function closeConfirmModal() {
+    setConfirmModalVisible(false);
+    setUseCashback(false);
+    setConfirmSnapshot(null);
+    setConfirmWalletError(null);
+    setConfirmWalletLoading(false);
   }
 
   async function handleConfirmPurchase() {
@@ -198,7 +246,7 @@ export default function VtpassAirtimeScreen() {
       });
 
       if (res.success && res.data) {
-        setConfirmModalVisible(false);
+        closeConfirmModal();
         await addRecentAirtime(phoneNorm, selectedProvider.serviceID);
         const updated = await getRecentAirtime();
         setRecentList(updated);
@@ -310,16 +358,7 @@ export default function VtpassAirtimeScreen() {
           amountMin={amountMin}
           amountMax={amountMax}
           maxAffordable={maxPayable}
-          error={
-            fieldErrors.amount ??
-            (amount > 0 &&
-            amountValid &&
-            !amountWithinFunds
-              ? maxPayable <= 0
-                ? "Insufficient wallet and cashback balance"
-                : `Maximum ₦${maxPayable.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (wallet + cashback)`
-              : undefined)
-          }
+          error={fieldErrors.amount}
           onAmountChange={handleAmountChange}
           onClearAmountError={() =>
             setFieldErrors((e) => ({ ...e, amount: undefined }))
@@ -339,18 +378,21 @@ export default function VtpassAirtimeScreen() {
 
       <ConfirmBuyAirtimeModal
         visible={confirmModalVisible}
-        onClose={() => setConfirmModalVisible(false)}
+        onClose={closeConfirmModal}
         productName={selectedProvider?.name ?? "Airtime"}
         selectedProvider={selectedProvider}
         recipientPhone={phone.startsWith("0") ? phone : `0${phone}`}
         amount={amount}
-        cashbackBalance={cashbackBalance}
+        cashbackBalance={confirmSnapshot?.cashback ?? "₦0.00"}
         cashbackToEarn={cashbackToEarn}
         useCashback={useCashback}
         onUseCashbackChange={setUseCashback}
         onConfirm={handleConfirmPurchase}
         purchasing={purchasing}
-        walletBalance={walletBalance}
+        walletBalance={confirmSnapshot?.wallet ?? "₦0.00"}
+        balancesLoading={confirmWalletLoading}
+        balancesError={confirmWalletError}
+        onRetryBalances={refreshConfirmBalances}
       />
 
       <AlertModal

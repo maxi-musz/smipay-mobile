@@ -13,6 +13,9 @@ import type { CashbackRate, RewardBanner } from "@/types/homepage";
 
 const QUICK_AMOUNTS = [50, 100, 200, 500, 1000, 2000];
 
+/** Reserves one line of space for every tile so amounts align with cashback rows */
+const CASHBACK_STRIP_MIN_HEIGHT = 28;
+
 interface AmountSectionProps {
   amountStr: string;
   amountMin: number;
@@ -74,36 +77,50 @@ export function AmountSection({
       maxPerTransaction,
     );
     const showCashback = cashbackToEarn > 0;
+    const hasCashbackProgram = percentage > 0;
+
+    const stripBg = hasCashbackProgram
+      ? isDark
+        ? colors.green[950]
+        : colors.green[100]
+      : isDark
+        ? colors.gray[800]
+        : colors.gray[200];
+    const cashbackColor = isDark ? colors.green[300] : colors.green[700];
+    const noEarnTint = isDark
+      ? "rgba(134, 239, 172, 0.43)"
+      : "rgba(22, 101, 52, 0.45)";
 
     return (
       <Pressable
         key={value}
         onPress={() => selectQuickAmount(value)}
         className={cn(
-          "flex-1 rounded-xl border overflow-hidden min-w-0",
+          "flex-1 flex-col min-w-0 rounded-xl border overflow-hidden",
           isSelected
             ? "border-primary bg-primary/15"
             : "border-border bg-muted/50 active:bg-muted",
         )}
       >
-        {showCashback && (
-          <View
-            className="px-3 py-1"
-            style={{
-              backgroundColor: isDark ? colors.green[950] : colors.green[100],
-            }}
-          >
+        <View
+          className="justify-center px-2"
+          style={{
+            minHeight: CASHBACK_STRIP_MIN_HEIGHT,
+            backgroundColor: stripBg,
+          }}
+        >
+          {hasCashbackProgram ? (
             <Text
-              className="text-xs font-semibold"
+              className="text-center text-xs font-semibold"
               style={{
-                color: isDark ? colors.green[300] : colors.green[700],
+                color: showCashback ? cashbackColor : noEarnTint,
               }}
             >
-              ₦{cashbackToEarn} Cashback
+              {showCashback ? `₦${cashbackToEarn} Cashback` : "—"}
             </Text>
-          </View>
-        )}
-        <View className={cn("px-3 py-2.5 items-center", showCashback && "pt-2")}>
+          ) : null}
+        </View>
+        <View className="items-center px-3 py-2">
           <Text
             className={cn(
               "text-sm font-semibold",

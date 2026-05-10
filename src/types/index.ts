@@ -15,6 +15,8 @@ export type {
   VerifyPaystackStatusData,
   VerifyPaystackData,
   CancelPaystackData,
+  UserWalletSnapshotData,
+  UserWalletAccountRow,
 } from "./banking";
 export type {
   HomepageData,

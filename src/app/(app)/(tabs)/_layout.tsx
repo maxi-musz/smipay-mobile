@@ -35,7 +35,7 @@ type TabConfig = {
 const TABS: TabConfig[] = [
   { name: "index", title: "Home", iconFocused: "home", iconDefault: "home-outline" },
   { name: "history/index", title: "History", iconFocused: "receipt", iconDefault: "receipt-outline" },
-  { name: "profile/index", title: "Profile", iconFocused: "person", iconDefault: "person-outline" },
+  { name: "profile/index", title: "Menu", iconFocused: "person", iconDefault: "person-outline" },
 ];
 
 export default function TabsLayout() {

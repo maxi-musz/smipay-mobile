@@ -35,3 +35,36 @@ export type VerifyPaystackData = VerifyPaystackSuccessData | VerifyPaystackStatu
 export interface CancelPaystackData {
   status: "cancelled";
 }
+
+/** Account row from GET /banking/user-wallet */
+export interface UserWalletAccountRow {
+  id: string;
+  account_number: string | null;
+  bank_name: string | null;
+  currency: string | null;
+  balance: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** GET /banking/user-wallet — formatted wallet + accounts + cashback */
+export interface UserWalletSnapshotData {
+  wallet: {
+    id: string;
+    current_balance: string;
+    all_time_fuunding: string;
+    all_time_withdrawn: string;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+    is_four_digit_pin_set?: boolean;
+  };
+  accounts: UserWalletAccountRow[];
+  cashback_wallet: {
+    id?: string;
+    current_balance: string;
+    all_time_earned: string;
+    all_time_withdrawn: string;
+  };
+}
