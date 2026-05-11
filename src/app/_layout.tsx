@@ -13,6 +13,8 @@ import { LockScreen } from "@/components/lock-screen";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { SplashOverlay } from "@/components/splash-overlay";
 import { ToastContainer } from "@/components/ui/toast";
+import { VersionGateModal } from "@/components/version-gate-modal";
+import { VersionGateProvider, useVersionGateContext } from "@/context/version-gate-context";
 import { SupportSocketProvider } from "@/context/support-socket";
 import { ThemeProvider } from "@/context/theme-context";
 import { WebhookEventsSocketProvider } from "@/context/webhook-events-socket";
@@ -45,6 +47,10 @@ function InnerLayout() {
   const isHydrated = useAppStore.use.isHydrated();
   const isAuthenticated = useAuthStore.use.isAuthenticated();
   const isLocked = useAuthStore.use.isLocked();
+
+  // Server-driven force/soft update gate. Mounted at the root so it can sit
+  // above every screen, including the lock screen, when a force update is due.
+  const versionGate = useVersionGateContext();
 
   const hadLockedRef = useRef(false);
   useEffect(() => {
@@ -170,6 +176,29 @@ function InnerLayout() {
       {isAuthenticated && isLocked && <LockScreen />}
       <ToastContainer />
       <PortalHost />
+
+      {/*
+       * Force updates are always surfaced (even over the lock screen) so a
+       * broken/unsupported build can't be used. Soft updates wait until the
+       * user is signed in and unlocked so we don't nag them at login.
+       */}
+      <VersionGateModal
+        visible={
+          (versionGate.effectiveLevel === "force" && !showSplash) ||
+          (versionGate.effectiveLevel === "soft" &&
+            !showSplash &&
+            isAuthenticated &&
+            !isLocked)
+        }
+        level={versionGate.effectiveLevel === "force" ? "force" : "soft"}
+        message={versionGate.message}
+        currentVersion={versionGate.currentVersion}
+        targetVersion={versionGate.targetVersion}
+        storeUrl={versionGate.storeUrl}
+        onDismiss={() => {
+          void versionGate.snoozeSoftUpdate();
+        }}
+      />
     </View>
   );
 }
@@ -180,7 +209,9 @@ export default function RootLayout() {
       <ThemeProvider>
         <SupportSocketProvider>
           <WebhookEventsSocketProvider>
-            <InnerLayout />
+            <VersionGateProvider>
+              <InnerLayout />
+            </VersionGateProvider>
           </WebhookEventsSocketProvider>
         </SupportSocketProvider>
       </ThemeProvider>

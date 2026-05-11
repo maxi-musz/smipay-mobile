@@ -16,6 +16,7 @@ import {
 } from "@/components/dashboard";
 import { FullPageLoader } from "@/components/ui/loaders";
 // import { useToastStore } from "@/components/ui/toast/toast-store";
+import { useVersionGateContext } from "@/context/version-gate-context";
 import { useAuthStore, useHomepageStore, useProfileStore } from "@/store";
 import { colors } from "@/constants/colors";
 
@@ -27,6 +28,7 @@ export default function HomeScreen() {
   const fetchHomepage = useHomepageStore.use.fetchHomepage();
   const refreshHomepageSilently = useHomepageStore.use.refreshHomepageSilently();
   const fetchProfile = useProfileStore.use.fetchProfile();
+  const { versionCheckComplete, effectiveLevel } = useVersionGateContext();
   const wasLockedRef = useRef(isLocked);
 
   const [addMoneyModalVisible, setAddMoneyModalVisible] = useState(false);
@@ -48,17 +50,19 @@ export default function HomeScreen() {
   }, [isLocked, data, fetchHomepage]);
 
   /**
-   * The transaction PIN setup is mandatory: the modal stays visible for as long
-   * as the homepage tells us the user has no PIN. There is no dismiss path —
-   * once a PIN is saved, `is_four_digit_pin_set` flips to `true` and the modal
-   * unmounts on the next homepage refresh.
+   * PIN setup is mandatory, but a soft update prompt takes priority: we only
+   * show the PIN modal after the version check has run and `effectiveLevel`
+   * is `"none"` (including after the user taps "Later" on a soft update, which
+   * snoozes and clears the effective level until the next window).
    */
-  const pinModalVisible = !!data?.user
-    ? !(
-        data.user.is_four_digit_pin_set === true ||
-        data.user.isTransactionPinSetup === true
-      )
-    : false;
+  const pinModalVisible =
+    versionCheckComplete &&
+    effectiveLevel === "none" &&
+    !!data?.user &&
+    !(
+      data.user.is_four_digit_pin_set === true ||
+      data.user.isTransactionPinSetup === true
+    );
 
   if (isLoading && !data) {
     return (

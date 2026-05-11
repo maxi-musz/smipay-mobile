@@ -96,3 +96,4 @@ export {
   purchaseElectricity,
   queryElectricityTransaction,
 } from "./services/vtpass-electricity";
+export { fetchVersionGate, type VersionGateData } from "./services/app-config";
