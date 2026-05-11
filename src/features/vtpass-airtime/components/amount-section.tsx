@@ -1,10 +1,7 @@
-import { useState } from "react";
-import { Keyboard, Pressable, View } from "react-native";
+import { Keyboard, Pressable, TextInput, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "@/components/ui/text";
-import { NumericKeypad } from "@/components/ui/numeric-keypad";
 import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import {
@@ -48,7 +45,6 @@ export function AmountSection({
   canSubmit = false,
 }: AmountSectionProps) {
   const { isDark } = useAppTheme();
-  const [amountKeypadExpanded, setAmountKeypadExpanded] = useState(true);
   const amount = parseInt(amountStr.replace(/\D/g, ""), 10) || 0;
   const { percentage, maxPerTransaction } = getAirtimeCashbackRate(
     cashbackRates,
@@ -59,24 +55,6 @@ export function AmountSection({
     maxAffordable != null && maxAffordable >= 0
       ? Math.min(amountMax, maxAffordable)
       : amountMax;
-
-  /** Local keypad digits only — parent stores digits-only `amountStr` */
-  function appendKeypadDigit(digit: string) {
-    const current = amountStr.replace(/\D/g, "");
-    const raw = `${current}${digit}`;
-    const n = parseInt(raw, 10);
-    if (Number.isNaN(n)) return;
-    const capWhole = Math.floor(effectiveMax);
-    if (n > capWhole) return;
-    onAmountChange(String(n));
-    onClearAmountError();
-  }
-
-  function keyPadBackspace() {
-    const d = amountStr.replace(/\D/g, "").slice(0, -1);
-    onAmountChange(d);
-    if (error) onClearAmountError();
-  }
 
   function selectQuickAmount(value: number) {
     Keyboard.dismiss();
@@ -177,26 +155,23 @@ export function AmountSection({
         )}
       </View>
 
-      {/* Amount display + Pay (digits via NumericKeypad below) */}
+      {/* Amount input row: ₦ + minimal line + small Pay button */}
       <View
         className={cn(
-          "flex-row items-center gap-2 border-b py-3",
+          "flex-row items-center gap-2 border-b py-2",
           error ? "border-destructive" : "border-border",
         )}
       >
         <Text className="text-base font-medium text-muted-foreground">₦</Text>
-        <View className="min-h-[28px] flex-1 justify-center py-1">
-          {amountStr.replace(/\D/g, "").length > 0 ? (
-            <Text className="text-lg font-semibold tabular-nums text-foreground">
-              {amount.toLocaleString("en-NG")}
-            </Text>
-          ) : (
-            <Text className="text-base text-muted-foreground">
-              {amountMin.toLocaleString("en-NG")} —{" "}
-              {effectiveMax.toLocaleString("en-NG")}
-            </Text>
-          )}
-        </View>
+        <TextInput
+          className="flex-1 text-base font-medium text-foreground min-h-[24px] py-0"
+          placeholder={`${amountMin} - ${effectiveMax.toLocaleString()}`}
+          placeholderTextColor="#9CA3AF"
+          value={amountStr}
+          onChangeText={onAmountChange}
+          keyboardType="number-pad"
+          onFocus={onClearAmountError}
+        />
         {onPay && (
           <Pressable
             onPress={onPay}
@@ -228,52 +203,6 @@ export function AmountSection({
       </View>
       {error && (
         <Text className="mt-1.5 text-sm text-destructive">{error}</Text>
-      )}
-
-      {amountKeypadExpanded ? (
-        <>
-          <Pressable
-            onPress={() => setAmountKeypadExpanded(false)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Hide amount keypad"
-            className="mt-4 flex-row items-center justify-center gap-1.5 rounded-xl border border-border bg-muted/40 py-3 active:opacity-80"
-          >
-            <Text className="text-sm font-medium text-muted-foreground">
-              Hide keypad
-            </Text>
-            <Ionicons
-              name="chevron-down"
-              size={18}
-              color={isDark ? "#94A3B8" : "#64748B"}
-            />
-          </Pressable>
-          <NumericKeypad
-            disabled={false}
-            className="mt-2"
-            keyHeight={52}
-            onDigitPress={appendKeypadDigit}
-            onBackspacePress={keyPadBackspace}
-          />
-        </>
-      ) : (
-        <Pressable
-          onPress={() => setAmountKeypadExpanded(true)}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Show amount keypad"
-          className="mt-4 flex-row items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-3.5 active:opacity-80"
-        >
-          <Ionicons name="calculator-outline" size={18} color={colors.green[500]} />
-          <Text className="text-sm font-semibold" style={{ color: colors.green[600] }}>
-            Show keypad · custom amount
-          </Text>
-          <Ionicons
-            name="chevron-up"
-            size={18}
-            color={colors.green[600]}
-          />
-        </Pressable>
       )}
     </Animated.View>
   );

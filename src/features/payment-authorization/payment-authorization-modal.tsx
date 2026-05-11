@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Button } from "@/components/ui/button";
-import { NumericKeypad } from "@/components/ui/numeric-keypad";
 import { Text } from "@/components/ui/text";
 import { Spinner } from "@/components/ui/loaders";
 import { colors } from "@/constants/colors";
@@ -53,6 +55,7 @@ export function PaymentAuthorizationModal({
   const [pinError, setPinError] = useState<string | null>(null);
   const [biometricLabel, setBiometricLabel] = useState("Biometrics");
   const [pinFlowBusy, setPinFlowBusy] = useState(false);
+  const pinInputRef = useRef<TextInput>(null);
 
   const panelBg = isDark ? "#1C1C1E" : "#FFFFFF";
   const slotBorderIdle = isDark ? "#3A3A3C" : "#E5E7EB";
@@ -78,16 +81,16 @@ export function PaymentAuthorizationModal({
     }
   }, [visible]);
 
-  function appendDigit(d: string) {
-    if (pin.length >= PIN_LENGTH || isBusy || pinFlowBusy) return;
-    const next = `${pin}${d}`.slice(0, PIN_LENGTH);
-    setPin(next);
-    if (pinError) setPinError(null);
-  }
+  useEffect(() => {
+    if (!visible) return;
+    const id = setTimeout(() => pinInputRef.current?.focus(), 350);
+    return () => clearTimeout(id);
+  }, [visible]);
 
-  function deleteDigit() {
+  function onPinChange(text: string) {
     if (isBusy || pinFlowBusy) return;
-    setPin((p) => p.slice(0, -1));
+    const digits = text.replace(/\D/g, "").slice(0, PIN_LENGTH);
+    setPin(digits);
     if (pinError) setPinError(null);
   }
 
@@ -123,7 +126,11 @@ export function PaymentAuthorizationModal({
       onRequestClose={() => canDismiss && onClose()}
       statusBarTranslucent
     >
-      <View className="flex-1 justify-end">
+      <KeyboardAvoidingView
+        className="flex-1 justify-end"
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
         <Pressable
           className="absolute inset-0 bg-black/55"
           accessibilityRole="button"
@@ -197,41 +204,63 @@ export function PaymentAuthorizationModal({
             </>
           ) : null}
 
-          {/* OPay-style 4 boxed slots */}
-          <View className="flex-row justify-center gap-3 px-6 pb-3">
-            {Array.from({ length: PIN_LENGTH }).map((_, i) => {
-              const digit = pin[i];
-              const isActive = pin.length === i;
-              return (
-                <View
-                  key={i}
-                  style={{
-                    height: 52,
-                    width: 52,
-                    borderRadius: 14,
-                    borderWidth: 2,
-                    borderColor: isActive ? slotActive : slotBorderIdle,
-                    backgroundColor: isDark ? "#2C2C2E" : "#F9FAFB",
-                  }}
-                  className="items-center justify-center"
-                >
-                  {digit ? (
-                    <Text
-                      className="text-xl font-semibold tabular-nums"
-                      style={{ color: isDark ? "#F8FAFC" : "#0F172A" }}
-                    >
-                      •
-                    </Text>
-                  ) : isActive ? (
-                    <View
-                      className="h-5 w-0.5 rounded-full"
-                      style={{ backgroundColor: slotActive }}
-                    />
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
+          {/* 4 boxed slots; system number pad via overlaid TextInput */}
+          <Pressable
+            className="relative mx-6 pb-3"
+            disabled={keypadLocked}
+            onPress={() => pinInputRef.current?.focus()}
+            accessibilityRole="none"
+          >
+            <View className="flex-row justify-center gap-3">
+              {Array.from({ length: PIN_LENGTH }).map((_, i) => {
+                const digit = pin[i];
+                const isActive = pin.length === i;
+                return (
+                  <View
+                    key={i}
+                    style={{
+                      height: 52,
+                      width: 52,
+                      borderRadius: 14,
+                      borderWidth: 2,
+                      borderColor: isActive ? slotActive : slotBorderIdle,
+                      backgroundColor: isDark ? "#2C2C2E" : "#F9FAFB",
+                    }}
+                    className="items-center justify-center"
+                  >
+                    {digit ? (
+                      <Text
+                        className="text-xl font-semibold tabular-nums"
+                        style={{ color: isDark ? "#F8FAFC" : "#0F172A" }}
+                      >
+                        •
+                      </Text>
+                    ) : isActive ? (
+                      <View
+                        className="h-5 w-0.5 rounded-full"
+                        style={{ backgroundColor: slotActive }}
+                      />
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+            <TextInput
+              ref={pinInputRef}
+              value={pin}
+              onChangeText={onPinChange}
+              keyboardType="number-pad"
+              maxLength={PIN_LENGTH}
+              secureTextEntry
+              editable={!keypadLocked}
+              caretHidden
+              importantForAutofill="no"
+              autoComplete="off"
+              textContentType="password"
+              accessibilityLabel="Transaction PIN, 4 digits"
+              className="absolute inset-0 opacity-0"
+            />
+          </Pressable>
 
           {onForgotPinPress ? (
             <Pressable
@@ -248,26 +277,6 @@ export function PaymentAuthorizationModal({
           ) : (
             <View className="h-2" />
           )}
-
-          <View
-            className="mx-4 mt-2 flex-row items-center justify-center gap-2 rounded-xl py-2"
-            style={{
-              backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "rgba(22,163,74,0.08)",
-            }}
-          >
-            <Ionicons name="shield-checkmark" size={18} color={colors.green[600]} />
-            <Text className="text-xs font-medium text-muted-foreground">
-              SmiPay secure numeric keypad
-            </Text>
-          </View>
-
-          <NumericKeypad
-            disabled={keypadLocked}
-            className="px-4 pt-4"
-            keyHeight={56}
-            onDigitPress={appendDigit}
-            onBackspacePress={deleteDigit}
-          />
 
           {pinError ? (
             <Text className="mt-3 px-6 text-center text-sm text-destructive">{pinError}</Text>
@@ -288,7 +297,7 @@ export function PaymentAuthorizationModal({
             </Button>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

@@ -16,13 +16,40 @@ export type AuthorizePurchaseOptions = {
 
 type PendingAction = () => Promise<void>;
 
+const BIOMETRIC_AUTH_TIMEOUT_MS = 25_000;
+
+async function authenticateWithTimeout(
+  opts: Parameters<typeof authenticate>[0],
+): Promise<{ success: boolean; error?: string }> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<{ success: boolean; error?: string }>(
+    (resolve) => {
+      timeoutId = setTimeout(() => {
+        resolve({
+          success: false,
+          error: "Biometrics timed out. Enter your PIN.",
+        });
+      }, BIOMETRIC_AUTH_TIMEOUT_MS);
+    },
+  );
+  try {
+    return await Promise.race([authenticate(opts), timeoutPromise]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
 /**
  * Reusable checkout step-up: tries device biometrics when enabled (OPay-style),
  * otherwise shows PIN entry whose correctness is verified on the backend.
  *
- * Mount `<PaymentAuthorizationModal />` **after** any checkout `BottomSheetModal` in the
- * same screen so React Native stacks this `Modal` above the sheet (otherwise the PIN UI is hidden).
- * and wrap the purchase mutation in `runAuthorizedPurchase`.
+ * **iOS:** Do not keep another React Native `Modal` visible (e.g. a checkout `BottomSheetModal`)
+ * while `paymentAuthorizationModalProps.visible` is true — stacking two native modals is unreliable
+ * and the PIN sheet may not appear. Prefer `visible={checkoutOpen && !paymentAuthVisible}` on the
+ * checkout modal, or use a non-Modal overlay for checkout.
+ *
+ * Mount `<PaymentAuthorizationModal />` on the same screen and wrap the purchase mutation in
+ * `runAuthorizedPurchase`.
  */
 export function useAuthorizePurchase(options: AuthorizePurchaseOptions = {}) {
   const biometricsEnabled = useAppStore.use.biometricsEnabled();
@@ -45,7 +72,7 @@ export function useAuthorizePurchase(options: AuthorizePurchaseOptions = {}) {
       if (biometricGate) {
         setIsStepUpBusy(true);
         try {
-          const result = await authenticate({
+          const result = await authenticateWithTimeout({
             promptMessage,
             disableDeviceFallback: true,
           });
@@ -99,7 +126,7 @@ export function useAuthorizePurchase(options: AuthorizePurchaseOptions = {}) {
     const label = getBiometricLabel(availability);
     setIsStepUpBusy(true);
     try {
-      const result = await authenticate({
+      const result = await authenticateWithTimeout({
         promptMessage: promptMessage.includes(label)
           ? promptMessage
           : `${promptMessage} with ${label}`,

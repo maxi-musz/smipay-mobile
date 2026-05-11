@@ -175,7 +175,7 @@ export function ProviderPhoneRow({
         >
           <TextInput
             className="flex-1 text-base font-medium text-foreground min-h-[24px] py-0"
-            placeholder="08012345678"
+            placeholder="Phone Number"
             placeholderTextColor="#9CA3AF"
             value={formatDisplayPhone(phone)}
             onChangeText={handlePhoneChange}

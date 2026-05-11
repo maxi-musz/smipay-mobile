@@ -340,7 +340,7 @@ export default function VtpassAirtimeScreen() {
         className="flex-1"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="px-5 pb-32"
+        contentContainerClassName="px-5 pb-10"
       >
         <WalletBalanceCard
           walletBalance={walletBalance}
@@ -397,7 +397,9 @@ export default function VtpassAirtimeScreen() {
       </ScrollView>
 
       <ConfirmBuyAirtimeModal
-        visible={confirmModalVisible}
+        visible={
+          confirmModalVisible && !paymentAuthorizationModalProps.visible
+        }
         onClose={closeConfirmModal}
         productName={selectedProvider?.name ?? "Airtime"}
         selectedProvider={selectedProvider}
@@ -415,7 +417,7 @@ export default function VtpassAirtimeScreen() {
         onRetryBalances={refreshConfirmBalances}
       />
 
-      {/* Mount after checkout modal so this RN Modal stacks on top when both are visible. */}
+      {/* Hide checkout bottom sheet while PIN/auth Modal is open — iOS cannot reliably stack two RN Modals. */}
       <PaymentAuthorizationModal
         {...paymentAuthorizationModalProps}
         onForgotPinPress={() => {
