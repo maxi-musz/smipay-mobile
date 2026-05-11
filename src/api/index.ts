@@ -55,6 +55,7 @@ export {
   verifyTransactionPinSetupOtp,
   requestTransactionPinUpdateOtp,
   verifyTransactionPinUpdateOtp,
+  verifyTransactionPin,
   type RequestTransactionPinOtpData,
   type VerifyTransactionPinOtpData,
   type TransactionPinOtpErrorData,

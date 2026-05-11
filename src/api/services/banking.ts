@@ -125,3 +125,14 @@ export async function verifyTransactionPinUpdateOtp(payload: {
   );
   return data;
 }
+
+/** Checkout step-up: verify the current 4-digit transaction PIN (after biometric fallback). */
+export async function verifyTransactionPin(payload: {
+  pin: string;
+}): Promise<ApiResponse<Record<string, never>>> {
+  const { data } = await api.post<ApiResponse<Record<string, never>>>(
+    `${BANKING}/user-wallet/transaction-pin/verify`,
+    payload,
+  );
+  return data;
+}

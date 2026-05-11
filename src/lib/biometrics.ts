@@ -70,14 +70,30 @@ export function clearBiometricsCache(): void {
 }
 
 /**
- * Run biometric authentication. Resolves to true if user authenticated successfully.
+ * Runs LocalAuthentication with optional policy.
+ *
+ * **Device passcode vs app PIN:** By default Expo uses a policy where, after biometric
+ * failure/cancel flows, iOS/Android may prompt for the **device** unlock PIN/password — that only
+ * proves device access, not your SmiPay transaction PIN. For checkout, pass
+ * `{ disableDeviceFallback: true }` so failures yield your in-app transaction PIN sheet instead.
  */
 export async function authenticate(
-  options: { promptMessage?: string } = {}
+  options: {
+    promptMessage?: string;
+    /**
+     * `true` = biometrics only (LAPolicy biometric-only on iOS); OS will not accept device passcode as success.
+     * `false` (default) = OS may fall back to device PIN — appropriate for optional flows like enabling biometrics after sign-in.
+     */
+    disableDeviceFallback?: boolean;
+  } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const disableDeviceFallback = options.disableDeviceFallback ?? false;
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: options.promptMessage ?? DEFAULT_PROMPT,
+      disableDeviceFallback,
+      // iOS: hide "Enter Passcode" / use-password path when biometric-only policy is enforced
+      ...(Platform.OS === "ios" && disableDeviceFallback ? { fallbackLabel: "" } : {}),
     });
     return {
       success: result.success,

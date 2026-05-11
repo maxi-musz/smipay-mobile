@@ -7,27 +7,31 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { fetchUserWallet } from "@/api";
 import { purchaseAirtime } from "@/api/services/vtpass-airtime";
 import {
-  AirtimeHeader,
+  addRecentAirtime,
   AmountSection,
+  AirtimeHeader,
   ConfirmBuyAirtimeModal,
+  computeCashbackToEarn,
+  getAirtimeCashbackRate,
+  getRecentAirtime,
+  getRecentEntryDisplay,
+  normalizeNgMobileDigits,
+  parseBalanceToNumber,
+  parseMinMax,
+  PHONE_REGEX,
   ProviderPhoneRow,
   RecentAirtimeList,
   WalletBalanceCard,
-  getRecentAirtime,
-  addRecentAirtime,
-  getRecentEntryDisplay,
-  PHONE_REGEX,
-  normalizeNgMobileDigits,
-  parseMinMax,
-  getAirtimeCashbackRate,
-  computeCashbackToEarn,
-  parseBalanceToNumber,
 } from "@/features/vtpass-airtime";
+import {
+  PaymentAuthorizationModal,
+  useAuthorizePurchase,
+} from "@/features/payment-authorization";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { useAirtimeStore, useHomepageStore } from "@/store";
 import { ApiClientError } from "@/lib/api";
-import { handleApiError } from "@/lib/errors";
+import { classifyError } from "@/lib/errors";
 import type { AirtimeServiceItem } from "@/types/vtpass-airtime";
 
 export default function VtpassAirtimeScreen() {
@@ -42,6 +46,14 @@ export default function VtpassAirtimeScreen() {
   const loadingProviders = useAirtimeStore.use.isLoading();
   const providerError = useAirtimeStore.use.error();
   const fetchAirtimeProviders = useAirtimeStore.use.fetchAirtimeProviders();
+
+  const {
+    runAuthorizedPurchase,
+    isStepUpBusy,
+    paymentAuthorizationModalProps,
+  } = useAuthorizePurchase({
+    biometricPromptMessage: "Authenticate to confirm airtime purchase",
+  });
 
   const [selectedProvider, setSelectedProvider] =
     useState<AirtimeServiceItem | null>(null);
@@ -235,54 +247,62 @@ export default function VtpassAirtimeScreen() {
   async function handleConfirmPurchase() {
     if (!selectedProvider) return;
 
-    const phoneNorm = normalizeNgMobileDigits(phone);
-    setPurchasing(true);
-    try {
-      const res = await purchaseAirtime({
-        serviceID: selectedProvider.serviceID,
-        amount,
-        phone: phoneNorm,
-        use_cashback: useCashback,
-      });
+    await runAuthorizedPurchase(async () => {
+      const phoneNorm = normalizeNgMobileDigits(phone);
+      setPurchasing(true);
+      try {
+        const res = await purchaseAirtime({
+          serviceID: selectedProvider.serviceID,
+          amount,
+          phone: phoneNorm,
+          use_cashback: useCashback,
+        });
 
-      if (res.success && res.data) {
-        closeConfirmModal();
-        await addRecentAirtime(phoneNorm, selectedProvider.serviceID);
-        const updated = await getRecentAirtime();
-        setRecentList(updated);
+        if (res.success && res.data) {
+          closeConfirmModal();
+          await addRecentAirtime(phoneNorm, selectedProvider.serviceID);
+          const updated = await getRecentAirtime();
+          setRecentList(updated);
 
-        const status =
-          res.data.content?.transactions?.status ?? res.data.status;
-        const isProcessing =
-          status === "pending" ||
-          status === "initiated" ||
-          res.data.response_description?.toUpperCase().includes("PROCESSING");
+          const status =
+            res.data.content?.transactions?.status ?? res.data.status;
+          const isProcessing =
+            status === "pending" ||
+            status === "initiated" ||
+            res.data.response_description?.toUpperCase().includes("PROCESSING");
 
-        if (isProcessing) {
-          setSuccessModal({
+          if (isProcessing) {
+            setSuccessModal({
+              visible: true,
+              message:
+                "Your airtime purchase is being processed. You'll receive a confirmation shortly.",
+            });
+          } else {
+            setSuccessModal({
+              visible: true,
+              message: `${selectedProvider.name} airtime of ₦${amount.toLocaleString()} has been sent to ${phoneNorm}.`,
+            });
+          }
+        } else {
+          setErrorModal({
             visible: true,
             message:
-              "Your airtime purchase is being processed. You'll receive a confirmation shortly.",
-          });
-        } else {
-          setSuccessModal({
-            visible: true,
-            message: `${selectedProvider.name} airtime of ₦${amount.toLocaleString()} has been sent to ${phoneNorm}.`,
+              (res as { message?: string }).message ??
+              "Purchase failed. Please try again.",
           });
         }
-      } else {
+      } catch (e) {
+        const classified = classifyError(e);
         setErrorModal({
           visible: true,
           message:
-            (res as { message?: string }).message ??
-            "Purchase failed. Please try again.",
+            classified.message ||
+            "We couldn't complete this purchase. Please try again.",
         });
+      } finally {
+        setPurchasing(false);
       }
-    } catch (e) {
-      handleApiError(e);
-    } finally {
-      setPurchasing(false);
-    }
+    });
   }
 
   function handleSuccessClose() {
@@ -320,7 +340,7 @@ export default function VtpassAirtimeScreen() {
         className="flex-1"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="px-5 pb-10"
+        contentContainerClassName="px-5 pb-32"
       >
         <WalletBalanceCard
           walletBalance={walletBalance}
@@ -388,11 +408,21 @@ export default function VtpassAirtimeScreen() {
         useCashback={useCashback}
         onUseCashbackChange={setUseCashback}
         onConfirm={handleConfirmPurchase}
-        purchasing={purchasing}
+        purchasing={purchasing || isStepUpBusy}
         walletBalance={confirmSnapshot?.wallet ?? "₦0.00"}
         balancesLoading={confirmWalletLoading}
         balancesError={confirmWalletError}
         onRetryBalances={refreshConfirmBalances}
+      />
+
+      {/* Mount after checkout modal so this RN Modal stacks on top when both are visible. */}
+      <PaymentAuthorizationModal
+        {...paymentAuthorizationModalProps}
+        onForgotPinPress={() => {
+          paymentAuthorizationModalProps.onClose();
+          closeConfirmModal();
+          router.push("/(app)/profile/security");
+        }}
       />
 
       <AlertModal
@@ -410,10 +440,22 @@ export default function VtpassAirtimeScreen() {
         title="Purchase Failed"
         message={errorModal.message}
         primaryAction={{
-          label: "OK",
-          onPress: () => setErrorModal({ visible: false, message: "" }),
+          label: "Retry",
+          onPress: () => {
+            setErrorModal({ visible: false, message: "" });
+            void handleConfirmPurchase();
+          },
         }}
-        onClose={() => setErrorModal({ visible: false, message: "" })}
+        secondaryAction={{
+          label: "Cancel",
+          onPress: () => {
+            setErrorModal({ visible: false, message: "" });
+            closeConfirmModal();
+            router.replace("/(app)/(tabs)");
+          },
+        }}
+        closeable={false}
+        onClose={() => {}}
       />
     </SafeAreaView>
   );
