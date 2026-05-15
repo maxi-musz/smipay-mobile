@@ -9,11 +9,25 @@ import { getLocation } from "./location";
 const REQUEST_SIGNING_SECRET =
   process.env.EXPO_PUBLIC_REQUEST_SIGNING_SECRET ?? "";
 
+/**
+ * Required on every API call — backend endpoints that use SecurityHeadersGuard
+ * (including `POST …/transaction-pin/verify` at checkout) reject requests without it.
+ *
+ * Uses the **same secret** as the server expects for HMAC of `timestamp.nonce`.
+ * Set `EXPO_PUBLIC_REQUEST_SIGNING_SECRET` in `mobile/.env` (typically same value as backend env).
+ */
 function computeRequestSignature(timestamp: string, nonce: string): string {
-  if (!REQUEST_SIGNING_SECRET) return "";
+  if (!REQUEST_SIGNING_SECRET.trim()) {
+    throw new Error(
+      "Missing EXPO_PUBLIC_REQUEST_SIGNING_SECRET — add it to mobile/.env (must match backend). " +
+        "Signed requests cannot complete without X-Signature.",
+    );
+  }
   const message = `${timestamp}.${nonce}`;
-  const signature = CryptoJS.HmacSHA256(message, REQUEST_SIGNING_SECRET);
-  return signature.toString(CryptoJS.enc.Hex);
+  return CryptoJS.HmacSHA256(
+    message,
+    REQUEST_SIGNING_SECRET,
+  ).toString(CryptoJS.enc.Hex);
 }
 
 const BASE_URL = __DEV__
@@ -49,10 +63,7 @@ api.interceptors.request.use(async (config) => {
   config.headers["X-Timestamp"] = timestamp;
   config.headers["X-Nonce"] = nonce;
   config.headers["X-Request-ID"] = nonce;
-  const signature = computeRequestSignature(timestamp, nonce);
-  if (signature) {
-    config.headers["X-Signature"] = signature;
-  }
+  config.headers["X-Signature"] = computeRequestSignature(timestamp, nonce);
 
   try {
     const device = await getDeviceMetadata();

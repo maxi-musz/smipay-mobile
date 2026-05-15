@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -24,6 +24,11 @@ import {
   POLL_MAX_ELAPSED_MS,
 } from "@/features/vtpass-cable/lib/constants";
 import { useCableStore } from "@/features/vtpass-cable/lib/store";
+import {
+  PaymentAuthorizationModal,
+  useAuthorizePurchase,
+  useConfirmWalletSnapshot,
+} from "@/features/payment-authorization";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -51,6 +56,22 @@ export default function CablePurchaseScreen() {
   const storedBillersCode = useCableStore.use.billersCode();
   const subscriptionType = useCableStore.use.subscriptionType();
   const resetStore = useCableStore.use.reset();
+
+  const {
+    runAuthorizedPurchase,
+    isStepUpBusy,
+    paymentAuthorizationModalProps,
+  } = useAuthorizePurchase({
+    biometricPromptMessage: "Authenticate to confirm cable subscription",
+  });
+
+  const {
+    snapshot: confirmSnapshot,
+    loading: confirmWalletLoading,
+    error: confirmWalletError,
+    refresh: refreshConfirmBalances,
+    reset: resetConfirmWallet,
+  } = useConfirmWalletSnapshot();
 
   const [billersCode, setBillersCode] = useState("");
   const [phone, setPhone] = useState("");
@@ -155,6 +176,18 @@ export default function CablePurchaseScreen() {
     amount > 0 &&
     billersCodeValid &&
     !purchasing;
+
+  useLayoutEffect(() => {
+    if (confirmModalVisible) {
+      setUseCashback(false);
+    }
+  }, [confirmModalVisible]);
+
+  function closeConfirmModal() {
+    setConfirmModalVisible(false);
+    setUseCashback(false);
+    resetConfirmWallet();
+  }
 
   // ── Polling ──────────────────────────────────────────────────────────────
 
@@ -262,8 +295,8 @@ export default function CablePurchaseScreen() {
     }
 
     setFieldErrors({});
-    if (hasCashback) setUseCashback(true);
     setConfirmModalVisible(true);
+    void refreshConfirmBalances();
   }
 
   async function handleConfirmPurchase() {
@@ -297,81 +330,83 @@ export default function CablePurchaseScreen() {
       }
     }
 
-    setPurchasing(true);
-    try {
-      const res = await purchaseCable(payload);
+    await runAuthorizedPurchase(async () => {
+      setPurchasing(true);
+      try {
+        const res = await purchaseCable(payload);
 
-      if (res.success && res.data) {
-        setConfirmModalVisible(false);
+        if (res.success && res.data) {
+          closeConfirmModal();
 
-        const voucherCode =
-          res.data.voucher_code ??
-          res.data.purchased_code ??
-          res.data.Voucher?.[0] ??
-          res.data.voucher_codes?.[0];
+          const voucherCode =
+            res.data.voucher_code ??
+            res.data.purchased_code ??
+            res.data.Voucher?.[0] ??
+            res.data.voucher_codes?.[0];
 
-        if (voucherCode) {
-          setVoucherModal({ visible: true, code: voucherCode });
-          return;
-        }
+          if (voucherCode) {
+            setVoucherModal({ visible: true, code: voucherCode });
+            return;
+          }
 
-        const requestId =
-          res.data.requestId ??
-          (res.data as { request_id?: string }).request_id;
-        const status =
-          res.data.content?.transactions?.status ?? res.data.status ?? "";
-        const code = res.data.code ?? "";
-        const isProcessing =
-          res.data.status === "processing" ||
-          status === "pending" ||
-          status === "initiated" ||
-          code === "099" ||
-          res.data.response_description?.toUpperCase().includes("PROCESSING");
+          const requestId =
+            res.data.requestId ??
+            (res.data as { request_id?: string }).request_id;
+          const status =
+            res.data.content?.transactions?.status ?? res.data.status ?? "";
+          const code = res.data.code ?? "";
+          const isProcessing =
+            res.data.status === "processing" ||
+            status === "pending" ||
+            status === "initiated" ||
+            code === "099" ||
+            res.data.response_description?.toUpperCase().includes("PROCESSING");
 
-        if (isProcessing && requestId) {
-          pollStartRef.current = Date.now();
-          setProcessingModal({
-            visible: true,
-            requestId,
-            message:
-              "Your subscription is being processed. We'll check the status shortly.",
-          });
-          pollStatus(requestId, true);
-        } else if (status === "delivered" || code === "000") {
-          setSuccessModal({
-            visible: true,
-            message: `Your ${selectedProvider.name.replace(" Subscription", "")} subscription has been activated!`,
-          });
+          if (isProcessing && requestId) {
+            pollStartRef.current = Date.now();
+            setProcessingModal({
+              visible: true,
+              requestId,
+              message:
+                "Your subscription is being processed. We'll check the status shortly.",
+            });
+            pollStatus(requestId, true);
+          } else if (status === "delivered" || code === "000") {
+            setSuccessModal({
+              visible: true,
+              message: `Your ${selectedProvider.name.replace(" Subscription", "")} subscription has been activated!`,
+            });
+          } else {
+            setSuccessModal({
+              visible: true,
+              message:
+                "Your request was received. You'll get a confirmation shortly.",
+            });
+          }
         } else {
-          setSuccessModal({
+          setErrorModal({
             visible: true,
             message:
-              "Your request was received. You'll get a confirmation shortly.",
+              (res as { message?: string }).message ??
+              "Purchase failed. Please try again.",
           });
         }
-      } else {
+      } catch (e) {
+        handleApiError(e);
         setErrorModal({
           visible: true,
           message:
-            (res as { message?: string }).message ??
-            "Purchase failed. Please try again.",
+            (e as {
+              response?: { data?: { message?: string } };
+              message?: string;
+            })?.response?.data?.message ??
+            (e as Error).message ??
+            "Purchase failed.",
         });
+      } finally {
+        setPurchasing(false);
       }
-    } catch (e) {
-      handleApiError(e);
-      setErrorModal({
-        visible: true,
-        message:
-          (e as {
-            response?: { data?: { message?: string } };
-            message?: string;
-          })?.response?.data?.message ??
-          (e as Error).message ??
-          "Purchase failed.",
-      });
-    } finally {
-      setPurchasing(false);
-    }
+    });
   }
 
   function handleSuccessClose() {
@@ -605,8 +640,10 @@ export default function CablePurchaseScreen() {
 
       {/* Confirm bottom sheet */}
       <ConfirmCableModal
-        visible={confirmModalVisible}
-        onClose={() => setConfirmModalVisible(false)}
+        visible={
+          confirmModalVisible && !paymentAuthorizationModalProps.visible
+        }
+        onClose={closeConfirmModal}
         providerName={providerLabel}
         serviceID={selectedProvider.serviceID}
         planName={planName}
@@ -614,13 +651,25 @@ export default function CablePurchaseScreen() {
         amount={amount}
         subscriptionTypeLabel={subscriptionTypeLabel}
         customerName={customerName}
-        cashbackBalance={cashbackBalance}
+        cashbackBalance={confirmSnapshot?.cashback ?? "₦0.00"}
         cashbackToEarn={cashbackToEarn}
         useCashback={useCashback}
         onUseCashbackChange={setUseCashback}
         onConfirm={handleConfirmPurchase}
-        purchasing={purchasing}
-        walletBalance={walletBalance}
+        purchasing={purchasing || isStepUpBusy}
+        walletBalance={confirmSnapshot?.wallet ?? "₦0.00"}
+        balancesLoading={confirmWalletLoading}
+        balancesError={confirmWalletError}
+        onRetryBalances={refreshConfirmBalances}
+      />
+
+      <PaymentAuthorizationModal
+        {...paymentAuthorizationModalProps}
+        onForgotPinPress={() => {
+          paymentAuthorizationModalProps.onClose();
+          closeConfirmModal();
+          router.push("/(app)/profile/security");
+        }}
       />
 
       {/* Showmax voucher */}
@@ -647,10 +696,22 @@ export default function CablePurchaseScreen() {
         title="Error"
         message={errorModal.message}
         primaryAction={{
-          label: "OK",
-          onPress: () => setErrorModal({ visible: false, message: "" }),
+          label: "Retry",
+          onPress: () => {
+            setErrorModal({ visible: false, message: "" });
+            void handleConfirmPurchase();
+          },
         }}
-        onClose={() => setErrorModal({ visible: false, message: "" })}
+        secondaryAction={{
+          label: "Cancel",
+          onPress: () => {
+            setErrorModal({ visible: false, message: "" });
+            closeConfirmModal();
+            router.replace("/(app)/(tabs)");
+          },
+        }}
+        closeable={false}
+        onClose={() => {}}
       />
 
       {/* Processing / polling */}

@@ -31,6 +31,9 @@ interface ConfirmIntlAirtimeModalProps {
   onConfirm: () => void;
   purchasing: boolean;
   walletBalance: string;
+  balancesLoading: boolean;
+  balancesError: string | null;
+  onRetryBalances?: () => void;
 }
 
 export function ConfirmIntlAirtimeModal({
@@ -49,13 +52,24 @@ export function ConfirmIntlAirtimeModal({
   onConfirm,
   purchasing,
   walletBalance,
+  balancesLoading,
+  balancesError,
+  onRetryBalances,
 }: ConfirmIntlAirtimeModalProps) {
   const { isDark } = useAppTheme();
+  const balancesReady = !balancesLoading && !balancesError;
   const cashbackNum = parseBalanceToNumber(cashbackBalance);
-  const hasCashback = cashbackNum > 0;
+  const hasCashback = balancesReady && cashbackNum > 0;
   const cashbackToApply =
-    useCashback && hasCashback ? Math.min(cashbackNum, amount) : 0;
+    balancesReady && useCashback && hasCashback
+      ? Math.min(cashbackNum, amount)
+      : 0;
   const amountToPay = amount - cashbackToApply;
+  const walletNum = parseBalanceToNumber(walletBalance);
+  const balanceAfter = Math.max(0, walletNum - amountToPay);
+  const insufficientWallet = balancesReady && walletNum + 1e-9 < amountToPay;
+  const payDisabled =
+    purchasing || balancesLoading || !!balancesError || insufficientWallet;
 
   const productLabel = [country?.name, operator?.name, variation?.name]
     .filter(Boolean)
@@ -79,24 +93,35 @@ export function ConfirmIntlAirtimeModal({
           <Ionicons name="close" size={24} color={colors.gray[500]} />
         </Pressable>
 
-        <View className="items-center pt-8">
-          <Text className="text-3xl font-bold text-foreground">
-            {formatNaira(amountToPay)}
-          </Text>
-          {cashbackToApply > 0 && (
-            <Text
-              className="mt-1 text-sm text-muted-foreground"
-              style={{ textDecorationLine: "line-through" }}
-            >
-              {formatNaira(amount)}
-            </Text>
+        <View className="min-h-[100px] items-center justify-center px-8 pt-8">
+          {balancesLoading ? (
+            <>
+              <Spinner color={colors.gray[500]} size="small" />
+              <Text className="mt-3 text-center text-sm text-muted-foreground">
+                Processing...
+              </Text>
+            </>
+          ) : balancesError ? null : (
+            <>
+              <Text className="text-3xl font-bold text-foreground">
+                {formatNaira(amountToPay)}
+              </Text>
+              {cashbackToApply > 0 && (
+                <Text
+                  className="mt-1 text-sm text-muted-foreground"
+                  style={{ textDecorationLine: "line-through" }}
+                >
+                  {formatNaira(amount)}
+                </Text>
+              )}
+            </>
           )}
         </View>
 
-        <View className="gap-4 rounded-2xl bg-gray-50 dark:bg-gray-800/50 p-4">
+        <View className="gap-4 rounded-2xl bg-gray-50 p-4 dark:bg-gray-800/50">
           <View className="flex-row items-center justify-between">
             <Text className="text-sm text-muted-foreground">Product</Text>
-            <View className="flex-row items-center gap-2 flex-1 justify-end">
+            <View className="flex-1 flex-row items-center justify-end gap-2">
               {operator?.operator_image && (
                 <View className="overflow-hidden rounded-lg">
                   <Image
@@ -131,7 +156,7 @@ export function ConfirmIntlAirtimeModal({
             </Text>
           </View>
 
-          {hasCashback && (
+          {balancesReady && hasCashback && (
             <View className="flex-row items-center justify-between border-t border-border pt-3">
               <View className="flex-1">
                 <Text className="text-sm font-medium text-foreground">
@@ -150,7 +175,7 @@ export function ConfirmIntlAirtimeModal({
             </View>
           )}
 
-          {cashbackToEarn > 0 && (
+          {balancesReady && cashbackToEarn > 0 && (
             <View
               className="self-start rounded-lg px-3 py-1.5"
               style={{
@@ -169,23 +194,52 @@ export function ConfirmIntlAirtimeModal({
           )}
         </View>
 
-        <View className="flex-row items-center justify-between rounded-xl border border-border bg-gray-50 dark:bg-gray-800/50 px-4 py-3">
-          <Text className="text-sm text-muted-foreground">
-            Balance after purchase
+        {balancesError ? (
+          <View className="gap-3">
+            <Text className="text-center text-sm text-destructive">
+              {balancesError}
+            </Text>
+            {onRetryBalances ? (
+              <Button
+                variant="outline"
+                className="w-full rounded-xl"
+                onPress={onRetryBalances}
+                disabled={balancesLoading}
+              >
+                <Text className="font-semibold">Try again</Text>
+              </Button>
+            ) : null}
+          </View>
+        ) : balancesLoading ? (
+          <View className="rounded-xl border border-dashed border-border bg-gray-50/50 px-4 py-4 dark:bg-gray-800/30">
+            <Text className="text-center text-sm text-muted-foreground">
+              Balance after purchase will appear here.
+            </Text>
+          </View>
+        ) : (
+          <View className="flex-row items-center justify-between rounded-xl border border-border bg-gray-50 px-4 py-3 dark:bg-gray-800/50">
+            <Text className="text-sm text-muted-foreground">
+              Balance after purchase
+            </Text>
+            <Text className="text-sm font-semibold text-foreground">
+              {formatNaira(balanceAfter)}
+            </Text>
+          </View>
+        )}
+
+        {balancesReady && insufficientWallet ? (
+          <Text className="text-center text-sm text-destructive">
+            Insufficient wallet balance for this purchase. Fund your wallet or
+            adjust the amount.
           </Text>
-          <Text className="text-sm font-semibold text-foreground">
-            {formatNaira(
-              Math.max(0, parseBalanceToNumber(walletBalance) - amountToPay),
-            )}
-          </Text>
-        </View>
+        ) : null}
 
         <Button
           size="lg"
           className="w-full rounded-xl"
           style={{ backgroundColor: colors.green[500] }}
           onPress={onConfirm}
-          disabled={purchasing}
+          disabled={payDisabled}
         >
           {purchasing ? (
             <Spinner color="#fff" size="small" />

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -25,6 +25,11 @@ import {
   POLL_MAX_ELAPSED_MS,
 } from "@/features/vtpass-electricity/lib/constants";
 import { useElectricityStore } from "@/features/vtpass-electricity/lib/store";
+import {
+  PaymentAuthorizationModal,
+  useAuthorizePurchase,
+  useConfirmWalletSnapshot,
+} from "@/features/payment-authorization";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -50,6 +55,22 @@ export default function ElectricityPurchaseScreen() {
   const verifyData = useElectricityStore.use.verifyData();
   const storedBillersCode = useElectricityStore.use.billersCode();
   const resetStore = useElectricityStore.use.reset();
+
+  const {
+    runAuthorizedPurchase,
+    isStepUpBusy,
+    paymentAuthorizationModalProps,
+  } = useAuthorizePurchase({
+    biometricPromptMessage: "Authenticate to confirm electricity payment",
+  });
+
+  const {
+    snapshot: confirmSnapshot,
+    loading: confirmWalletLoading,
+    error: confirmWalletError,
+    refresh: refreshConfirmBalances,
+    reset: resetConfirmWallet,
+  } = useConfirmWalletSnapshot();
 
   const [amountStr, setAmountStr] = useState("");
   const [phone, setPhone] = useState("");
@@ -124,6 +145,18 @@ export default function ElectricityPurchaseScreen() {
     amountValid &&
     phoneValid &&
     !purchasing;
+
+  useLayoutEffect(() => {
+    if (confirmModalVisible) {
+      setUseCashback(false);
+    }
+  }, [confirmModalVisible]);
+
+  function closeConfirmModal() {
+    setConfirmModalVisible(false);
+    setUseCashback(false);
+    resetConfirmWallet();
+  }
 
   // ── Polling ──────────────────────────────────────────────────────────────
 
@@ -261,8 +294,8 @@ export default function ElectricityPurchaseScreen() {
     }
 
     setFieldErrors({});
-    if (hasCashback) setUseCashback(true);
     setConfirmModalVisible(true);
+    void refreshConfirmBalances();
   }
 
   async function handleConfirmPurchase() {
@@ -279,83 +312,85 @@ export default function ElectricityPurchaseScreen() {
       ...(verifyData?.Address ? { customer_address: verifyData.Address } : {}),
     };
 
-    setPurchasing(true);
-    try {
-      const res = await purchaseElectricity(payload);
+    await runAuthorizedPurchase(async () => {
+      setPurchasing(true);
+      try {
+        const res = await purchaseElectricity(payload);
 
-      if (res.success && res.data) {
-        setConfirmModalVisible(false);
+        if (res.success && res.data) {
+          closeConfirmModal();
 
-        const requestId =
-          res.data.requestId ??
-          (res.data as { request_id?: string }).request_id;
-        const status =
-          res.data.content?.transactions?.status ?? res.data.status ?? "";
-        const code = res.data.code ?? "";
-        const isProcessing =
-          res.data.status === "processing" ||
-          status === "pending" ||
-          status === "initiated" ||
-          code === "099" ||
-          res.data.response_description
-            ?.toUpperCase()
-            .includes("PROCESSING");
+          const requestId =
+            res.data.requestId ??
+            (res.data as { request_id?: string }).request_id;
+          const status =
+            res.data.content?.transactions?.status ?? res.data.status ?? "";
+          const code = res.data.code ?? "";
+          const isProcessing =
+            res.data.status === "processing" ||
+            status === "pending" ||
+            status === "initiated" ||
+            code === "099" ||
+            res.data.response_description
+              ?.toUpperCase()
+              .includes("PROCESSING");
 
-        if (isProcessing && requestId) {
-          pollStartRef.current = Date.now();
-          setProcessingModal({
-            visible: true,
-            requestId,
-            message:
-              "Your payment is being processed. We'll check the status shortly.",
-          });
-          pollStatus(requestId, true);
-        } else if (status === "delivered" || code === "000") {
-          const token = res.data.electricity_token;
-          if (token && meterType === "prepaid") {
-            setTokenModal({
+          if (isProcessing && requestId) {
+            pollStartRef.current = Date.now();
+            setProcessingModal({
               visible: true,
-              token,
-              units: res.data.units,
-              customerName: res.data.customerName ?? customerName,
-              amount: res.data.amount,
+              requestId,
+              message:
+                "Your payment is being processed. We'll check the status shortly.",
             });
+            pollStatus(requestId, true);
+          } else if (status === "delivered" || code === "000") {
+            const token = res.data.electricity_token;
+            if (token && meterType === "prepaid") {
+              setTokenModal({
+                visible: true,
+                token,
+                units: res.data.units,
+                customerName: res.data.customerName ?? customerName,
+                amount: res.data.amount,
+              });
+            } else {
+              setSuccessModal({
+                visible: true,
+                message: "Your electricity bill has been paid!",
+              });
+            }
           } else {
             setSuccessModal({
               visible: true,
-              message: "Your electricity bill has been paid!",
+              message:
+                "Your request was received. You'll get a confirmation shortly.",
             });
           }
         } else {
-          setSuccessModal({
+          setErrorModal({
             visible: true,
             message:
-              "Your request was received. You'll get a confirmation shortly.",
+              (res as { message?: string }).message ??
+              "Purchase failed. Please try again.",
           });
         }
-      } else {
+      } catch (e) {
+        handleApiError(e);
         setErrorModal({
           visible: true,
           message:
-            (res as { message?: string }).message ??
-            "Purchase failed. Please try again.",
+            (e as {
+              response?: { data?: { message?: string } };
+              message?: string;
+            })?.response?.data?.message ??
+            (e as Error).message ??
+            "Purchase failed.",
         });
+      } finally {
+        setPurchasing(false);
       }
-    } catch (e) {
-      handleApiError(e);
-      setErrorModal({
-        visible: true,
-        message:
-          (e as {
-            response?: { data?: { message?: string } };
-            message?: string;
-          })?.response?.data?.message ??
-          (e as Error).message ??
-          "Purchase failed.",
-      });
-    } finally {
-      setPurchasing(false);
-    }
+    });
   }
 
   function handleTokenClose() {
@@ -574,21 +609,35 @@ export default function ElectricityPurchaseScreen() {
 
       {/* Confirm bottom sheet */}
       <ConfirmElectricityModal
-        visible={confirmModalVisible}
-        onClose={() => setConfirmModalVisible(false)}
+        visible={
+          confirmModalVisible && !paymentAuthorizationModalProps.visible
+        }
+        onClose={closeConfirmModal}
         providerName={providerLabel}
         serviceID={selectedProvider.serviceID}
         meterType={meterType}
         meterNumber={storedBillersCode}
         customerName={customerName}
         amount={amount}
-        cashbackBalance={cashbackBalance}
+        cashbackBalance={confirmSnapshot?.cashback ?? "₦0.00"}
         cashbackToEarn={cashbackToEarn}
         useCashback={useCashback}
         onUseCashbackChange={setUseCashback}
         onConfirm={handleConfirmPurchase}
-        purchasing={purchasing}
-        walletBalance={walletBalance}
+        purchasing={purchasing || isStepUpBusy}
+        walletBalance={confirmSnapshot?.wallet ?? "₦0.00"}
+        balancesLoading={confirmWalletLoading}
+        balancesError={confirmWalletError}
+        onRetryBalances={refreshConfirmBalances}
+      />
+
+      <PaymentAuthorizationModal
+        {...paymentAuthorizationModalProps}
+        onForgotPinPress={() => {
+          paymentAuthorizationModalProps.onClose();
+          closeConfirmModal();
+          router.push("/(app)/profile/security");
+        }}
       />
 
       {/* Prepaid token display */}
@@ -618,10 +667,22 @@ export default function ElectricityPurchaseScreen() {
         title="Error"
         message={errorModal.message}
         primaryAction={{
-          label: "OK",
-          onPress: () => setErrorModal({ visible: false, message: "" }),
+          label: "Retry",
+          onPress: () => {
+            setErrorModal({ visible: false, message: "" });
+            void handleConfirmPurchase();
+          },
         }}
-        onClose={() => setErrorModal({ visible: false, message: "" })}
+        secondaryAction={{
+          label: "Cancel",
+          onPress: () => {
+            setErrorModal({ visible: false, message: "" });
+            closeConfirmModal();
+            router.replace("/(app)/(tabs)");
+          },
+        }}
+        closeable={false}
+        onClose={() => {}}
       />
 
       {/* Processing / polling */}

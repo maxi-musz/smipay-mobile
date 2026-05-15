@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -17,7 +17,6 @@ import {
   formatNaira,
   getDataCashbackRate,
   computeCashbackToEarn,
-  parseBalanceToNumber,
   DATA_PHONE_REGEX,
   POLL_FIRST_DELAY_MS,
   POLL_INTERVAL_MS,
@@ -31,6 +30,11 @@ import {
   type DataRecentEntry,
 } from "@/features/vtpass-data/lib/data-recent-storage";
 import { useDataStore } from "@/features/vtpass-data/lib/store";
+import {
+  PaymentAuthorizationModal,
+  useAuthorizePurchase,
+  useConfirmWalletSnapshot,
+} from "@/features/payment-authorization";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -48,6 +52,22 @@ export default function DataAmountScreen() {
   const selectedProvider = useDataStore.use.selectedProvider();
   const selectedVariation = useDataStore.use.selectedVariation();
   const resetStore = useDataStore.use.reset();
+
+  const {
+    runAuthorizedPurchase,
+    isStepUpBusy,
+    paymentAuthorizationModalProps,
+  } = useAuthorizePurchase({
+    biometricPromptMessage: "Authenticate to confirm data purchase",
+  });
+
+  const {
+    snapshot: confirmSnapshot,
+    loading: confirmWalletLoading,
+    error: confirmWalletError,
+    refresh: refreshConfirmBalances,
+    reset: resetConfirmWallet,
+  } = useConfirmWalletSnapshot();
 
   const [phone, setPhone] = useState("");
   const [useCashback, setUseCashback] = useState(false);
@@ -77,10 +97,6 @@ export default function DataAmountScreen() {
   const amount = selectedVariation?.variation_amount
     ? parseFloat(String(selectedVariation.variation_amount))
     : 0;
-
-  const maxPayable =
-    parseBalanceToNumber(walletBalance) + parseBalanceToNumber(cashbackBalance);
-  const amountWithinFunds = amount <= maxPayable + 1e-9;
 
   useEffect(() => {
     if (!selectedProvider || !selectedVariation) {
@@ -213,9 +229,20 @@ export default function DataAmountScreen() {
     !!selectedProvider &&
     !!selectedVariation &&
     amount > 0 &&
-    amountWithinFunds &&
     phoneValid &&
     !purchasing;
+
+  useLayoutEffect(() => {
+    if (confirmModalVisible) {
+      setUseCashback(false);
+    }
+  }, [confirmModalVisible]);
+
+  function closeConfirmModal() {
+    setConfirmModalVisible(false);
+    setUseCashback(false);
+    resetConfirmWallet();
+  }
 
   function handleOpenConfirmModal() {
     if (!canSubmit) return;
@@ -223,12 +250,9 @@ export default function DataAmountScreen() {
       setPhoneError("Enter a valid 11-digit phone number (e.g. 08012345678)");
       return;
     }
-    if (amount > maxPayable + 1e-9) {
-      return;
-    }
     setPhoneError(null);
-    if (hasCashback) setUseCashback(true);
     setConfirmModalVisible(true);
+    void refreshConfirmBalances();
   }
 
   async function handleConfirmPurchase() {
@@ -240,79 +264,84 @@ export default function DataAmountScreen() {
       return;
     }
 
-    setPurchasing(true);
-    try {
-      const res = await purchaseData({
-        serviceID: selectedProvider.serviceID,
-        billersCode,
-        variation_code: selectedVariation.variation_code,
-        amount: Math.round(amount * 100) / 100,
-        use_cashback: useCashback,
-      });
+    await runAuthorizedPurchase(async () => {
+      setPurchasing(true);
+      try {
+        const res = await purchaseData({
+          serviceID: selectedProvider.serviceID,
+          billersCode,
+          variation_code: selectedVariation.variation_code,
+          amount: Math.round(amount * 100) / 100,
+          use_cashback: useCashback,
+        });
 
-      if (res.success && res.data) {
-        setConfirmModalVisible(false);
-        const requestId = res.data.requestId ?? (res.data as { request_id?: string }).request_id;
-        const status =
-          res.data.content?.transactions?.status ?? res.data.status ?? "";
-        const code = res.data.code ?? "";
-        const isProcessing =
-          res.data.status === "processing" ||
-          status === "pending" ||
-          status === "initiated" ||
-          code === "099" ||
-          res.data.response_description?.toUpperCase().includes("PROCESSING");
+        if (res.success && res.data) {
+          closeConfirmModal();
+          const requestId =
+            res.data.requestId ??
+            (res.data as { request_id?: string }).request_id;
+          const status =
+            res.data.content?.transactions?.status ?? res.data.status ?? "";
+          const code = res.data.code ?? "";
+          const isProcessing =
+            res.data.status === "processing" ||
+            status === "pending" ||
+            status === "initiated" ||
+            code === "099" ||
+            res.data.response_description?.toUpperCase().includes("PROCESSING");
 
-        if (isProcessing && requestId) {
-          successPayloadRef.current = {
-            phone: phoneNorm,
-            serviceID: selectedProvider.serviceID,
-          };
-          pollStartRef.current = Date.now();
-          setProcessingModal({
-            visible: true,
-            requestId,
-            message:
-              "Your purchase is being processed. We'll check the status shortly.",
-          });
-          pollStatus(requestId, true);
-        } else if (status === "delivered" || code === "000") {
-          addRecentData(phoneNorm, selectedProvider.serviceID).then(() => {
-            getRecentData().then(setRecentList);
-          });
-          setSuccessModal({
-            visible: true,
-            message: `Data plan ${formatNaira(amount)} has been purchased successfully.`,
-          });
+          if (isProcessing && requestId) {
+            successPayloadRef.current = {
+              phone: phoneNorm,
+              serviceID: selectedProvider.serviceID,
+            };
+            pollStartRef.current = Date.now();
+            setProcessingModal({
+              visible: true,
+              requestId,
+              message:
+                "Your purchase is being processed. We'll check the status shortly.",
+            });
+            pollStatus(requestId, true);
+          } else if (status === "delivered" || code === "000") {
+            addRecentData(phoneNorm, selectedProvider.serviceID).then(() => {
+              getRecentData().then(setRecentList);
+            });
+            setSuccessModal({
+              visible: true,
+              message: `Data plan ${formatNaira(amount)} has been purchased successfully.`,
+            });
+          } else {
+            setSuccessModal({
+              visible: true,
+              message:
+                "Your request was received. You'll get a confirmation shortly.",
+            });
+          }
         } else {
-          setSuccessModal({
+          setErrorModal({
             visible: true,
-            message: "Your request was received. You'll get a confirmation shortly.",
+            message:
+              (res as { message?: string }).message ??
+              "Purchase failed. Please try again.",
           });
         }
-      } else {
+      } catch (e) {
+        handleApiError(e);
         setErrorModal({
           visible: true,
           message:
-            (res as { message?: string }).message ??
-            "Purchase failed. Please try again.",
+            (e as {
+              response?: { data?: { message?: string } };
+              message?: string;
+            })?.response?.data?.message ??
+            (e as Error).message ??
+            "Purchase failed.",
         });
+      } finally {
+        setPurchasing(false);
       }
-    } catch (e) {
-      handleApiError(e);
-      setErrorModal({
-        visible: true,
-        message:
-          (e as {
-            response?: { data?: { message?: string } };
-            message?: string;
-          })?.response?.data?.message ??
-          (e as Error).message ??
-          "Purchase failed.",
-      });
-    } finally {
-      setPurchasing(false);
-    }
+    });
   }
 
   function handleSuccessClose() {
@@ -393,11 +422,10 @@ export default function DataAmountScreen() {
           </Text>
         )}
 
-        {amount > 0 && !amountWithinFunds && (
-          <Text className="mt-5 text-sm text-destructive">
-            {maxPayable <= 0
-              ? "Insufficient wallet and cashback balance for this plan."
-              : `This plan costs ${formatNaira(amount)}. Maximum you can pay is ${formatNaira(maxPayable)} (wallet + cashback).`}
+        {amount > 0 && (
+          <Text className="mt-5 text-sm text-muted-foreground">
+            Wallet and cashback amounts refresh when you open the confirmation
+            step.
           </Text>
         )}
 
@@ -423,19 +451,34 @@ export default function DataAmountScreen() {
       </ScrollView>
 
       <ConfirmDataModal
-        visible={confirmModalVisible}
-        onClose={() => setConfirmModalVisible(false)}
+        visible={
+          confirmModalVisible &&
+          !paymentAuthorizationModalProps.visible
+        }
+        onClose={closeConfirmModal}
         provider={selectedProvider}
         variation={selectedVariation}
         phone={phoneNorm}
         amount={amount}
-        cashbackBalance={cashbackBalance}
+        cashbackBalance={confirmSnapshot?.cashback ?? "₦0.00"}
         cashbackToEarn={cashbackToEarn}
         useCashback={useCashback}
         onUseCashbackChange={setUseCashback}
         onConfirm={handleConfirmPurchase}
-        purchasing={purchasing}
-        walletBalance={walletBalance}
+        purchasing={purchasing || isStepUpBusy}
+        walletBalance={confirmSnapshot?.wallet ?? "₦0.00"}
+        balancesLoading={confirmWalletLoading}
+        balancesError={confirmWalletError}
+        onRetryBalances={refreshConfirmBalances}
+      />
+
+      <PaymentAuthorizationModal
+        {...paymentAuthorizationModalProps}
+        onForgotPinPress={() => {
+          paymentAuthorizationModalProps.onClose();
+          closeConfirmModal();
+          router.push("/(app)/profile/security");
+        }}
       />
 
       <AlertModal
@@ -453,10 +496,22 @@ export default function DataAmountScreen() {
         title="Error"
         message={errorModal.message}
         primaryAction={{
-          label: "OK",
-          onPress: () => setErrorModal({ visible: false, message: "" }),
+          label: "Retry",
+          onPress: () => {
+            setErrorModal({ visible: false, message: "" });
+            void handleConfirmPurchase();
+          },
         }}
-        onClose={() => setErrorModal({ visible: false, message: "" })}
+        secondaryAction={{
+          label: "Cancel",
+          onPress: () => {
+            setErrorModal({ visible: false, message: "" });
+            closeConfirmModal();
+            router.replace("/(app)/(tabs)");
+          },
+        }}
+        closeable={false}
+        onClose={() => {}}
       />
 
       {processingModal.visible && processingModal.requestId && (

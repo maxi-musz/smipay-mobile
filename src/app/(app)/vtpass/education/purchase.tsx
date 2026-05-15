@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -23,6 +23,11 @@ import {
   POLL_MAX_ELAPSED_MS,
 } from "@/features/vtpass-education/lib/constants";
 import { useEducationStore } from "@/features/vtpass-education/lib/store";
+import {
+  PaymentAuthorizationModal,
+  useAuthorizePurchase,
+  useConfirmWalletSnapshot,
+} from "@/features/payment-authorization";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -51,6 +56,22 @@ export default function EducationPurchaseScreen() {
   const quantity = useEducationStore.use.quantity();
   const setQuantity = useEducationStore.use.setQuantity();
   const resetStore = useEducationStore.use.reset();
+
+  const {
+    runAuthorizedPurchase,
+    isStepUpBusy,
+    paymentAuthorizationModalProps,
+  } = useAuthorizePurchase({
+    biometricPromptMessage: "Authenticate to confirm education purchase",
+  });
+
+  const {
+    snapshot: confirmSnapshot,
+    loading: confirmWalletLoading,
+    error: confirmWalletError,
+    refresh: refreshConfirmBalances,
+    reset: resetConfirmWallet,
+  } = useConfirmWalletSnapshot();
 
   const [phone, setPhone] = useState("");
   const [useCashback, setUseCashback] = useState(false);
@@ -113,6 +134,18 @@ export default function EducationPurchaseScreen() {
     amount > 0 &&
     phoneValid &&
     !purchasing;
+
+  useLayoutEffect(() => {
+    if (confirmModalVisible) {
+      setUseCashback(false);
+    }
+  }, [confirmModalVisible]);
+
+  function closeConfirmModal() {
+    setConfirmModalVisible(false);
+    setUseCashback(false);
+    resetConfirmWallet();
+  }
 
   // ── Polling ──────────────────────────────────────────────────────────────
 
@@ -213,8 +246,8 @@ export default function EducationPurchaseScreen() {
     }
 
     setPhoneError(undefined);
-    if (hasCashback) setUseCashback(true);
     setConfirmModalVisible(true);
+    void refreshConfirmBalances();
   }
 
   async function handleConfirmPurchase() {
@@ -235,71 +268,73 @@ export default function EducationPurchaseScreen() {
       payload.billersCode = storedBillersCode;
     }
 
-    setPurchasing(true);
-    try {
-      const res = await purchaseEducation(payload);
+    await runAuthorizedPurchase(async () => {
+      setPurchasing(true);
+      try {
+        const res = await purchaseEducation(payload);
 
-      if (res.success && res.data) {
-        setConfirmModalVisible(false);
+        if (res.success && res.data) {
+          closeConfirmModal();
 
-        const credentials = res.data.credentials ?? null;
-        const requestId =
-          res.data.requestId ??
-          (res.data as { request_id?: string }).request_id;
-        const status =
-          res.data.content?.transactions?.status ?? res.data.status ?? "";
-        const code = res.data.code ?? "";
-        const isProcessing =
-          res.data.status === "processing" ||
-          status === "pending" ||
-          status === "initiated" ||
-          code === "099" ||
-          res.data.response_description?.toUpperCase().includes("PROCESSING");
+          const credentials = res.data.credentials ?? null;
+          const requestId =
+            res.data.requestId ??
+            (res.data as { request_id?: string }).request_id;
+          const status =
+            res.data.content?.transactions?.status ?? res.data.status ?? "";
+          const code = res.data.code ?? "";
+          const isProcessing =
+            res.data.status === "processing" ||
+            status === "pending" ||
+            status === "initiated" ||
+            code === "099" ||
+            res.data.response_description?.toUpperCase().includes("PROCESSING");
 
-        if (
-          !isProcessing &&
-          (status === "delivered" || code === "000") &&
-          credentials &&
-          (credentials.pin || credentials.cards?.length)
-        ) {
-          setSuccessModal({ visible: true, credentials });
-        } else if (isProcessing && requestId) {
-          pollStartRef.current = Date.now();
-          setProcessingModal({
-            visible: true,
-            requestId,
-            message:
-              "Your purchase is being processed. We'll check the status shortly.",
-          });
-          pollStatus(requestId, true);
-        } else if (status === "delivered" || code === "000") {
-          setSuccessModal({ visible: true, credentials });
+          if (
+            !isProcessing &&
+            (status === "delivered" || code === "000") &&
+            credentials &&
+            (credentials.pin || credentials.cards?.length)
+          ) {
+            setSuccessModal({ visible: true, credentials });
+          } else if (isProcessing && requestId) {
+            pollStartRef.current = Date.now();
+            setProcessingModal({
+              visible: true,
+              requestId,
+              message:
+                "Your purchase is being processed. We'll check the status shortly.",
+            });
+            pollStatus(requestId, true);
+          } else if (status === "delivered" || code === "000") {
+            setSuccessModal({ visible: true, credentials });
+          } else {
+            setSuccessModal({ visible: true, credentials });
+          }
         } else {
-          setSuccessModal({ visible: true, credentials });
+          setErrorModal({
+            visible: true,
+            message:
+              (res as { message?: string }).message ??
+              "Purchase failed. Please try again.",
+          });
         }
-      } else {
+      } catch (e) {
+        handleApiError(e);
         setErrorModal({
           visible: true,
           message:
-            (res as { message?: string }).message ??
-            "Purchase failed. Please try again.",
+            (e as {
+              response?: { data?: { message?: string } };
+              message?: string;
+            })?.response?.data?.message ??
+            (e as Error).message ??
+            "Purchase failed.",
         });
+      } finally {
+        setPurchasing(false);
       }
-    } catch (e) {
-      handleApiError(e);
-      setErrorModal({
-        visible: true,
-        message:
-          (e as {
-            response?: { data?: { message?: string } };
-            message?: string;
-          })?.response?.data?.message ??
-          (e as Error).message ??
-          "Purchase failed.",
-      });
-    } finally {
-      setPurchasing(false);
-    }
+    });
   }
 
   function handleSuccessClose() {
@@ -491,8 +526,10 @@ export default function EducationPurchaseScreen() {
 
       {/* Confirm bottom sheet */}
       <ConfirmEducationModal
-        visible={confirmModalVisible}
-        onClose={() => setConfirmModalVisible(false)}
+        visible={
+          confirmModalVisible && !paymentAuthorizationModalProps.visible
+        }
+        onClose={closeConfirmModal}
         productLabel={productLabel}
         serviceID={selectedProduct}
         planName={planName}
@@ -501,13 +538,25 @@ export default function EducationPurchaseScreen() {
         quantity={quantity}
         customerName={customerName}
         profileId={storedBillersCode || undefined}
-        cashbackBalance={cashbackBalance}
+        cashbackBalance={confirmSnapshot?.cashback ?? "₦0.00"}
         cashbackToEarn={cashbackToEarn}
         useCashback={useCashback}
         onUseCashbackChange={setUseCashback}
         onConfirm={handleConfirmPurchase}
-        purchasing={purchasing}
-        walletBalance={walletBalance}
+        purchasing={purchasing || isStepUpBusy}
+        walletBalance={confirmSnapshot?.wallet ?? "₦0.00"}
+        balancesLoading={confirmWalletLoading}
+        balancesError={confirmWalletError}
+        onRetryBalances={refreshConfirmBalances}
+      />
+
+      <PaymentAuthorizationModal
+        {...paymentAuthorizationModalProps}
+        onForgotPinPress={() => {
+          paymentAuthorizationModalProps.onClose();
+          closeConfirmModal();
+          router.push("/(app)/profile/security");
+        }}
       />
 
       {/* Credential display */}
@@ -527,10 +576,22 @@ export default function EducationPurchaseScreen() {
         title="Error"
         message={errorModal.message}
         primaryAction={{
-          label: "OK",
-          onPress: () => setErrorModal({ visible: false, message: "" }),
+          label: "Retry",
+          onPress: () => {
+            setErrorModal({ visible: false, message: "" });
+            void handleConfirmPurchase();
+          },
         }}
-        onClose={() => setErrorModal({ visible: false, message: "" })}
+        secondaryAction={{
+          label: "Cancel",
+          onPress: () => {
+            setErrorModal({ visible: false, message: "" });
+            closeConfirmModal();
+            router.replace("/(app)/(tabs)");
+          },
+        }}
+        closeable={false}
+        onClose={() => {}}
       />
 
       {/* Processing / polling */}

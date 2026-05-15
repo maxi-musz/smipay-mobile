@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -17,12 +17,16 @@ import {
   formatNaira,
   getIntlAirtimeCashbackRate,
   computeCashbackToEarn,
-  parseBalanceToNumber,
   POLL_FIRST_DELAY_MS,
   POLL_INTERVAL_MS,
   POLL_MAX_ELAPSED_MS,
 } from "@/features/vtpass-intl-airtime/lib/constants";
 import { useIntlAirtimeStore } from "@/features/vtpass-intl-airtime/lib/store";
+import {
+  PaymentAuthorizationModal,
+  useAuthorizePurchase,
+  useConfirmWalletSnapshot,
+} from "@/features/payment-authorization";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { useHomepageStore } from "@/store";
@@ -41,6 +45,22 @@ export default function IntlAirtimeAmountScreen() {
   const selectedOperator = useIntlAirtimeStore.use.selectedOperator();
   const selectedVariation = useIntlAirtimeStore.use.selectedVariation();
   const resetStore = useIntlAirtimeStore.use.reset();
+
+  const {
+    runAuthorizedPurchase,
+    isStepUpBusy,
+    paymentAuthorizationModalProps,
+  } = useAuthorizePurchase({
+    biometricPromptMessage: "Authenticate to confirm international airtime purchase",
+  });
+
+  const {
+    snapshot: confirmSnapshot,
+    loading: confirmWalletLoading,
+    error: confirmWalletError,
+    refresh: refreshConfirmBalances,
+    reset: resetConfirmWallet,
+  } = useConfirmWalletSnapshot();
 
   const [amountStr, setAmountStr] = useState("");
   const [billersCode, setBillersCode] = useState("");
@@ -163,9 +183,6 @@ export default function IntlAirtimeAmountScreen() {
   }, [processingModal.requestId, pollStatus]);
 
   const amount = parseInt(amountStr.replace(/\D/g, ""), 10) || 0;
-  const maxPayable =
-    parseBalanceToNumber(walletBalance) + parseBalanceToNumber(cashbackBalance);
-  const amountWithinFunds = amount <= maxPayable + 1e-9;
   const billersCodeTrimmed = billersCode.replace(/\s/g, "").replace(/\D/g, "");
   const billersCodeValid = billersCodeTrimmed.length >= 10;
   const phoneTrimmed = phone.replace(/\s/g, "").replace(/\D/g, "");
@@ -181,10 +198,21 @@ export default function IntlAirtimeAmountScreen() {
     !!selectedOperator &&
     !!selectedVariation &&
     amountValid &&
-    amountWithinFunds &&
     billersCodeValid &&
     phoneValid &&
     !purchasing;
+
+  useLayoutEffect(() => {
+    if (confirmModalVisible) {
+      setUseCashback(false);
+    }
+  }, [confirmModalVisible]);
+
+  function closeConfirmModal() {
+    setConfirmModalVisible(false);
+    setUseCashback(false);
+    resetConfirmWallet();
+  }
 
   const hasCashback =
     cashbackBalance &&
@@ -222,19 +250,9 @@ export default function IntlAirtimeAmountScreen() {
       }));
       return;
     }
-    if (amount > maxPayable + 1e-9) {
-      setFieldErrors((e) => ({
-        ...e,
-        amount:
-          maxPayable <= 0
-            ? "Insufficient wallet and cashback balance"
-            : `Maximum ${formatNaira(maxPayable)} (wallet + cashback)`,
-      }));
-      return;
-    }
     setFieldErrors({});
-    if (hasCashback) setUseCashback(true);
     setConfirmModalVisible(true);
+    void refreshConfirmBalances();
   }
 
   async function handleConfirmPurchase() {
@@ -262,78 +280,80 @@ export default function IntlAirtimeAmountScreen() {
       ? billersCodeTrimmed
       : selectedCountry.prefix + billersCodeTrimmed.replace(/^0+/, "");
 
-    setPurchasing(true);
-    try {
-      const res = await purchaseIntlAirtime({
-        billersCode: billersCodeFormatted,
-        variation_code: selectedVariation.variation_code,
-        amount,
-        phone: phoneFormatted,
-        operator_id: selectedOperator.operator_id,
-        country_code: selectedCountry.code,
-        product_type_id: String(selectedProductType.product_type_id),
-        use_cashback: useCashback,
-      });
+    await runAuthorizedPurchase(async () => {
+      setPurchasing(true);
+      try {
+        const res = await purchaseIntlAirtime({
+          billersCode: billersCodeFormatted,
+          variation_code: selectedVariation.variation_code,
+          amount,
+          phone: phoneFormatted,
+          operator_id: selectedOperator.operator_id,
+          country_code: selectedCountry.code,
+          product_type_id: String(selectedProductType.product_type_id),
+          use_cashback: useCashback,
+        });
 
-      if (res.success && res.data) {
-        setConfirmModalVisible(false);
-        const requestId =
-          res.data.requestId ??
-          (res.data as { request_id?: string }).request_id;
-        const status =
-          res.data.content?.transactions?.status ?? res.data.status ?? "";
-        const code = res.data.code ?? "";
-        const isProcessing =
-          res.data.status === "processing" ||
-          status === "pending" ||
-          status === "initiated" ||
-          code === "099" ||
-          res.data.response_description?.toUpperCase().includes("PROCESSING");
+        if (res.success && res.data) {
+          closeConfirmModal();
+          const requestId =
+            res.data.requestId ??
+            (res.data as { request_id?: string }).request_id;
+          const status =
+            res.data.content?.transactions?.status ?? res.data.status ?? "";
+          const code = res.data.code ?? "";
+          const isProcessing =
+            res.data.status === "processing" ||
+            status === "pending" ||
+            status === "initiated" ||
+            code === "099" ||
+            res.data.response_description?.toUpperCase().includes("PROCESSING");
 
-        if (isProcessing && requestId) {
-          pollStartRef.current = Date.now();
-          setProcessingModal({
-            visible: true,
-            requestId,
-            message:
-              "Your purchase is being processed. We'll check the status shortly.",
-          });
-          pollStatus(requestId, true);
-        } else if (status === "delivered" || code === "000") {
-          setSuccessModal({
-            visible: true,
-            message: `International airtime of ${formatNaira(amount)} has been sent successfully.`,
-          });
+          if (isProcessing && requestId) {
+            pollStartRef.current = Date.now();
+            setProcessingModal({
+              visible: true,
+              requestId,
+              message:
+                "Your purchase is being processed. We'll check the status shortly.",
+            });
+            pollStatus(requestId, true);
+          } else if (status === "delivered" || code === "000") {
+            setSuccessModal({
+              visible: true,
+              message: `International airtime of ${formatNaira(amount)} has been sent successfully.`,
+            });
+          } else {
+            setSuccessModal({
+              visible: true,
+              message:
+                "Your request was received. You'll get a confirmation shortly.",
+            });
+          }
         } else {
-          setSuccessModal({
+          setErrorModal({
             visible: true,
             message:
-              "Your request was received. You'll get a confirmation shortly.",
+              (res as { message?: string }).message ??
+              "Purchase failed. Please try again.",
           });
         }
-      } else {
+      } catch (e) {
+        handleApiError(e);
         setErrorModal({
           visible: true,
           message:
-            (res as { message?: string }).message ??
-            "Purchase failed. Please try again.",
+            (e as {
+              response?: { data?: { message?: string } };
+              message?: string;
+            })?.response?.data?.message ??
+            (e as Error).message ??
+            "Purchase failed.",
         });
+      } finally {
+        setPurchasing(false);
       }
-    } catch (e) {
-      handleApiError(e);
-      setErrorModal({
-        visible: true,
-        message:
-          (e as {
-            response?: { data?: { message?: string } };
-            message?: string;
-          })?.response?.data?.message ??
-          (e as Error).message ??
-          "Purchase failed.",
-      });
-    } finally {
-      setPurchasing(false);
-    }
+    });
   }
 
   function handleSuccessClose() {
@@ -388,14 +408,7 @@ export default function IntlAirtimeAmountScreen() {
             setFieldErrors((e) => ({ ...e, amount: undefined }));
           }}
           countryPrefix={selectedCountry.prefix}
-          amountError={
-            fieldErrors.amount ??
-            (amount > 0 && !amountWithinFunds
-              ? maxPayable <= 0
-                ? "Insufficient wallet and cashback balance"
-                : `Maximum ${formatNaira(maxPayable)} (wallet + cashback)`
-              : undefined)
-          }
+          amountError={fieldErrors.amount}
           billersCodeError={fieldErrors.billersCode}
           phoneError={fieldErrors.phone}
           onClearAmountError={() =>
@@ -414,8 +427,10 @@ export default function IntlAirtimeAmountScreen() {
       </ScrollView>
 
       <ConfirmIntlAirtimeModal
-        visible={confirmModalVisible}
-        onClose={() => setConfirmModalVisible(false)}
+        visible={
+          confirmModalVisible && !paymentAuthorizationModalProps.visible
+        }
+        onClose={closeConfirmModal}
         country={selectedCountry}
         operator={selectedOperator}
         variation={selectedVariation}
@@ -424,13 +439,25 @@ export default function IntlAirtimeAmountScreen() {
           phone.startsWith("0") ? phone : phoneTrimmed ? `0${phoneTrimmed}` : phone
         }
         amount={amount}
-        cashbackBalance={cashbackBalance}
+        cashbackBalance={confirmSnapshot?.cashback ?? "₦0.00"}
         cashbackToEarn={cashbackToEarn}
         useCashback={useCashback}
         onUseCashbackChange={setUseCashback}
         onConfirm={handleConfirmPurchase}
-        purchasing={purchasing}
-        walletBalance={walletBalance}
+        purchasing={purchasing || isStepUpBusy}
+        walletBalance={confirmSnapshot?.wallet ?? "₦0.00"}
+        balancesLoading={confirmWalletLoading}
+        balancesError={confirmWalletError}
+        onRetryBalances={refreshConfirmBalances}
+      />
+
+      <PaymentAuthorizationModal
+        {...paymentAuthorizationModalProps}
+        onForgotPinPress={() => {
+          paymentAuthorizationModalProps.onClose();
+          closeConfirmModal();
+          router.push("/(app)/profile/security");
+        }}
       />
 
       <AlertModal
@@ -448,10 +475,22 @@ export default function IntlAirtimeAmountScreen() {
         title="Error"
         message={errorModal.message}
         primaryAction={{
-          label: "OK",
-          onPress: () => setErrorModal({ visible: false, message: "" }),
+          label: "Retry",
+          onPress: () => {
+            setErrorModal({ visible: false, message: "" });
+            void handleConfirmPurchase();
+          },
         }}
-        onClose={() => setErrorModal({ visible: false, message: "" })}
+        secondaryAction={{
+          label: "Cancel",
+          onPress: () => {
+            setErrorModal({ visible: false, message: "" });
+            closeConfirmModal();
+            router.replace("/(app)/(tabs)");
+          },
+        }}
+        closeable={false}
+        onClose={() => {}}
       />
 
       {processingModal.visible && processingModal.requestId && (

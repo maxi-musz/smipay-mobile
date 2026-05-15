@@ -13,7 +13,6 @@ import {
   getDiscoShortName,
 } from "../lib/constants";
 import { getElectricityLogo } from "../lib/electricity-logos";
-import { useAppTheme } from "@/hooks/use-app-theme";
 import type { MeterType } from "@/types/vtpass-electricity";
 
 interface ConfirmElectricityModalProps {
@@ -32,6 +31,9 @@ interface ConfirmElectricityModalProps {
   onConfirm: () => void;
   purchasing: boolean;
   walletBalance: string;
+  balancesLoading: boolean;
+  balancesError: string | null;
+  onRetryBalances?: () => void;
 }
 
 export function ConfirmElectricityModal({
@@ -50,15 +52,25 @@ export function ConfirmElectricityModal({
   onConfirm,
   purchasing,
   walletBalance,
+  balancesLoading,
+  balancesError,
+  onRetryBalances,
 }: ConfirmElectricityModalProps) {
-  useAppTheme();
+  const balancesReady = !balancesLoading && !balancesError;
   const cashbackNum = parseBalanceToNumber(cashbackBalance);
-  const hasCashback = cashbackNum > 0;
+  const hasCashback = balancesReady && cashbackNum > 0;
   const cashbackToApply =
-    useCashback && hasCashback ? Math.min(cashbackNum, amount) : 0;
+    balancesReady && useCashback && hasCashback
+      ? Math.min(cashbackNum, amount)
+      : 0;
   const amountToPay = amount - cashbackToApply;
   const walletBalanceNum = parseBalanceToNumber(walletBalance);
   const balanceAfter = Math.max(0, walletBalanceNum - amountToPay);
+  const insufficientWallet =
+    balancesReady && walletBalanceNum + 1e-9 < amountToPay;
+  const payDisabled =
+    purchasing || balancesLoading || !!balancesError || insufficientWallet;
+
   const logo = getElectricityLogo(serviceID);
   const shortName = getDiscoShortName(serviceID);
 
@@ -98,21 +110,32 @@ export function ConfirmElectricityModal({
           bounces={false}
           contentContainerStyle={{ paddingBottom: 4 }}
         >
-          <View className="items-center pt-6 pb-3">
-            <Text className="text-2xl font-bold text-foreground">
-              {formatNaira(amountToPay)}
-            </Text>
-            {cashbackToApply > 0 && (
-              <Text
-                className="mt-0.5 text-sm text-muted-foreground"
-                style={{ textDecorationLine: "line-through" }}
-              >
-                {formatNaira(amount)}
-              </Text>
+          <View className="min-h-[88px] items-center justify-center pt-6 pb-3">
+            {balancesLoading ? (
+              <>
+                <Spinner color={colors.gray[500]} size="small" />
+                <Text className="mt-2 text-center text-xs text-muted-foreground">
+                  Processing...
+                </Text>
+              </>
+            ) : balancesError ? null : (
+              <>
+                <Text className="text-2xl font-bold text-foreground">
+                  {formatNaira(amountToPay)}
+                </Text>
+                {cashbackToApply > 0 && (
+                  <Text
+                    className="mt-0.5 text-sm text-muted-foreground"
+                    style={{ textDecorationLine: "line-through" }}
+                  >
+                    {formatNaira(amount)}
+                  </Text>
+                )}
+              </>
             )}
           </View>
 
-          <View className="rounded-2xl bg-gray-50 dark:bg-gray-800/50 px-4">
+          <View className="rounded-2xl bg-gray-50 px-4 dark:bg-gray-800/50">
             {detailRow(
               "Provider",
               <>
@@ -160,9 +183,10 @@ export function ConfirmElectricityModal({
               <Text className="text-[13px] font-medium text-foreground">
                 {formatNaira(amount)}
               </Text>,
-              !hasCashback,
+              !balancesReady || !hasCashback,
             )}
-            {hasCashback &&
+            {balancesReady &&
+              hasCashback &&
               detailRow(
                 `Cashback (${formatNaira(cashbackNum)})`,
                 <Switch
@@ -173,7 +197,7 @@ export function ConfirmElectricityModal({
               )}
           </View>
 
-          {cashbackToEarn > 0 && (
+          {balancesReady && cashbackToEarn > 0 && (
             <View
               className="self-start mt-3 rounded-lg px-3 py-1"
               style={{ backgroundColor: colors.orange[100] }}
@@ -187,24 +211,58 @@ export function ConfirmElectricityModal({
             </View>
           )}
 
-          <View className="mt-3 gap-2">
-            <Text className="text-[13px] font-semibold text-foreground">
-              Payment Method
-            </Text>
-            <View className="flex-row items-center justify-between rounded-xl border border-border bg-gray-50 dark:bg-gray-800/50 px-4 py-2.5">
-              <Text className="text-[13px] text-foreground">
-                Balance ({formatNaira(walletBalanceNum)})
+          {balancesError ? (
+            <View className="mt-3 gap-3">
+              <Text className="text-center text-sm text-destructive">
+                {balancesError}
               </Text>
-              <Ionicons
-                name="checkmark-circle"
-                size={22}
-                color={colors.orange[500]}
-              />
+              {onRetryBalances ? (
+                <Button
+                  variant="outline"
+                  className="w-full rounded-xl"
+                  onPress={onRetryBalances}
+                  disabled={balancesLoading}
+                >
+                  <Text className="font-semibold">Try again</Text>
+                </Button>
+              ) : null}
             </View>
-            <Text className="text-xs text-muted-foreground">
-              After purchase: {formatNaira(balanceAfter)}
+          ) : balancesLoading ? (
+            <View className="mt-3 rounded-xl border border-dashed border-border bg-gray-50/50 px-4 py-3 dark:bg-gray-800/30">
+              <Text className="text-center text-[13px] font-semibold text-foreground">
+                Payment Method
+              </Text>
+              <Text className="mt-1 text-center text-xs text-muted-foreground">
+                Your wallet balance will appear shortly.
+              </Text>
+            </View>
+          ) : (
+            <View className="mt-3 gap-2">
+              <Text className="text-[13px] font-semibold text-foreground">
+                Payment Method
+              </Text>
+              <View className="flex-row items-center justify-between rounded-xl border border-border bg-gray-50 px-4 py-2.5 dark:bg-gray-800/50">
+                <Text className="text-[13px] text-foreground">
+                  Balance ({formatNaira(walletBalanceNum)})
+                </Text>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={22}
+                  color={colors.orange[500]}
+                />
+              </View>
+              <Text className="text-xs text-muted-foreground">
+                After purchase: {formatNaira(balanceAfter)}
+              </Text>
+            </View>
+          )}
+
+          {balancesReady && insufficientWallet ? (
+            <Text className="mt-3 text-center text-sm text-destructive">
+              Insufficient wallet balance for this purchase. Fund your wallet or
+              adjust the amount.
             </Text>
-          </View>
+          ) : null}
         </ScrollView>
 
         <Button
@@ -212,7 +270,7 @@ export function ConfirmElectricityModal({
           className="mt-4 w-full flex-row gap-2 rounded-xl"
           style={{ backgroundColor: colors.orange[500] }}
           onPress={onConfirm}
-          disabled={purchasing}
+          disabled={payDisabled}
         >
           {purchasing ? (
             <Spinner color="#fff" size="small" />
