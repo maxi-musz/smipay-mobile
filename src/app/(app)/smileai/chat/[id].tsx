@@ -15,6 +15,17 @@ export default function SmileaiChatRoute() {
           params: { id: newId },
         });
       }}
+      showBackButton
+      onOpenHistory={() => router.push("/(app)/smileai")}
+      onNewChat={
+        conversationId
+          ? () =>
+              router.replace({
+                pathname: "/(app)/smileai/chat/[id]",
+                params: { id: "new" },
+              })
+          : undefined
+      }
     />
   );
 }

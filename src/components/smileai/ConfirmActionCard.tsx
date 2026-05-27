@@ -38,10 +38,10 @@ export function ConfirmActionCard({
       <Text className="mt-2 text-sm text-muted-foreground">{description}</Text>
       <View className="mt-4 flex-row gap-3">
         <Button variant="outline" className="flex-1" onPress={onCancel} disabled={loading}>
-          Cancel
+          <Text>Cancel</Text>
         </Button>
         <Button className="flex-1" onPress={onConfirm} disabled={loading}>
-          Confirm
+          <Text className="font-semibold text-primary-foreground">Confirm</Text>
         </Button>
       </View>
     </View>

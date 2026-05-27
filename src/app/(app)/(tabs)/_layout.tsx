@@ -1,5 +1,5 @@
 import { View } from "react-native";
-import { Tabs } from "expo-router";
+import { Tabs, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -87,6 +87,16 @@ export default function TabsLayout() {
         <Tabs.Screen
           key={tab.name}
           name={tab.name}
+          listeners={
+            tab.name === "smile/index"
+              ? {
+                  tabPress: (e) => {
+                    e.preventDefault();
+                    router.push("/(app)/smileai/chat/new");
+                  },
+                }
+              : undefined
+          }
           options={{
             title: tab.title,
             tabBarIcon: ({ focused }) => {

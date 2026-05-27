@@ -66,7 +66,7 @@ export function RatingSheet({ visible, onSubmit, onDismiss, submitting }: Props)
             disabled={rating == null || submitting}
             onPress={() => rating != null && onSubmit(rating, feedback.trim() || undefined)}
           >
-            Submit
+            <Text className="font-semibold text-primary-foreground">Submit</Text>
           </Button>
         </Pressable>
       </Pressable>

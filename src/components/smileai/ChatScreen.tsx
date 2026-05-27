@@ -40,9 +40,21 @@ const TOOL_LABELS: Record<string, string> = {
 type Props = {
   conversationId: string | null;
   onConversationCreated: (id: string) => void;
+  /** Show a back chevron in the header (defaults to true). */
+  showBackButton?: boolean;
+  /** Render a history icon in the header right group when provided. */
+  onOpenHistory?: () => void;
+  /** Render a "new chat" icon in the header right group when provided. */
+  onNewChat?: () => void;
 };
 
-export function ChatScreen({ conversationId, onConversationCreated }: Props) {
+export function ChatScreen({
+  conversationId,
+  onConversationCreated,
+  showBackButton = true,
+  onOpenHistory,
+  onNewChat,
+}: Props) {
   const insets = useSafeAreaInsets();
   const { isDark } = useAppTheme();
   const showToast = useToastStore((s) => s.show);
@@ -324,7 +336,12 @@ export function ChatScreen({ conversationId, onConversationCreated }: Props) {
     return (
       <View className="flex-1 items-center justify-center px-6">
         <Text className="text-center text-lg">{error}</Text>
-        <Pressable className="mt-4" onPress={() => router.push("/(app)/support")}>
+        <Pressable
+          className="mt-4"
+          onPress={() => router.push("/(app)/support/chat")}
+          accessibilityRole="button"
+          accessibilityLabel="Talk to a human"
+        >
           <Text className="font-semibold text-primary">Talk to a human</Text>
         </Pressable>
       </View>
@@ -351,12 +368,55 @@ export function ChatScreen({ conversationId, onConversationCreated }: Props) {
         className="flex-row items-center border-b border-border px-4 py-3"
         style={{ paddingTop: insets.top + 8 }}
       >
-        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityLabel="Go back">
-          <Ionicons name="chevron-back" size={24} color={isDark ? "#F8FAFC" : "#0F172A"} />
-        </Pressable>
-        <View className="ml-3 flex-1">
+        {showBackButton ? (
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={12}
+            accessibilityLabel="Go back"
+            style={{ minWidth: 32, minHeight: 32, justifyContent: "center" }}
+          >
+            <Ionicons
+              name="chevron-back"
+              size={24}
+              color={isDark ? "#F8FAFC" : "#0F172A"}
+            />
+          </Pressable>
+        ) : null}
+        <View className={showBackButton ? "ml-3 flex-1" : "flex-1"}>
           <Text className="text-lg font-semibold">Smile</Text>
           <Text className="text-xs text-muted-foreground">{statusLabel}</Text>
+        </View>
+        <View className="flex-row items-center" style={{ gap: 4 }}>
+          {onNewChat && conversationId ? (
+            <Pressable
+              onPress={onNewChat}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Start a new chat"
+              style={{ minWidth: 36, minHeight: 36, alignItems: "center", justifyContent: "center" }}
+            >
+              <Ionicons
+                name="create-outline"
+                size={22}
+                color={isDark ? "#F8FAFC" : "#0F172A"}
+              />
+            </Pressable>
+          ) : null}
+          {onOpenHistory ? (
+            <Pressable
+              onPress={onOpenHistory}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="View conversation history"
+              style={{ minWidth: 36, minHeight: 36, alignItems: "center", justifyContent: "center" }}
+            >
+              <Ionicons
+                name="time-outline"
+                size={22}
+                color={isDark ? "#F8FAFC" : "#0F172A"}
+              />
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
