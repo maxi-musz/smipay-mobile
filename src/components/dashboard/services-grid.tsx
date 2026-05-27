@@ -76,15 +76,6 @@ const SERVICES: ServiceItem[] = [
     cashbackService: "international_airtime",
   },
   {
-    id: "savings",
-    icon: "trending-up",
-    label: "Savings",
-    iconColor: colors.green[500],
-    bgColor: colors.green[100],
-    darkBgColor: colors.green[950],
-    comingSoon: true,
-  },
-  {
     id: "streaming",
     icon: "repeat",
     label: "Subscriptions",
