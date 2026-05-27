@@ -1,6 +1,7 @@
 export { AccountDetailsModal } from "./account-details-modal";
 export { AddMoneyModal } from "./add-money-modal";
 export { DashboardHeader } from "./dashboard-header";
+export { AskSmileCard } from "./AskSmileCard";
 export { BalanceCard } from "./balance-card";
 export { FundMethodOption } from "./fund-method-option";
 export { FundWithCardFlow } from "./fund-with-card";

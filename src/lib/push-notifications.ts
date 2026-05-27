@@ -295,6 +295,12 @@ function buildHrefFromNotificationData(
   if (screen === "support") {
     return "/(app)/support";
   }
+  if (screen === "smileai" && id) {
+    return { pathname: "/(app)/smileai/chat/[id]", params: { id } };
+  }
+  if (screen === "smileai") {
+    return "/(app)/smileai";
+  }
   if (screen === "transaction" && id) {
     return `/(app)/history/${id}`;
   }

@@ -43,6 +43,17 @@ export {
   rateConversation,
 } from "./services/support";
 export {
+  startSmileConversation,
+  listSmileConversations,
+  fetchSmileConversation,
+  backfillSmileMessages,
+  sendSmileMessageRest,
+  confirmSmileAction,
+  requestSmileHandoff,
+  submitSmileRating,
+  closeSmileConversation,
+} from "./services/smileai";
+export {
   fetchTransactionHistory,
   fetchTransactionById,
 } from "./services/history";

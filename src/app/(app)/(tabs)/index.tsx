@@ -13,6 +13,7 @@ import {
   RecentTransactions,
   ServicesGrid,
   SetTransactionPinModal,
+  AskSmileCard,
 } from "@/components/dashboard";
 import { FullPageLoader } from "@/components/ui/loaders";
 // import { useToastStore } from "@/components/ui/toast/toast-store";
@@ -106,6 +107,9 @@ export default function HomeScreen() {
           />
         }
       >
+        <Animated.View>
+          <AskSmileCard />
+        </Animated.View>
         <Animated.View>
           <PromoBanner
           banners={

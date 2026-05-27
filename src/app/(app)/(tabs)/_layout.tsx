@@ -34,6 +34,7 @@ type TabConfig = {
 
 const TABS: TabConfig[] = [
   { name: "index", title: "Home", iconFocused: "home", iconDefault: "home-outline" },
+  { name: "smile/index", title: "Smile", iconFocused: "happy", iconDefault: "happy-outline" },
   { name: "history/index", title: "History", iconFocused: "receipt", iconDefault: "receipt-outline" },
   { name: "profile/index", title: "Menu", iconFocused: "person", iconDefault: "person-outline" },
 ];

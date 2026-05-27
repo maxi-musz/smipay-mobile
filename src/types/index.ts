@@ -87,3 +87,11 @@ export type {
   SendMessageData,
   RateConversationPayload,
 } from "./support";
+export type {
+  AIConversationStatus,
+  SmileCitation,
+  SmileMessage,
+  SmileConversationListItem,
+  SmileConversationDetail,
+  PendingConfirmation,
+} from "./smileai";
