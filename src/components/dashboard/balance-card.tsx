@@ -8,6 +8,7 @@ import Animated, {
   FadeOut,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
   withSequence,
   withTiming,
 } from "react-native-reanimated";
@@ -40,6 +41,8 @@ interface BalanceCardProps {
   loadFailed?: boolean;
   /** Called when the user taps the refresh area after load failed. */
   onRetry?: () => void;
+  /** When true, render shimmering placeholders instead of balance numbers (cold start, no cached data). */
+  isLoading?: boolean;
 }
 
 export function BalanceCard({
@@ -48,6 +51,7 @@ export function BalanceCard({
   onAddMoneyPress,
   loadFailed = false,
   onRetry,
+  isLoading = false,
 }: BalanceCardProps) {
   const [balanceVisible, setBalanceVisible] = useState(true);
   const { s } = useResponsiveScale();
@@ -57,6 +61,7 @@ export function BalanceCard({
   const cashbackParsed = parseBalance(cashbackBalance);
 
   const glow = useSharedValue(0);
+  const shimmer = useSharedValue(0);
   const previousBalanceRef = useRef(walletBalance);
 
   useEffect(() => {
@@ -70,8 +75,24 @@ export function BalanceCard({
     previousBalanceRef.current = walletBalance;
   }, [walletBalance, glow]);
 
+  useEffect(() => {
+    if (isLoading) {
+      shimmer.value = withRepeat(
+        withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }),
+        -1,
+        true,
+      );
+    } else {
+      shimmer.value = 0;
+    }
+  }, [isLoading, shimmer]);
+
   const glowStyle = useAnimatedStyle(() => ({
     opacity: glow.value,
+  }));
+
+  const shimmerStyle = useAnimatedStyle(() => ({
+    opacity: 0.35 + shimmer.value * 0.45,
   }));
 
   return (
@@ -109,7 +130,19 @@ export function BalanceCard({
         className="flex-row items-baseline"
         style={{ marginTop: s(6), gap: s(8) }}
       >
-        {loadFailed ? (
+        {isLoading ? (
+          <Animated.View
+            style={[
+              {
+                width: s(160),
+                height: s(28),
+                borderRadius: s(8),
+                backgroundColor: "rgba(255,255,255,0.12)",
+              },
+              shimmerStyle,
+            ]}
+          />
+        ) : loadFailed ? (
           <Pressable
             onPress={onRetry}
             className="flex-row items-center gap-2"
@@ -161,7 +194,7 @@ export function BalanceCard({
             {NAIRA_SYMBOL} • • • • •
           </Text>
         )}
-        {!loadFailed && (
+        {!loadFailed && !isLoading && (
           <Pressable
             onPress={() => setBalanceVisible((v) => !v)}
             hitSlop={12}
@@ -175,7 +208,22 @@ export function BalanceCard({
         )}
       </View>
 
-      {hasCashback && !loadFailed && (
+      {isLoading && (
+        <Animated.View
+          style={[
+            {
+              marginTop: s(8),
+              width: s(110),
+              height: s(12),
+              borderRadius: s(6),
+              backgroundColor: "rgba(255,255,255,0.10)",
+            },
+            shimmerStyle,
+          ]}
+        />
+      )}
+
+      {hasCashback && !loadFailed && !isLoading && (
         <View
           className="flex-row flex-wrap items-baseline"
           style={{ marginTop: s(2) }}

@@ -1,15 +1,14 @@
 import { Redirect } from "expo-router";
 
 /**
- * Smile tab — actual launch is handled by the `tabPress` listener in the
- * parent `(tabs)/_layout.tsx`, which pushes `/(app)/smileai` onto the
- * parent stack (the landing screen where the user can start a new chat
- * or resume a non-closed one). That keeps the chat surface *outside* the
- * tab navigator so the bottom tab bar is hidden during a chat, matching
- * the home banner flow.
+ * Legacy Smile tab route. Smile is no longer surfaced via the bottom tab
+ * navigator — entry is the floating breathing orb on the Home screen
+ * (`FloatingSmileButton`) and the in-flow `AskSmileCard` banner, both of
+ * which push `/(app)/smileai`.
  *
- * This file only renders if someone navigates to the route directly
- * (e.g. via deep link); we redirect to the landing in that case.
+ * This file is kept for deep-link safety so any stale internal links or
+ * external push notifications targeting `(tabs)/smile` continue to resolve
+ * to the Smile landing instead of 404'ing.
  */
 export default function SmileTab() {
   return <Redirect href="/(app)/smileai" />;

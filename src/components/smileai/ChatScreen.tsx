@@ -1,4 +1,11 @@
-import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -39,6 +46,25 @@ const TOOL_LABELS: Record<string, string> = {
   get_transaction_by_reference: "Finding that transaction…",
   escalate_to_human: "Connecting you to support…",
 };
+
+/** Server backfill uses `after` as a DB message id; optimistic client UUIDs are not valid. */
+function lastAssistantMessageId(messages: SmileMessage[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "assistant") return messages[i].id;
+  }
+  return undefined;
+}
+
+function mergeSmileMessages(existing: SmileMessage[], incoming: SmileMessage[]): SmileMessage[] {
+  const byId = new Map<string, SmileMessage>();
+  for (const m of existing) byId.set(m.id, m);
+  for (const m of incoming) {
+    if (!byId.has(m.id)) byId.set(m.id, m);
+  }
+  return [...byId.values()].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+}
 
 type Props = {
   conversationId: string | null;
@@ -110,7 +136,8 @@ export function ChatScreen({
   const setDraftText = useSmileaiStore.use.setDraftText();
   const setLastOpenConversationId = useSmileaiStore.use.setLastOpenConversationId();
 
-  const [loading, setLoading] = useState(!!conversationId);
+  /** True only when we must block the UI with a full loader (no cached messages for this chat). */
+  const [awaitingNetwork, setAwaitingNetwork] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [citationSheet, setCitationSheet] = useState<SmileCitation[] | null>(null);
   const [ratingVisible, setRatingVisible] = useState(false);
@@ -121,46 +148,101 @@ export function ChatScreen({
   const pendingCitationsRef = useRef<SmileCitation[]>([]);
 
   const isHandedOff = status === "handed_off" || status === "handoff_pending";
-  const showWelcome = !conversationId && messages.length === 0 && !loading;
+  const showFullLoader =
+    !!conversationId && messages.length === 0 && awaitingNetwork;
+  const showWelcome = !conversationId && messages.length === 0 && !awaitingNetwork;
 
-  const loadConversation = useCallback(async () => {
+  useLayoutEffect(() => {
     if (!conversationId) {
-      setLoading(false);
+      setAwaitingNetwork(false);
       return;
     }
-    try {
+    const cached = useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
+    setAwaitingNetwork(cached.length === 0);
+  }, [conversationId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!conversationId) {
       setError(null);
-      const res = await fetchSmileConversation(conversationId);
-      const data = res.data;
-      setMessages(conversationId, data.messages ?? []);
-      setStatus(conversationId, data.status);
-      if (data.support_conversation_id) {
-        setSupportConversationId(conversationId, data.support_conversation_id);
-      }
-      const last = data.messages?.[data.messages.length - 1];
-      lastMessageIdRef.current = last?.id ?? null;
-      setLastOpenConversationId(conversationId);
-      joinConversation(conversationId);
-    } catch {
-      setError("Smile is offline. Try again or talk to a human.");
-    } finally {
-      setLoading(false);
+      return;
     }
+
+    const fullFetch = async () => {
+      try {
+        const res = await fetchSmileConversation(conversationId);
+        if (cancelled) return;
+        const data = res.data;
+        setMessages(conversationId, data.messages ?? []);
+        setStatus(conversationId, data.status);
+        if (data.support_conversation_id) {
+          setSupportConversationId(conversationId, data.support_conversation_id);
+        }
+        const last = data.messages?.[data.messages.length - 1];
+        lastMessageIdRef.current = last?.id ?? null;
+        setLastOpenConversationId(conversationId);
+        joinConversation(conversationId);
+      } catch {
+        if (!cancelled) {
+          setError("Smile is offline. Try again or talk to a human.");
+        }
+      } finally {
+        if (!cancelled) setAwaitingNetwork(false);
+      }
+    };
+
+    const run = async () => {
+      setError(null);
+      const cached = useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
+
+      if (cached.length > 0) {
+        const last = cached[cached.length - 1];
+        lastMessageIdRef.current = last?.id ?? null;
+        setLastOpenConversationId(conversationId);
+        joinConversation(conversationId);
+
+        const after = lastAssistantMessageId(cached);
+        try {
+          if (after) {
+            const res = await backfillSmileMessages(conversationId, { after });
+            if (cancelled) return;
+            const items = res.data?.items ?? [];
+            if (items.length > 0) {
+              const current =
+                useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
+              const merged = mergeSmileMessages(current, items);
+              setMessages(conversationId, merged);
+              const tail = merged[merged.length - 1];
+              lastMessageIdRef.current = tail?.id ?? lastMessageIdRef.current;
+            }
+          } else {
+            await fullFetch();
+          }
+        } catch {
+          if (!cancelled) await fullFetch();
+        }
+        return;
+      }
+
+      await fullFetch();
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+      if (conversationId) leaveConversation(conversationId);
+    };
   }, [
     conversationId,
     joinConversation,
+    leaveConversation,
     setMessages,
     setStatus,
     setSupportConversationId,
     setLastOpenConversationId,
   ]);
-
-  useEffect(() => {
-    loadConversation();
-    return () => {
-      if (conversationId) leaveConversation(conversationId);
-    };
-  }, [conversationId, loadConversation, leaveConversation]);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -249,16 +331,17 @@ export function ChatScreen({
   useEffect(() => {
     if (!isConnected || !conversationId) return;
     const reconnectBackfill = async () => {
-      if (!lastMessageIdRef.current) return;
+      const msgs = useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
+      const after = lastAssistantMessageId(msgs);
+      if (!after) return;
       try {
-        const res = await backfillSmileMessages(conversationId, {
-          after: lastMessageIdRef.current,
-        });
+        const res = await backfillSmileMessages(conversationId, { after });
         const items = res.data?.items ?? [];
         if (items.length > 0) {
           const current = useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
-          setMessages(conversationId, [...current, ...items]);
-          lastMessageIdRef.current = items[items.length - 1]?.id ?? lastMessageIdRef.current;
+          const merged = mergeSmileMessages(current, items);
+          setMessages(conversationId, merged);
+          lastMessageIdRef.current = merged[merged.length - 1]?.id ?? lastMessageIdRef.current;
         }
       } catch {
         /* ignore */
@@ -385,7 +468,7 @@ export function ChatScreen({
     }
   };
 
-  if (loading) {
+  if (showFullLoader) {
     return <FullPageLoader message="Loading Smile…" />;
   }
 

@@ -1,12 +1,13 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import { listSmileConversations } from "@/api/services/smileai";
 import type {
   PendingConfirmation,
   SmileConversationListItem,
   SmileMessage,
 } from "@/types/smileai";
+import { createPersistConfig } from "./middleware";
 import { createSelectors } from "./create-selectors";
 
 interface SmileaiUiState {
@@ -18,6 +19,11 @@ interface SmileaiUiState {
 
 interface SmileaiStoreState {
   conversations: SmileConversationListItem[];
+  /** True when no conversation list is available yet and we are fetching for the first time. */
+  isLoadingConversations: boolean;
+  /** True when a list already exists but we are refreshing in the background. */
+  isRefreshingConversations: boolean;
+  conversationsLoadError: string | null;
   messagesByConversation: Record<string, SmileMessage[]>;
   streamingText: Record<string, string>;
   streamingMessageId: Record<string, string | null>;
@@ -30,6 +36,8 @@ interface SmileaiStoreState {
 }
 
 interface SmileaiStoreActions {
+  loadConversations: () => Promise<void>;
+  refreshConversationsSilently: () => Promise<void>;
   setConversations: (items: SmileConversationListItem[]) => void;
   setMessages: (conversationId: string, messages: SmileMessage[]) => void;
   appendUserMessage: (conversationId: string, message: SmileMessage) => void;
@@ -55,26 +63,126 @@ interface SmileaiStoreActions {
 
 type SmileaiStore = SmileaiStoreState & SmileaiStoreActions;
 
+/** Persist top N chats by recent activity with at most M messages each. */
+const PERSIST_CHAT_COUNT = 5;
+const PERSIST_MESSAGES_PER_CHAT = 50;
+
+function sortConversationsByRecency(items: SmileConversationListItem[]): SmileConversationListItem[] {
+  return [...items].sort((a, b) => {
+    const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+    const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+    return tb - ta;
+  });
+}
+
+function buildSmilePersistSnapshot(state: SmileaiStoreState) {
+  const sorted = sortConversationsByRecency(state.conversations);
+  const topIds = new Set(sorted.slice(0, PERSIST_CHAT_COUNT).map((c) => c.id));
+
+  const messagesByConversation: Record<string, SmileMessage[]> = {};
+  const statusByConversation: Record<string, string> = {};
+  const supportConversationId: Record<string, string | null> = {};
+
+  for (const id of topIds) {
+    const msgs = state.messagesByConversation[id];
+    if (msgs?.length) {
+      messagesByConversation[id] = msgs.slice(-PERSIST_MESSAGES_PER_CHAT);
+    }
+    if (state.statusByConversation[id]) {
+      statusByConversation[id] = state.statusByConversation[id];
+    }
+    if (state.supportConversationId[id] !== undefined && state.supportConversationId[id] !== null) {
+      supportConversationId[id] = state.supportConversationId[id];
+    }
+  }
+
+  return {
+    ui: state.ui,
+    conversations: state.conversations,
+    messagesByConversation,
+    statusByConversation,
+    supportConversationId,
+  };
+}
+
+type PersistedSmileSlice = Partial<ReturnType<typeof buildSmilePersistSnapshot>>;
+
+const initialState: SmileaiStoreState = {
+  conversations: [],
+  isLoadingConversations: false,
+  isRefreshingConversations: false,
+  conversationsLoadError: null,
+  messagesByConversation: {},
+  streamingText: {},
+  streamingMessageId: {},
+  suggestions: {},
+  pendingConfirmation: {},
+  supportConversationId: {},
+  statusByConversation: {},
+  toolBadge: {},
+  ui: {
+    draftText: "",
+    suggestedRepliesEnabled: true,
+    soundEnabled: true,
+    lastOpenConversationId: null,
+  },
+};
+
 const useSmileaiStoreBase = create<SmileaiStore>()(
   persist(
     (set, get) => ({
-      conversations: [],
-      messagesByConversation: {},
-      streamingText: {},
-      streamingMessageId: {},
-      suggestions: {},
-      pendingConfirmation: {},
-      supportConversationId: {},
-      statusByConversation: {},
-      toolBadge: {},
-      ui: {
-        draftText: "",
-        suggestedRepliesEnabled: true,
-        soundEnabled: true,
-        lastOpenConversationId: null,
+      ...initialState,
+
+      loadConversations: async () => {
+        if (get().isLoadingConversations || get().isRefreshingConversations) return;
+
+        const hasList = get().conversations.length > 0;
+        if (hasList) {
+          set({ isRefreshingConversations: true });
+        } else {
+          set({ isLoadingConversations: true });
+        }
+
+        try {
+          const res = await listSmileConversations();
+          const list = res.data?.items ?? [];
+          const sorted = sortConversationsByRecency(list);
+          set({
+            conversations: sorted,
+            isLoadingConversations: false,
+            isRefreshingConversations: false,
+            conversationsLoadError: null,
+          });
+        } catch {
+          set({
+            isLoadingConversations: false,
+            isRefreshingConversations: false,
+            conversationsLoadError: "Unable to load conversations.",
+          });
+        }
       },
 
-      setConversations: (items) => set({ conversations: items }),
+      refreshConversationsSilently: async () => {
+        if (get().isRefreshingConversations) return;
+        set({ isRefreshingConversations: true });
+        try {
+          const res = await listSmileConversations();
+          const list = res.data?.items ?? [];
+          const sorted = sortConversationsByRecency(list);
+          set({
+            conversations: sorted,
+            isRefreshingConversations: false,
+            conversationsLoadError: null,
+          });
+        } catch {
+          set({
+            isRefreshingConversations: false,
+            conversationsLoadError: "Unable to load conversations.",
+          });
+        }
+      },
+
+      setConversations: (items) => set({ conversations: sortConversationsByRecency(items) }),
 
       setMessages: (conversationId, messages) =>
         set((s) => ({
@@ -185,22 +293,35 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
           toolBadge: { ...s.toolBadge, [conversationId]: null },
         })),
     }),
-    {
-      name: "smileai-store",
-      storage: {
-        getItem: async (name) => {
-          const v = await AsyncStorage.getItem(name);
-          return v ? JSON.parse(v) : null;
-        },
-        setItem: async (name, value) => {
-          await AsyncStorage.setItem(name, JSON.stringify(value));
-        },
-        removeItem: async (name) => AsyncStorage.removeItem(name),
+    createPersistConfig<SmileaiStore>("smileai", {
+      partialize: (state) => buildSmilePersistSnapshot(state),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as PersistedSmileSlice | undefined;
+        return {
+          ...currentState,
+          ui: {
+            ...currentState.ui,
+            ...(persisted?.ui ?? {}),
+          },
+          conversations:
+            currentState.conversations.length > 0
+              ? currentState.conversations
+              : (persisted?.conversations ?? []),
+          messagesByConversation: {
+            ...(persisted?.messagesByConversation ?? {}),
+            ...currentState.messagesByConversation,
+          },
+          statusByConversation: {
+            ...(persisted?.statusByConversation ?? {}),
+            ...currentState.statusByConversation,
+          },
+          supportConversationId: {
+            ...(persisted?.supportConversationId ?? {}),
+            ...currentState.supportConversationId,
+          },
+        };
       },
-      partialize: (state) => ({
-        ui: state.ui,
-      }),
-    },
+    }),
   ),
 );
 

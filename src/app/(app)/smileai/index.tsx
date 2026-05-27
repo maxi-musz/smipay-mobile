@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, router } from "expo-router";
 
-import { listSmileConversations } from "@/api/services/smileai";
-import { Button } from "@/components/ui/button";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
@@ -66,41 +64,17 @@ function formatTimeAgo(dateStr: string | null): string {
 
 export default function SmileLandingScreen() {
   const { isDark } = useAppTheme();
-  const setConversations = useSmileaiStore.use.setConversations();
-  const [items, setItems] = useState<SmileConversationListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const items = useSmileaiStore.use.conversations();
+  const isLoadingConversations = useSmileaiStore.use.isLoadingConversations();
+  const isRefreshingConversations = useSmileaiStore.use.isRefreshingConversations();
+  const conversationsLoadError = useSmileaiStore.use.conversationsLoadError();
+  const loadConversations = useSmileaiStore.use.loadConversations();
+  const refreshConversationsSilently = useSmileaiStore.use.refreshConversationsSilently();
   const [showClosed, setShowClosed] = useState(false);
 
-  const load = useCallback(
-    async (isRefresh = false) => {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-      try {
-        const res = await listSmileConversations();
-        const list = res.data?.items ?? [];
-        const sorted = [...list].sort((a, b) => {
-          const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-          const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-          return tb - ta;
-        });
-        setItems(sorted);
-        setConversations(sorted);
-      } catch {
-        setError("Unable to load conversations.");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [setConversations],
-  );
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadConversations();
+  }, [loadConversations]);
 
   const { resumable, closed } = useMemo(() => {
     const r: SmileConversationListItem[] = [];
@@ -123,7 +97,9 @@ export default function SmileLandingScreen() {
     });
   };
 
-  if (loading) {
+  const showSkeleton = isLoadingConversations && items.length === 0;
+
+  if (showSkeleton) {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
         <FullPageLoader message="Loading Smile…" />
@@ -136,6 +112,14 @@ export default function SmileLandingScreen() {
   const chipText = isDark ? "#93C5FD" : "#1D4ED8";
   const closedChipBg = isDark ? "#334155" : "#E2E8F0";
   const closedChipText = isDark ? "#CBD5E1" : "#475569";
+  const iconBtnBg = isDark ? "rgba(255,255,255,0.06)" : "#F1F5F9";
+  const iconBtnFg = isDark ? "#E2E8F0" : "#0F172A";
+  const newChatBg = isDark ? "rgba(245,130,32,0.18)" : "#FFF1E3";
+  const newChatFg = isDark ? "#FB923C" : "#C2520A";
+  const welcomeBg = isDark ? "#1E293B" : "#FFF7ED";
+  const welcomeBorder = isDark ? "rgba(251,146,60,0.18)" : "rgba(245,130,32,0.18)";
+  const welcomeIconBg = isDark ? "rgba(245,130,32,0.18)" : "#FFE7D1";
+  const welcomeIconFg = isDark ? "#FB923C" : "#C2520A";
 
   const visibleClosed = showClosed ? closed : [];
 
@@ -156,39 +140,51 @@ export default function SmileLandingScreen() {
           />
         </Pressable>
         <Text className="text-xl font-bold">Smile</Text>
-        <Pressable
-          onPress={() => router.push("/(app)/smileai/settings")}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Smile settings"
-          style={{
-            minWidth: 32,
-            minHeight: 32,
-            justifyContent: "center",
-            alignItems: "flex-end",
-          }}
-        >
-          <Ionicons
-            name="settings-outline"
-            size={22}
-            color={isDark ? "#94A3B8" : "#64748B"}
-          />
-        </Pressable>
-      </View>
-
-      <View className="px-4 pb-3">
-        <Button onPress={startNewChat}>
-          <View className="flex-row items-center" style={{ gap: 6 }}>
-            <Ionicons name="add" size={18} color="#FFFFFF" />
-            <Text className="font-semibold text-primary-foreground">
-              Start a new chat
+        <View className="flex-row items-center" style={{ gap: 8 }}>
+          <Pressable
+            onPress={startNewChat}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Start a new chat"
+            style={{
+              minHeight: 36,
+              paddingHorizontal: 12,
+              borderRadius: 18,
+              backgroundColor: newChatBg,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+            }}
+          >
+            <Ionicons name="add" size={18} color={newChatFg} />
+            <Text
+              style={{
+                color: newChatFg,
+                fontSize: 13,
+                fontWeight: "600",
+              }}
+            >
+              New chat
             </Text>
-          </View>
-        </Button>
-        <Text className="mt-2 text-xs text-muted-foreground">
-          Smile helps with wallet, KYC, transactions, airtime, data, cards, and
-          bill payments.
-        </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push("/(app)/smileai/settings")}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Smile settings"
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: iconBtnBg,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Ionicons name="settings-outline" size={19} color={iconBtnFg} />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -196,14 +192,73 @@ export default function SmileLandingScreen() {
         contentContainerClassName="pb-12"
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void load(true)}
+            refreshing={isRefreshingConversations}
+            onRefresh={() => void refreshConversationsSilently()}
           />
         }
       >
-        {error ? (
-          <Text className="py-4 text-center text-muted-foreground">{error}</Text>
+        {conversationsLoadError ? (
+          <Text className="py-4 text-center text-muted-foreground">{conversationsLoadError}</Text>
         ) : null}
+
+        <View
+          style={{
+            marginTop: 8,
+            marginBottom: 16,
+            backgroundColor: welcomeBg,
+            borderColor: welcomeBorder,
+            borderWidth: 1,
+            borderRadius: 16,
+            padding: 16,
+            flexDirection: "row",
+            gap: 12,
+          }}
+        >
+          <View
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: welcomeIconBg,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Ionicons name="sparkles" size={20} color={welcomeIconFg} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text className="text-base font-semibold">
+              Welcome to Smile, your SmiPay assistant
+            </Text>
+            <Text
+              className="mt-1 text-xs text-muted-foreground"
+              style={{ lineHeight: 18 }}
+            >
+              Perform fast actions, check transactions, and get help — your
+              chats are private and securely stored. Start a new chat or
+              continue a recent one below.
+            </Text>
+            <View
+              className="mt-2 flex-row items-center"
+              style={{ gap: 6 }}
+            >
+              <Ionicons
+                name="shield-checkmark"
+                size={13}
+                color={welcomeIconFg}
+              />
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: "600",
+                  color: welcomeIconFg,
+                }}
+              >
+                End-to-end secure
+              </Text>
+            </View>
+          </View>
+        </View>
 
         {resumable.length > 0 ? (
           <>
@@ -267,23 +322,38 @@ export default function SmileLandingScreen() {
               </Pressable>
             ))}
           </>
-        ) : !error ? (
-          <View
-            className="mt-4 items-center rounded-2xl border border-dashed border-border px-6 py-8"
-            style={{ gap: 6 }}
+        ) : !conversationsLoadError ? (
+          <Pressable
+            onPress={startNewChat}
+            accessibilityRole="button"
+            accessibilityLabel="Start a new chat"
+            className="mt-4 items-center rounded-2xl border border-dashed border-border px-6 py-10 active:opacity-80"
+            style={{ gap: 8 }}
           >
-            <Ionicons
-              name="chatbubbles-outline"
-              size={28}
-              color={isDark ? "#94A3B8" : "#64748B"}
-            />
-            <Text className="text-center text-base font-medium">
-              No active conversations
+            <View
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                backgroundColor: isDark ? "rgba(245,130,32,0.15)" : "#FFF7ED",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons
+                name="sparkles"
+                size={22}
+                color={isDark ? "#FB923C" : "#F58220"}
+              />
+            </View>
+            <Text className="text-center text-base font-semibold">
+              Start a conversation with Smile
             </Text>
             <Text className="text-center text-xs text-muted-foreground">
-              Tap "Start a new chat" to ask Smile anything.
+              Ask about your wallet, KYC, transactions, airtime, data, cards
+              and bills — or talk to a human.
             </Text>
-          </View>
+          </Pressable>
         ) : null}
 
         {closed.length > 0 ? (

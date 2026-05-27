@@ -1,22 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { RefreshControl, ScrollView } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import { AppState, type AppStateStatus, RefreshControl, ScrollView } from "react-native";
+import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
-  // AddMoneyModal,
   AccountDetailsModal,
+  AskSmileCard,
   BalanceCard,
   DashboardHeader,
-  // FundWithCardFlow,
+  FloatingSmileButton,
   PromoBanner,
   RecentTransactions,
   ServicesGrid,
   SetTransactionPinModal,
-  AskSmileCard,
 } from "@/components/dashboard";
-import { FullPageLoader } from "@/components/ui/loaders";
-// import { useToastStore } from "@/components/ui/toast/toast-store";
 import { useVersionGateContext } from "@/context/version-gate-context";
 import { useAuthStore, useHomepageStore, useProfileStore } from "@/store";
 import { colors } from "@/constants/colors";
@@ -31,24 +28,46 @@ export default function HomeScreen() {
   const fetchProfile = useProfileStore.use.fetchProfile();
   const { versionCheckComplete, effectiveLevel } = useVersionGateContext();
   const wasLockedRef = useRef(isLocked);
+  const appStateRef = useRef(AppState.currentState);
 
   const [addMoneyModalVisible, setAddMoneyModalVisible] = useState(false);
-  // const [fundWithCardModalVisible, setFundWithCardModalVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Fetch on mount only.
+  // First mount: kick off a fetch. If cached data is rehydrated from disk the
+  // store treats this as a silent refresh and never flips `isLoading`, so the
+  // dashboard renders instantly with last-known balances and transactions
+  // while we revalidate in the background.
   useEffect(() => {
     fetchHomepage();
   }, [fetchHomepage]);
 
-  // After unlock only: refetch once so dashboard loads with new token. Do not refetch on every error (avoids loop when backend is down).
+  // After unlock: revalidate silently so we never block the UI behind a loader.
   useEffect(() => {
     const justUnlocked = wasLockedRef.current && !isLocked;
     wasLockedRef.current = isLocked;
-    if (justUnlocked && !data) {
-      fetchHomepage();
+    if (!justUnlocked) return;
+    if (data) {
+      void refreshHomepageSilently();
+    } else {
+      void fetchHomepage();
     }
-  }, [isLocked, data, fetchHomepage]);
+  }, [isLocked, data, fetchHomepage, refreshHomepageSilently]);
+
+  // Foreground transitions: when the user returns to the app from background,
+  // silently refresh balances + recent transactions in the background. The UI
+  // stays mounted with cached data so there's no perceptible reload — matches
+  // the behavior of Kuda / Opay / similar consumer fintech apps.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
+      const wasBackground =
+        appStateRef.current === "background" || appStateRef.current === "inactive";
+      appStateRef.current = next;
+      if (next === "active" && wasBackground && !isLocked) {
+        void refreshHomepageSilently();
+      }
+    });
+    return () => sub.remove();
+  }, [isLocked, refreshHomepageSilently]);
 
   /**
    * PIN setup is mandatory, but a soft update prompt takes priority: we only
@@ -65,15 +84,11 @@ export default function HomeScreen() {
       data.user.isTransactionPinSetup === true
     );
 
-  if (isLoading && !data) {
-    return (
-      <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-        <FullPageLoader message="Loading..." />
-      </SafeAreaView>
-    );
-  }
-
-  const loadFailed = !!error;
+  // Only treat a load as "failed" (with the inline retry CTA) when there's
+  // truly nothing to show. If we have cached data and a silent refresh fails,
+  // we keep showing the cache — failure is invisible to the user.
+  const showSkeleton = isLoading && !data;
+  const loadFailed = !!error && !data;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -87,54 +102,60 @@ export default function HomeScreen() {
           cashbackBalance={data?.cashback_wallet?.current_balance ?? "₦0.00"}
           onAddMoneyPress={() => setAddMoneyModalVisible(true)}
           loadFailed={loadFailed}
+          isLoading={showSkeleton}
           onRetry={fetchHomepage}
         />
       </Animated.View>
 
-
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pb-24"
+        contentContainerClassName="pb-32"
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={() => {
               setIsRefreshing(true);
-              Promise.resolve(fetchHomepage()).finally(() => setIsRefreshing(false));
+              Promise.resolve(refreshHomepageSilently()).finally(() =>
+                setIsRefreshing(false),
+              );
             }}
             tintColor={colors.orange[500]}
           />
         }
       >
-        <Animated.View>
+        <Animated.View entering={FadeInUp.duration(380).delay(40)}>
           <AskSmileCard />
         </Animated.View>
-        <Animated.View>
+        <Animated.View entering={FadeInUp.duration(380).delay(80)}>
           <PromoBanner
-          banners={
-            [...(data?.reward_banners ?? [])].sort((a, b) => {
-              const order: ("cashback" | "referral" | "first_transaction")[] = [
-                "cashback",
-                "referral",
-                "first_transaction",
-              ];
-              return order.indexOf(a.type) - order.indexOf(b.type);
-            })
-          }
-        />
+            banners={
+              [...(data?.reward_banners ?? [])].sort((a, b) => {
+                const order: ("cashback" | "referral" | "first_transaction")[] = [
+                  "cashback",
+                  "referral",
+                  "first_transaction",
+                ];
+                return order.indexOf(a.type) - order.indexOf(b.type);
+              })
+            }
+          />
         </Animated.View>
-        <Animated.View>
+        <Animated.View entering={FadeInUp.duration(380).delay(120)}>
           <ServicesGrid cashbackRates={data?.cashback_rates} />
         </Animated.View>
-        <Animated.View>
+        <Animated.View entering={FadeInUp.duration(380).delay(160)}>
           <RecentTransactions
             transactions={(data?.transaction_history ?? []).slice(0, 3)}
             loadFailed={loadFailed}
+            isLoading={showSkeleton}
             onRetry={fetchHomepage}
           />
         </Animated.View>
       </ScrollView>
+
+      <FloatingSmileButton />
+
       <AccountDetailsModal
         visible={addMoneyModalVisible}
         onClose={() => setAddMoneyModalVisible(false)}
