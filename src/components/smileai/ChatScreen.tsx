@@ -14,8 +14,10 @@ import { router } from "expo-router";
 import {
   backfillSmileMessages,
   fetchSmileConversation,
+  requestSmileStepUp,
   submitSmileRating,
 } from "@/api/services/smileai";
+import { PaymentAuthorizationModal } from "@/features/payment-authorization/payment-authorization-modal";
 import { SmileaiSocketContext } from "@/context/smileai-socket";
 import { Text } from "@/components/ui/text";
 import { FullPageLoader } from "@/components/ui/loaders";
@@ -30,6 +32,7 @@ import { HandoffBanner } from "./HandoffBanner";
 import { WelcomeCard } from "./WelcomeCard";
 import { CitationsSheet } from "./CitationsSheet";
 import { RatingSheet } from "./RatingSheet";
+import { ConversationsDrawer } from "./ConversationsDrawer";
 
 const TOOL_LABELS: Record<string, string> = {
   list_recent_transactions: "Looking up your recent transactions…",
@@ -42,8 +45,12 @@ type Props = {
   onConversationCreated: (id: string) => void;
   /** Show a back chevron in the header (defaults to true). */
   showBackButton?: boolean;
-  /** Render a history icon in the header right group when provided. */
-  onOpenHistory?: () => void;
+  /**
+   * Called when the user selects another conversation from the right-side
+   * drawer. Parent decides how to navigate (e.g. `router.replace`). If
+   * omitted, the history icon is hidden.
+   */
+  onSelectConversation?: (id: string) => void;
   /** Render a "new chat" icon in the header right group when provided. */
   onNewChat?: () => void;
 };
@@ -52,9 +59,10 @@ export function ChatScreen({
   conversationId,
   onConversationCreated,
   showBackButton = true,
-  onOpenHistory,
+  onSelectConversation,
   onNewChat,
 }: Props) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const insets = useSafeAreaInsets();
   const { isDark } = useAppTheme();
   const showToast = useToastStore((s) => s.show);
@@ -194,12 +202,19 @@ export function ChatScreen({
         if (conversation_id !== conversationId) return;
         setToolBadge(conversation_id, null);
       },
-      onConfirmRequested: ({ conversation_id, confirmation_id, action, copy }) => {
+      onConfirmRequested: ({
+        conversation_id,
+        confirmation_id,
+        action,
+        copy,
+        safety,
+      }) => {
         if (conversation_id !== conversationId) return;
         setPendingConfirmation(conversation_id, {
           confirmation_id,
           action,
           copy,
+          safety,
         });
       },
       onHandoffCompleted: ({ conversation_id, support_conversation_id }) => {
@@ -307,12 +322,54 @@ export function ChatScreen({
 
   const handleConfirm = (accept: boolean) => {
     if (!conversationId || !pendingConfirmation) return;
+    if (accept && pendingConfirmation.safety === "sensitive") {
+      setStepUpVisible(true);
+      return;
+    }
     respondConfirm(conversationId, pendingConfirmation.confirmation_id, accept);
     setPendingConfirmation(conversationId, null);
     if (pendingConfirmation.action === "escalate_to_human" && accept) {
       emitHandoff(conversationId);
     }
   };
+
+  const [stepUpVisible, setStepUpVisible] = useState(false);
+  const [stepUpBusy, setStepUpBusy] = useState(false);
+  const stepUpTokenRef = useRef<string | null>(null);
+
+  const verifyStepUpPin = useCallback(
+    async (pin: string) => {
+      if (!conversationId) throw new Error("No conversation");
+      setStepUpBusy(true);
+      try {
+        const res = await requestSmileStepUp(conversationId, { pin });
+        const token = res.data?.token;
+        if (!token) throw new Error("Could not mint step-up token");
+        stepUpTokenRef.current = token;
+      } finally {
+        setStepUpBusy(false);
+      }
+    },
+    [conversationId],
+  );
+
+  const completeStepUp = useCallback(async () => {
+    if (!conversationId || !pendingConfirmation) return;
+    const token = stepUpTokenRef.current;
+    stepUpTokenRef.current = null;
+    setStepUpVisible(false);
+    if (!token) {
+      showToast({ variant: "error", title: "Could not verify PIN. Try again." });
+      return;
+    }
+    respondConfirm(
+      conversationId,
+      pendingConfirmation.confirmation_id,
+      true,
+      token,
+    );
+    setPendingConfirmation(conversationId, null);
+  }, [conversationId, pendingConfirmation, respondConfirm, setPendingConfirmation, showToast]);
 
   const handleRatingSubmit = async (rating: number, feedback?: string) => {
     if (!conversationId) return;
@@ -402,9 +459,9 @@ export function ChatScreen({
               />
             </Pressable>
           ) : null}
-          {onOpenHistory ? (
+          {onSelectConversation ? (
             <Pressable
-              onPress={onOpenHistory}
+              onPress={() => setDrawerOpen(true)}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="View conversation history"
@@ -476,6 +533,7 @@ export function ChatScreen({
           <ConfirmActionCard
             title={pendingConfirmation.action.replace(/_/g, " ")}
             description={pendingConfirmation.copy}
+            safety={pendingConfirmation.safety}
             onCancel={() => handleConfirm(false)}
             onConfirm={() => handleConfirm(true)}
           />
@@ -520,6 +578,34 @@ export function ChatScreen({
         onDismiss={() => setRatingVisible(false)}
         onSubmit={handleRatingSubmit}
         submitting={ratingSubmitting}
+      />
+
+      {onSelectConversation ? (
+        <ConversationsDrawer
+          visible={drawerOpen}
+          activeConversationId={conversationId}
+          onClose={() => setDrawerOpen(false)}
+          onSelectConversation={onSelectConversation}
+          onStartNewChat={() => {
+            if (onNewChat) {
+              onNewChat();
+            } else {
+              onSelectConversation("new");
+            }
+          }}
+        />
+      ) : null}
+
+      <PaymentAuthorizationModal
+        visible={stepUpVisible}
+        onClose={() => setStepUpVisible(false)}
+        showRetryBiometrics={false}
+        isBusy={stepUpBusy}
+        onVerifyPin={verifyStepUpPin}
+        onCompletePayment={completeStepUp}
+        onRetryBiometrics={async () => {
+          /* biometrics flow runs through verifyStepUpPin by typing PIN */
+        }}
       />
     </KeyboardAvoidingView>
   );

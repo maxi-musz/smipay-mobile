@@ -91,3 +91,48 @@ export async function closeSmileConversation(conversationId: string) {
   );
   return data;
 }
+
+export async function requestSmileStepUp(
+  conversationId: string,
+  payload: { pin: string },
+) {
+  const { data } = await api.post<
+    ApiResponse<{ token: string; expires_at: string }>
+  >(`${SMILEAI}/conversations/${conversationId}/step-up`, payload);
+  return data;
+}
+
+export async function getSmilePreferences() {
+  const { data } = await api.get<
+    ApiResponse<{
+      effective: "read_only" | "read_write" | "paused";
+      admin_mode: "read_only" | "read_write";
+      user_mode: "read_only" | "read_write";
+      paused: boolean;
+    }>
+  >(`${SMILEAI}/preferences`);
+  return data;
+}
+
+export async function updateSmilePreferences(payload: {
+  mode?: "read_only" | "read_write";
+  paused?: boolean;
+}) {
+  const { data } = await api.patch<
+    ApiResponse<{
+      effective: "read_only" | "read_write" | "paused";
+      admin_mode: "read_only" | "read_write";
+      user_mode: "read_only" | "read_write";
+      paused: boolean;
+    }>
+  >(`${SMILEAI}/preferences`, payload);
+  return data;
+}
+
+export async function acknowledgeSmileProvider(payload: { signature: string }) {
+  const { data } = await api.post<ApiResponse<{ signature: string }>>(
+    `${SMILEAI}/preferences/acknowledge-provider`,
+    payload,
+  );
+  return data;
+}

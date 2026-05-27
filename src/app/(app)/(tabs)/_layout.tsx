@@ -92,7 +92,7 @@ export default function TabsLayout() {
               ? {
                   tabPress: (e) => {
                     e.preventDefault();
-                    router.push("/(app)/smileai/chat/new");
+                    router.push("/(app)/smileai");
                   },
                 }
               : undefined

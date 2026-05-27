@@ -81,9 +81,11 @@ interface SmileaiSocketContextValue {
     conversationId: string,
     confirmationId: string,
     accept: boolean,
+    stepUpToken?: string,
   ) => void;
   requestHandoff: (conversationId: string) => void;
   setHandlers: (handlers: SmileaiSocketHandlers | null) => void;
+  onModeChanged: ((handler: ((p: any) => void) | null) => void);
 }
 
 export const SmileaiSocketContext = createContext<SmileaiSocketContextValue>({
@@ -96,6 +98,7 @@ export const SmileaiSocketContext = createContext<SmileaiSocketContextValue>({
   respondConfirm: () => {},
   requestHandoff: () => {},
   setHandlers: () => {},
+  onModeChanged: () => {},
 });
 
 export function SmileaiSocketProvider({ children }: { children: React.ReactNode }) {
@@ -147,6 +150,7 @@ export function SmileaiSocketProvider({ children }: { children: React.ReactNode 
     s.on("ai.handoff.completed", (p) => handlersRef.current?.onHandoffCompleted?.(p));
     s.on("ai.conversation.closed", (p) => handlersRef.current?.onConversationClosed?.(p));
     s.on("ai.error", (p) => handlersRef.current?.onError?.(p));
+    s.on("ai.mode.changed", (p) => modeChangedHandlerRef.current?.(p));
 
     setSocket(s);
     return () => {
@@ -221,15 +225,26 @@ export function SmileaiSocketProvider({ children }: { children: React.ReactNode 
   );
 
   const respondConfirm = useCallback(
-    (conversationId: string, confirmationId: string, accept: boolean) => {
+    (
+      conversationId: string,
+      confirmationId: string,
+      accept: boolean,
+      stepUpToken?: string,
+    ) => {
       socket?.emit("ai.confirm.respond", {
         conversation_id: conversationId,
         confirmation_id: confirmationId,
         accept,
+        ...(stepUpToken ? { step_up_token: stepUpToken } : {}),
       });
     },
     [socket],
   );
+
+  const modeChangedHandlerRef = useRef<((p: any) => void) | null>(null);
+  const onModeChanged = useCallback((handler: ((p: any) => void) | null) => {
+    modeChangedHandlerRef.current = handler;
+  }, []);
 
   const requestHandoff = useCallback(
     (conversationId: string) => {
@@ -248,6 +263,7 @@ export function SmileaiSocketProvider({ children }: { children: React.ReactNode 
     respondConfirm,
     requestHandoff,
     setHandlers,
+    onModeChanged,
   };
 
   return (

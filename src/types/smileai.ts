@@ -51,6 +51,7 @@ export interface PendingConfirmation {
   action: string;
   copy: string;
   expires_at?: string;
+  safety?: "read" | "write" | "sensitive";
 }
 
 export interface StartConversationPayload {
@@ -73,4 +74,12 @@ export interface SubmitSmileRatingPayload {
 export interface ConfirmSmileActionPayload {
   confirmation_id: string;
   accept: boolean;
+  step_up_token?: string;
+}
+
+export interface SmilePreferences {
+  effective: "read_only" | "read_write" | "paused";
+  admin_mode: "read_only" | "read_write";
+  user_mode: "read_only" | "read_write";
+  paused: boolean;
 }

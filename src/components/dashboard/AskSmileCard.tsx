@@ -11,7 +11,7 @@ export function AskSmileCard() {
 
   return (
     <Pressable
-      onPress={() => router.push("/(app)/smileai/chat/new")}
+      onPress={() => router.push("/(app)/smileai")}
       accessibilityRole="button"
       accessibilityLabel="Ask Smile anything"
       className="mx-4 mb-4"
