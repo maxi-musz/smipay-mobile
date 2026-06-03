@@ -33,7 +33,6 @@ import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import { useKeyboardVisible } from "@/hooks/use-keyboard-visible";
 import {
   AUTH_OTP_DIGITS,
   AUTH_PASSWORD_DIGITS,
@@ -310,8 +309,6 @@ export default function SignUpScreen() {
 
   // ── Render ────────────────────────────────────────────────────────
 
-  const keyboardVisible = useKeyboardVisible();
-
   return (
     <SafeAreaView className="flex-1 bg-background">
       <KeyboardAvoidingView
@@ -321,18 +318,17 @@ export default function SignUpScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerClassName={
-            keyboardVisible ? "pb-12" : "flex-grow"
-          }
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: "center",
+            paddingVertical: 24,
+          }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           automaticallyAdjustKeyboardInsets={false}
           showsVerticalScrollIndicator={false}
         >
-          <AuthCenteredForm
-            layout={keyboardVisible ? "top" : "center"}
-            className="px-6"
-          >
+          <AuthCenteredForm layout="top" className="px-6">
           {/* ── Header ── */}
           <Animated.View
             className={`items-center ${step === "profile" ? "mt-4" : ""}`}

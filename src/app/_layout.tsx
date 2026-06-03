@@ -37,7 +37,11 @@ import { useAppStore, useAuthStore, useHomepageStore } from "@/store";
 import { registerPushToken } from "@/api";
 import * as Application from "expo-application";
 
-SplashScreen.preventAutoHideAsync();
+// Wrapped in catch: on iOS, presenting a React Native Modal (e.g. the required
+// transaction-PIN sheet) creates a separate view controller, and the native
+// splash module can reject for that VC. Without this catch it surfaces as an
+// "Uncaught (in promise)" red error in dev. Harmless to ignore.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function InnerLayout() {
   const { isDark } = useAppTheme();

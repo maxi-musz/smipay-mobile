@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -8,15 +8,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import Animated, {
-  Easing,
-  FadeIn,
-  FadeOut,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 
 import {
   requestTransactionPinSetupOtp,
@@ -84,6 +77,7 @@ export function SetTransactionPinModal({
   onSuccess,
 }: SetTransactionPinModalProps) {
   const { isDark } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const showToast = useToastStore((s) => s.show);
 
   const isUpdate = mode === "update";
@@ -103,7 +97,13 @@ export function SetTransactionPinModal({
   const [pinHidden, setPinHidden] = useState(true);
   const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
   const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(null);
-  const [now, setNow] = useState(() => Date.now());
+  /**
+   * Whether the current OTP TTL / resend cooldown have elapsed. These are kept
+   * as state (flipped once via the isolated `Countdown` ticker below) so the
+   * whole modal doesn't re-render every second while a code is pending.
+   */
+  const [otpExpired, setOtpExpired] = useState(false);
+  const [resendOnCooldown, setResendOnCooldown] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,23 +115,6 @@ export function SetTransactionPinModal({
   const pinInputRef = useRef<TextInput>(null);
   const otpInputRef = useRef<TextInput>(null);
 
-  // Modal entry animation, mirroring AlertModal/ConfirmModal.
-  const scale = useSharedValue(0.9);
-  const opacity = useSharedValue(0);
-
-  useEffect(() => {
-    if (visible) {
-      scale.value = withTiming(1, {
-        duration: 240,
-        easing: Easing.out(Easing.back(1.15)),
-      });
-      opacity.value = withTiming(1, { duration: 200 });
-    } else {
-      scale.value = 0.9;
-      opacity.value = 0;
-    }
-  }, [visible, scale, opacity]);
-
   // Reset internal state every time the modal closes so the next open is fresh.
   useEffect(() => {
     if (!visible) {
@@ -141,6 +124,8 @@ export function SetTransactionPinModal({
       setPinHidden(true);
       setOtpExpiresAt(null);
       setResendAvailableAt(null);
+      setOtpExpired(false);
+      setResendOnCooldown(false);
       setAttemptsRemaining(null);
       setError(null);
       setRequesting(false);
@@ -162,29 +147,6 @@ export function SetTransactionPinModal({
     return () => clearTimeout(t);
   }, [visible, step]);
 
-  // Countdown ticker — runs while either the OTP TTL or the resend cooldown is active.
-  useEffect(() => {
-    const hasOtpCountdown = step === "otp" && otpExpiresAt != null;
-    const hasResendCountdown =
-      resendAvailableAt != null && resendAvailableAt > Date.now();
-    if (!hasOtpCountdown && !hasResendCountdown) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [step, otpExpiresAt, resendAvailableAt]);
-
-  const cardStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    opacity: opacity.value,
-  }));
-
-  const otpSecondsLeft =
-    otpExpiresAt != null ? Math.max(0, Math.ceil((otpExpiresAt - now) / 1000)) : 0;
-  const otpExpired = step === "otp" && otpExpiresAt != null && otpSecondsLeft === 0;
-  const resendSecondsLeft =
-    resendAvailableAt != null
-      ? Math.max(0, Math.ceil((resendAvailableAt - now) / 1000))
-      : 0;
-  const resendOnCooldown = resendSecondsLeft > 0;
   const canSubmitPin = pin.length === PIN_LENGTH && !requesting;
   const canSubmitOtp = otp.length === OTP_LENGTH && !verifying && !otpExpired;
 
@@ -205,6 +167,7 @@ export function SetTransactionPinModal({
     const data = readPinOtpErrorData(err);
     if (data?.retry_after_seconds && data.retry_after_seconds > 0) {
       setResendAvailableAt(Date.now() + data.retry_after_seconds * 1000);
+      setResendOnCooldown(true);
     }
     if (data?.message) return data.message;
     if (err instanceof ApiClientError) return err.message;
@@ -225,7 +188,8 @@ export function SetTransactionPinModal({
       const cooldownMs = res.data?.cooldown_ms ?? RESEND_COOLDOWN_FALLBACK_MS;
       setOtpExpiresAt(expires);
       setResendAvailableAt(Date.now() + cooldownMs);
-      setNow(Date.now());
+      setOtpExpired(false);
+      setResendOnCooldown(cooldownMs > 0);
       setStep("otp");
       showToast({
         variant: "success",
@@ -241,6 +205,14 @@ export function SetTransactionPinModal({
 
   async function handleConfirmOtp() {
     if (!canSubmitOtp) return;
+    // Lazy expiry guard: the isolated Countdown flips `otpExpired` on the tick
+    // it reaches zero, but re-check against the wall clock here in case the
+    // press lands in the same frame the code lapses.
+    if (otpExpiresAt != null && otpExpiresAt <= Date.now()) {
+      setOtpExpired(true);
+      setError("That code has expired. Tap resend to get a new one.");
+      return;
+    }
     Keyboard.dismiss();
     setVerifying(true);
     setError(null);
@@ -270,6 +242,7 @@ export function SetTransactionPinModal({
       if (data?.otp_invalidated || data?.attempts_remaining === 0) {
         setOtp("");
         setOtpExpiresAt(null);
+        setOtpExpired(false);
         setStep("pin");
       }
 
@@ -301,6 +274,7 @@ export function SetTransactionPinModal({
     setPin("");
     setOtp("");
     setOtpExpiresAt(null);
+    setOtpExpired(false);
     setAttemptsRemaining(null);
     setError(null);
   }
@@ -319,7 +293,8 @@ export function SetTransactionPinModal({
       setOtpExpiresAt(expires);
       setResendAvailableAt(Date.now() + cooldownMs);
       setOtp("");
-      setNow(Date.now());
+      setOtpExpired(false);
+      setResendOnCooldown(cooldownMs > 0);
       showToast({
         variant: "success",
         title: "Code resent",
@@ -355,33 +330,48 @@ export function SetTransactionPinModal({
     <Modal
       visible={visible}
       transparent
-      animationType="none"
+      animationType="slide"
       statusBarTranslucent
       onRequestClose={dismissable ? handleDismiss : () => {}}
     >
-      <Animated.View
-        entering={FadeIn.duration(200)}
-        exiting={FadeOut.duration(150)}
-        className="flex-1 bg-black/70"
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+        className="flex-1 justify-end"
       >
         {dismissable ? (
           <Pressable
-            className="absolute inset-0"
+            className="absolute inset-0 bg-black/70"
             onPress={handleDismiss}
             accessibilityRole="button"
             accessibilityLabel="Close"
           />
-        ) : null}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          className="flex-1 items-center justify-center px-6"
-          style={{ flex: 1 }}
-          pointerEvents="box-none"
+        ) : (
+          <View className="absolute inset-0 bg-black/70" />
+        )}
+
+        <View
+          style={{
+            backgroundColor: cardBg,
+            paddingBottom: Math.max(insets.bottom, 16),
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+          }}
+          className="px-6 pt-3 shadow-2xl"
         >
-        <Animated.View
-          style={[cardStyle, { backgroundColor: cardBg }]}
-          className="w-full max-w-md rounded-3xl p-6 shadow-2xl"
-        >
+          {/* Grab handle — only in dismissable mode; hidden when setup is
+              required so it doesn't hint at a swipe-to-close that won't work. */}
+          {dismissable ? (
+            <View className="mb-2 items-center pb-1">
+              <View
+                className="h-1 w-10 rounded-full"
+                style={{ backgroundColor: isDark ? "#334155" : "#E5E7EB" }}
+              />
+            </View>
+          ) : (
+            <View className="pt-1" />
+          )}
+
           <View className="flex-row items-center gap-3">
             <View className="h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
               <Ionicons
@@ -450,10 +440,8 @@ export function SetTransactionPinModal({
               : step === "pin"
                 ? isUpdate
                   ? "Choose a new 4-digit transaction PIN. Your current PIN stays active until you finish verification."
-                  : "Set a 4-digit transaction PIN to protect every purchase, transfer and withdrawal on your SmiPay account. This is required before you can continue."
-                : isUpdate
-                  ? "We sent a 6-digit code to your email. Enter it below to confirm your new PIN."
-                  : "We sent a 6-digit code to your email. Enter it below to confirm your new PIN."}
+                  : "Set a 4-digit PIN to authorize purchases. Required to continue."
+                : "We emailed you a 6-digit code. Enter it to confirm your new PIN."}
           </Text>
 
           {/* PIN — full slot UI on step 1, hidden on step 2 / confirm view. */}
@@ -578,8 +566,9 @@ export function SetTransactionPinModal({
                 keyboardType="number-pad"
                 maxLength={OTP_LENGTH}
                 caretHidden
-                autoComplete="one-time-code"
-                textContentType="oneTimeCode"
+                autoComplete="off"
+                importantForAutofill="no"
+                textContentType="none"
                 style={{
                   position: "absolute",
                   opacity: 0,
@@ -592,14 +581,21 @@ export function SetTransactionPinModal({
               {/* Single meta row: TTL on the left, resend control on the right. */}
               <View className="mt-4 flex-row items-center justify-between">
                 {otpExpiresAt != null ? (
-                  <Text
-                    className="text-xs font-medium"
-                    style={{ color: otpExpired ? "#DC2626" : subtleText }}
+                  <Countdown
+                    until={otpExpiresAt}
+                    onComplete={() => setOtpExpired(true)}
                   >
-                    {otpExpired
-                      ? "Code expired"
-                      : `Expires in ${formatCountdown(otpSecondsLeft)}`}
-                  </Text>
+                    {(secondsLeft) => (
+                      <Text
+                        className="text-xs font-medium"
+                        style={{ color: secondsLeft <= 0 ? "#DC2626" : subtleText }}
+                      >
+                        {secondsLeft <= 0
+                          ? "Code expired"
+                          : `Expires in ${formatCountdown(secondsLeft)}`}
+                      </Text>
+                    )}
+                  </Countdown>
                 ) : (
                   <View />
                 )}
@@ -620,11 +616,20 @@ export function SetTransactionPinModal({
                           : colors.orange[500],
                     }}
                   >
-                    {requesting
-                      ? "Sending…"
-                      : resendOnCooldown
-                        ? `Resend in ${resendSecondsLeft}s`
-                        : "Resend code"}
+                    {requesting ? (
+                      "Sending…"
+                    ) : resendAvailableAt != null && resendOnCooldown ? (
+                      <Countdown
+                        until={resendAvailableAt}
+                        onComplete={() => setResendOnCooldown(false)}
+                      >
+                        {(secondsLeft) =>
+                          secondsLeft > 0 ? `Resend in ${secondsLeft}s` : "Resend code"
+                        }
+                      </Countdown>
+                    ) : (
+                      "Resend code"
+                    )}
                   </Text>
                 </Pressable>
               </View>
@@ -785,9 +790,8 @@ export function SetTransactionPinModal({
             )}
           </View>
 
-        </Animated.View>
-        </KeyboardAvoidingView>
-      </Animated.View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -796,4 +800,46 @@ function formatCountdown(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+interface CountdownProps {
+  /** Absolute epoch ms the countdown targets. */
+  until: number;
+  /** Fired exactly once when the countdown first reaches zero. */
+  onComplete?: () => void;
+  /** Render the remaining whole seconds. */
+  children: (secondsLeft: number) => ReactNode;
+}
+
+/**
+ * Self-contained 1-Hz countdown. Owning its own `setInterval` keeps the
+ * per-second re-render isolated to this tiny node instead of the whole PIN
+ * modal, which matters while a code is pending on lower-end Android devices.
+ */
+function Countdown({ until, onComplete, children }: CountdownProps) {
+  const compute = () => Math.max(0, Math.ceil((until - Date.now()) / 1000));
+  const [secondsLeft, setSecondsLeft] = useState(compute);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
+  useEffect(() => {
+    let completed = false;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+      setSecondsLeft(left);
+      if (left <= 0 && !completed) {
+        completed = true;
+        onCompleteRef.current?.();
+        return true;
+      }
+      return false;
+    };
+    if (tick()) return;
+    const id = setInterval(() => {
+      if (tick()) clearInterval(id);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [until]);
+
+  return <>{children(secondsLeft)}</>;
 }

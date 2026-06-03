@@ -26,8 +26,6 @@ import {
 } from "@/lib/auth-password";
 import { handleApiError } from "@/lib/errors";
 import { useToastStore } from "@/components/ui/toast";
-import { useKeyboardVisible } from "@/hooks/use-keyboard-visible";
-
 type Step = "email" | "reset";
 
 const EMAIL_RE = /\S+@\S+\.\S+/;
@@ -155,8 +153,6 @@ export default function ForgotPasswordScreen() {
 
   // ── Render ────────────────────────────────────────────────────────
 
-  const keyboardVisible = useKeyboardVisible();
-
   return (
     <SafeAreaView className="flex-1 bg-background">
       <KeyboardAvoidingView
@@ -166,17 +162,16 @@ export default function ForgotPasswordScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerClassName={
-            keyboardVisible ? "pb-12" : "flex-grow"
-          }
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: "center",
+            paddingVertical: 24,
+          }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           automaticallyAdjustKeyboardInsets={false}
         >
-          <AuthCenteredForm
-            layout={keyboardVisible ? "top" : "center"}
-            className="px-6"
-          >
+          <AuthCenteredForm layout="top" className="px-6">
           {/* Header */}
           <Animated.View
             className="items-center"
