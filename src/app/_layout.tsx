@@ -8,6 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import { PortalHost } from "@rn-primitives/portal";
 import { useColorScheme } from "nativewind";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 
 import { LockScreen } from "@/components/lock-screen";
 import { FullPageLoader } from "@/components/ui/loaders";
@@ -210,15 +211,17 @@ function InnerLayout() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <SupportSocketProvider>
-          <WebhookEventsSocketProvider>
-            <VersionGateProvider>
-              <InnerLayout />
-            </VersionGateProvider>
-          </WebhookEventsSocketProvider>
-        </SupportSocketProvider>
-      </ThemeProvider>
+      <KeyboardProvider>
+        <ThemeProvider>
+          <SupportSocketProvider>
+            <WebhookEventsSocketProvider>
+              <VersionGateProvider>
+                <InnerLayout />
+              </VersionGateProvider>
+            </WebhookEventsSocketProvider>
+          </SupportSocketProvider>
+        </ThemeProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

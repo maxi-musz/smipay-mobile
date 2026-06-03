@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
+import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -95,7 +96,7 @@ export default function CableSmartcardScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <CableHeader showMainTitle={false} title="Verify Account" />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         className="flex-1"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -183,7 +184,7 @@ export default function CableSmartcardScreen() {
             </Animated.View>
           </>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

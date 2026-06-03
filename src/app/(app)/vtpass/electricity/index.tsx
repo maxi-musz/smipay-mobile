@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  View,
-} from "react-native";
+import { View } from "react-native";
+import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -116,17 +112,12 @@ export default function ElectricityIndexScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ElectricityHeader />
 
-      <KeyboardAvoidingView
+      <KeyboardAwareScrollView
         className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerClassName="px-5 pb-10"
       >
-        <ScrollView
-          className="flex-1"
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          contentContainerClassName="px-5 pb-10"
-        >
         <WalletBalanceCard
           walletBalance={walletBalance}
           cashbackBalance={cashbackBalance}
@@ -190,8 +181,7 @@ export default function ElectricityIndexScreen() {
             )}
           </>
         )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

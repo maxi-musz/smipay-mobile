@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
+import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
@@ -15,6 +16,7 @@ import {
 } from "@/features/vtpass-intl-airtime/components";
 import {
   formatNaira,
+  parseBalanceToNumber,
   getIntlAirtimeCashbackRate,
   computeCashbackToEarn,
   POLL_FIRST_DELAY_MS,
@@ -192,21 +194,30 @@ export default function IntlAirtimeAmountScreen() {
       phoneTrimmed.startsWith("234") ||
       phoneTrimmed.length >= 11);
   const amountValid = amount > 0;
+  const maxPayable =
+    parseBalanceToNumber(walletBalance) + parseBalanceToNumber(cashbackBalance);
+  const insufficientBalance = amount > 0 && amount > maxPayable;
   const canSubmit =
     !!selectedCountry &&
     !!selectedProductType &&
     !!selectedOperator &&
     !!selectedVariation &&
     amountValid &&
+    !insufficientBalance &&
     billersCodeValid &&
     phoneValid &&
     !purchasing;
 
   useLayoutEffect(() => {
-    if (confirmModalVisible) {
-      setUseCashback(false);
-    }
-  }, [confirmModalVisible]);
+    if (!confirmModalVisible) return;
+    // Auto-apply cashback only when the wallet alone can't cover the amount
+    // but wallet + cashback can. Otherwise leave cashback untouched.
+    const walletNum = parseBalanceToNumber(walletBalance);
+    const cashbackNum = parseBalanceToNumber(cashbackBalance);
+    setUseCashback(
+      walletNum + 1e-9 < amount && walletNum + cashbackNum + 1e-9 >= amount,
+    );
+  }, [confirmModalVisible, amount, walletBalance, cashbackBalance]);
 
   function closeConfirmModal() {
     setConfirmModalVisible(false);
@@ -379,7 +390,7 @@ export default function IntlAirtimeAmountScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <IntlAirtimeHeader title="Amount & pay" />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         className="flex-1"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -408,7 +419,12 @@ export default function IntlAirtimeAmountScreen() {
             setFieldErrors((e) => ({ ...e, amount: undefined }));
           }}
           countryPrefix={selectedCountry.prefix}
-          amountError={fieldErrors.amount}
+          amountError={
+            fieldErrors.amount ??
+            (insufficientBalance
+              ? "Insufficient balance. Fund your wallet or reduce the amount."
+              : undefined)
+          }
           billersCodeError={fieldErrors.billersCode}
           phoneError={fieldErrors.phone}
           onClearAmountError={() =>
@@ -424,7 +440,7 @@ export default function IntlAirtimeAmountScreen() {
           onPay={handleOpenConfirmModal}
           canSubmit={!!canSubmit}
         />
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <ConfirmIntlAirtimeModal
         visible={

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
+import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -15,6 +16,7 @@ import {
 } from "@/features/vtpass-data/components";
 import {
   formatNaira,
+  parseBalanceToNumber,
   getDataCashbackRate,
   computeCashbackToEarn,
   DATA_PHONE_REGEX,
@@ -225,18 +227,27 @@ export default function DataAmountScreen() {
     maxPerTransaction,
   );
 
+  const maxPayable =
+    parseBalanceToNumber(walletBalance) + parseBalanceToNumber(cashbackBalance);
+  const insufficientBalance = amount > 0 && amount > maxPayable;
   const canSubmit =
     !!selectedProvider &&
     !!selectedVariation &&
     amount > 0 &&
+    !insufficientBalance &&
     phoneValid &&
     !purchasing;
 
   useLayoutEffect(() => {
-    if (confirmModalVisible) {
-      setUseCashback(false);
-    }
-  }, [confirmModalVisible]);
+    if (!confirmModalVisible) return;
+    // Auto-apply cashback only when the wallet alone can't cover the amount
+    // but wallet + cashback can. Otherwise leave cashback untouched.
+    const walletNum = parseBalanceToNumber(walletBalance);
+    const cashbackNum = parseBalanceToNumber(cashbackBalance);
+    setUseCashback(
+      walletNum + 1e-9 < amount && walletNum + cashbackNum + 1e-9 >= amount,
+    );
+  }, [confirmModalVisible, amount, walletBalance, cashbackBalance]);
 
   function closeConfirmModal() {
     setConfirmModalVisible(false);
@@ -366,7 +377,7 @@ export default function DataAmountScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <DataHeader showBuyDataTitle={false} title="Amount & pay" />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         className="flex-1"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -422,10 +433,9 @@ export default function DataAmountScreen() {
           </Text>
         )}
 
-        {amount > 0 && (
-          <Text className="mt-5 text-sm text-muted-foreground">
-            Wallet and cashback amounts refresh when you open the confirmation
-            step.
+        {insufficientBalance && (
+          <Text className="mt-5 text-sm text-destructive">
+            Insufficient balance. Fund your wallet or reduce the amount.
           </Text>
         )}
 
@@ -448,7 +458,7 @@ export default function DataAmountScreen() {
             return sid.replace(/\s*data\s*/i, "").trim() || "Data";
           }}
         />
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <ConfirmDataModal
         visible={

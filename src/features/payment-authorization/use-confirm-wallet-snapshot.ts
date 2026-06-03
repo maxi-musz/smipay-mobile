@@ -1,60 +1,41 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 
-import { fetchUserWallet } from "@/api";
-import { ApiClientError } from "@/lib/api";
+import { useHomepageStore } from "@/store";
 
 export type ConfirmWalletSnapshot = {
   wallet: string;
   cashback: string;
 };
 
-/** Fresh wallet/cashback for VTpass checkout confirmation (aligned with homepage airtime master). */
+/**
+ * Wallet/cashback for VTpass checkout confirmation.
+ *
+ * Reads straight from the dashboard store (`useHomepageStore`) — which is loaded
+ * before any purchase screen is reachable, kept live on credits via the
+ * `wallet_credited` socket, and re-fetched after every successful purchase — so
+ * the confirm sheet shows the balance instantly with no extra backend call.
+ * The purchase request itself remains the server-side source of truth, so this
+ * pre-check is purely advisory.
+ */
 export function useConfirmWalletSnapshot() {
-  const [snapshot, setSnapshot] = useState<ConfirmWalletSnapshot | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const data = useHomepageStore.use.data();
 
-  const refresh = useCallback(async () => {
-    setSnapshot(null);
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await fetchUserWallet();
-      if (!res.success || !res.data) {
-        setError(res.message ?? "Could not load your wallet. Try again.");
-        setSnapshot(null);
-        return;
+  const snapshot: ConfirmWalletSnapshot | null = data
+    ? {
+        wallet: data.wallet_card?.current_balance ?? "₦0.00",
+        cashback: data.cashback_wallet?.current_balance ?? "₦0.00",
       }
-      const cashback =
-        res.data.cashback_wallet?.current_balance ?? "₦0.00";
-      setSnapshot({
-        wallet: res.data.wallet.current_balance,
-        cashback,
-      });
-    } catch (e) {
-      const message =
-        e instanceof ApiClientError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : "Could not load your wallet. Try again.";
-      setError(message);
-      setSnapshot(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    : null;
 
-  const reset = useCallback(() => {
-    setSnapshot(null);
-    setError(null);
-    setLoading(false);
-  }, []);
+  // No-ops: the dashboard store is the live source; there is nothing to fetch
+  // or reset here. Kept so callers' existing wiring stays unchanged.
+  const refresh = useCallback(async () => {}, []);
+  const reset = useCallback(() => {}, []);
 
   return {
     snapshot,
-    loading,
-    error,
+    loading: false as const,
+    error: null as string | null,
     refresh,
     reset,
   };

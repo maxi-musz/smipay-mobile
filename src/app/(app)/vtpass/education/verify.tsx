@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
+import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -63,7 +64,7 @@ export default function EducationVerifyScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <EducationHeader showMainTitle={false} title="Verify Profile" />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         className="flex-1"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -165,7 +166,7 @@ export default function EducationVerifyScreen() {
             </Animated.View>
           </>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

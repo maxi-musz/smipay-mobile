@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
+import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -135,11 +136,13 @@ export default function VtpassAirtimeScreen() {
   const phoneValid = PHONE_REGEX.test(phoneNormForValidation);
   const maxPayable =
     parseBalanceToNumber(walletBalance) + parseBalanceToNumber(cashbackBalance);
-  /** Stale homepage hint only (quick amounts); Pay uses fresh /banking/user-wallet in the modal */
+  /** Dashboard balance hint (quick amounts); the confirm modal reads the same live dashboard balance */
+  const insufficientBalance = amount > 0 && amount > maxPayable;
   const canSubmit =
     selectedProvider &&
     phoneValid &&
     amountValid &&
+    !insufficientBalance &&
     !purchasing &&
     !loadingProviders;
 
@@ -160,10 +163,15 @@ export default function VtpassAirtimeScreen() {
   );
 
   useLayoutEffect(() => {
-    if (confirmModalVisible) {
-      setUseCashback(false);
-    }
-  }, [confirmModalVisible]);
+    if (!confirmModalVisible) return;
+    // Auto-apply cashback only when the wallet alone can't cover the amount
+    // but wallet + cashback can. Otherwise leave cashback untouched.
+    const walletNum = parseBalanceToNumber(walletBalance);
+    const cashbackNum = parseBalanceToNumber(cashbackBalance);
+    setUseCashback(
+      walletNum + 1e-9 < amount && walletNum + cashbackNum + 1e-9 >= amount,
+    );
+  }, [confirmModalVisible, amount, walletBalance, cashbackBalance]);
 
   function handlePhoneChange(text: string) {
     setPhone(normalizeNgMobileDigits(text));
@@ -298,7 +306,7 @@ export default function VtpassAirtimeScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <AirtimeHeader />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         className="flex-1"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -340,7 +348,12 @@ export default function VtpassAirtimeScreen() {
           amountMin={amountMin}
           amountMax={amountMax}
           maxAffordable={maxPayable}
-          error={fieldErrors.amount}
+          error={
+            fieldErrors.amount ??
+            (insufficientBalance
+              ? "Insufficient balance. Fund your wallet or reduce the amount."
+              : undefined)
+          }
           onAmountChange={handleAmountChange}
           onClearAmountError={() =>
             setFieldErrors((e) => ({ ...e, amount: undefined }))
@@ -356,7 +369,7 @@ export default function VtpassAirtimeScreen() {
           providers={providers}
           onSelect={handleSelectRecent}
         />
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <ConfirmBuyAirtimeModal
         visible={

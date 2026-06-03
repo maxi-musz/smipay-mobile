@@ -14,7 +14,6 @@ interface WalletBalanceCardProps {
 export function WalletBalanceCard({
   walletBalance,
   cashbackBalance,
-  hasCashback,
 }: WalletBalanceCardProps) {
   const { isDark } = useAppTheme();
 
@@ -41,24 +40,22 @@ export function WalletBalanceCard({
             {walletBalance}
           </Text>
         </View>
-        {hasCashback && (
-          <View className="items-end">
-            <Text
-              className="text-xs font-medium"
-              style={{
-                color: isDark ? "rgba(255,255,255,0.6)" : colors.green[600],
-              }}
-            >
-              Cashback
-            </Text>
-            <Text
-              className="mt-0.5 text-sm font-semibold"
-              style={{ color: isDark ? "#fff" : colors.green[700] }}
-            >
-              {cashbackBalance}
-            </Text>
-          </View>
-        )}
+        <View className="items-end">
+          <Text
+            className="text-xs font-medium"
+            style={{
+              color: isDark ? "rgba(255,255,255,0.6)" : colors.green[600],
+            }}
+          >
+            Cashback
+          </Text>
+          <Text
+            className="mt-0.5 text-sm font-semibold"
+            style={{ color: isDark ? "#fff" : colors.green[700] }}
+          >
+            {cashbackBalance}
+          </Text>
+        </View>
       </View>
     </Animated.View>
   );

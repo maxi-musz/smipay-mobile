@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, TextInput, View } from "react-native";
+import { Pressable, TextInput, View } from "react-native";
+import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -14,6 +15,7 @@ import {
 } from "@/features/vtpass-electricity/components";
 import {
   formatNaira,
+  parseBalanceToNumber,
   getMinPurchaseAmount,
   getDiscoShortName,
   getElectricityCashbackRate,
@@ -139,18 +141,27 @@ export default function ElectricityPurchaseScreen() {
   const amountValid = amount >= minPurchase && amount <= ELECTRICITY_MAX_AMOUNT;
   const amountBelowMin = amount > 0 && amount < minPurchase;
   const showAmountError = !!fieldErrors.amount || amountBelowMin;
+  const maxPayable =
+    parseBalanceToNumber(walletBalance) + parseBalanceToNumber(cashbackBalance);
+  const insufficientBalance = amount > 0 && amount > maxPayable;
   const canSubmit =
     !!selectedProvider &&
     !!verifyData &&
     amountValid &&
+    !insufficientBalance &&
     phoneValid &&
     !purchasing;
 
   useLayoutEffect(() => {
-    if (confirmModalVisible) {
-      setUseCashback(false);
-    }
-  }, [confirmModalVisible]);
+    if (!confirmModalVisible) return;
+    // Auto-apply cashback only when the wallet alone can't cover the amount
+    // but wallet + cashback can. Otherwise leave cashback untouched.
+    const walletNum = parseBalanceToNumber(walletBalance);
+    const cashbackNum = parseBalanceToNumber(cashbackBalance);
+    setUseCashback(
+      walletNum + 1e-9 < amount && walletNum + cashbackNum + 1e-9 >= amount,
+    );
+  }, [confirmModalVisible, amount, walletBalance, cashbackBalance]);
 
   function closeConfirmModal() {
     setConfirmModalVisible(false);
@@ -420,7 +431,7 @@ export default function ElectricityPurchaseScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ElectricityHeader showMainTitle={false} title="Confirm & Pay" />
 
-      <ScrollView
+      <KeyboardAwareScrollView
         className="flex-1"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -595,6 +606,12 @@ export default function ElectricityPurchaseScreen() {
           </Text>
         )}
 
+        {insufficientBalance && (
+          <Text className="mt-5 text-sm text-destructive">
+            Insufficient balance. Fund your wallet or reduce the amount.
+          </Text>
+        )}
+
         <Button
           size="lg"
           className="mt-8 w-full rounded-xl"
@@ -605,7 +622,7 @@ export default function ElectricityPurchaseScreen() {
             {amount > 0 ? `Pay ${formatNaira(amount)}` : "Continue"}
           </Text>
         </Button>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Confirm bottom sheet */}
       <ConfirmElectricityModal
