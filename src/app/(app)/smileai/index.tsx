@@ -12,6 +12,7 @@ import type {
   AIConversationStatus,
   SmileConversationListItem,
 } from "@/types/smileai";
+import { ConversationListRow } from "@/components/smileai/ConversationListRow";
 
 /**
  * Smile landing screen. This is what `(tabs)/smile/index.tsx` and other
@@ -266,60 +267,18 @@ export default function SmileLandingScreen() {
               Continue a conversation
             </Text>
             {resumable.map((item) => (
-              <Pressable
+              <ConversationListRow
                 key={item.id}
+                item={item}
                 onPress={() => openConversation(item)}
-                style={{
-                  backgroundColor: cardBg,
-                  borderRadius: 12,
-                  padding: 16,
-                  marginBottom: 10,
-                  minHeight: 44,
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={`Smile conversation, ${STATUS_LABEL[item.status]}`}
-              >
-                <View className="flex-row items-center" style={{ gap: 8 }}>
-                  <View
-                    style={{
-                      backgroundColor: chipBg,
-                      paddingHorizontal: 8,
-                      paddingVertical: 2,
-                      borderRadius: 999,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontWeight: "600",
-                        color: chipText,
-                      }}
-                    >
-                      Smile
-                    </Text>
-                  </View>
-                  <Text className="flex-1 font-medium" numberOfLines={1}>
-                    Smile assistant
-                  </Text>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={18}
-                    color={isDark ? "#94A3B8" : "#94A3B8"}
-                  />
-                </View>
-                <View
-                  className="mt-2 flex-row items-center"
-                  style={{ gap: 8 }}
-                >
-                  <Text className="text-xs text-muted-foreground">
-                    {STATUS_LABEL[item.status]}
-                  </Text>
-                  <Text className="text-xs text-muted-foreground">•</Text>
-                  <Text className="text-xs text-muted-foreground">
-                    {formatTimeAgo(item.last_message_at)}
-                  </Text>
-                </View>
-              </Pressable>
+                isDark={isDark}
+                timeAgo={formatTimeAgo(item.last_message_at)}
+                chipLabel="Smile"
+                chipBg={chipBg}
+                chipText={chipText}
+                cardBg={cardBg}
+                showChevron
+              />
             ))}
           </>
         ) : !conversationsLoadError ? (
@@ -377,47 +336,18 @@ export default function SmileLandingScreen() {
               </Text>
             </Pressable>
             {visibleClosed.map((item) => (
-              <Pressable
+              <ConversationListRow
                 key={item.id}
+                item={item}
                 onPress={() => openConversation(item)}
-                style={{
-                  backgroundColor: cardBg,
-                  borderRadius: 12,
-                  padding: 16,
-                  marginBottom: 10,
-                  minHeight: 44,
-                  opacity: 0.85,
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={`Closed Smile conversation, ${STATUS_LABEL[item.status]}`}
-              >
-                <View className="flex-row items-center" style={{ gap: 8 }}>
-                  <View
-                    style={{
-                      backgroundColor: closedChipBg,
-                      paddingHorizontal: 8,
-                      paddingVertical: 2,
-                      borderRadius: 999,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontWeight: "600",
-                        color: closedChipText,
-                      }}
-                    >
-                      {STATUS_LABEL[item.status]}
-                    </Text>
-                  </View>
-                  <Text className="flex-1 font-medium" numberOfLines={1}>
-                    Smile assistant
-                  </Text>
-                </View>
-                <Text className="mt-2 text-xs text-muted-foreground">
-                  {formatTimeAgo(item.last_message_at)}
-                </Text>
-              </Pressable>
+                isDark={isDark}
+                timeAgo={formatTimeAgo(item.last_message_at)}
+                chipLabel={STATUS_LABEL[item.status]}
+                chipBg={closedChipBg}
+                chipText={closedChipText}
+                cardBg={cardBg}
+                opacity={0.85}
+              />
             ))}
           </View>
         ) : null}

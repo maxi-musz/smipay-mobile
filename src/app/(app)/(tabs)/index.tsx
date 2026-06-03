@@ -5,7 +5,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   AccountDetailsModal,
-  AskSmileCard,
   BalanceCard,
   DashboardHeader,
   FloatingSmileButton,
@@ -125,9 +124,6 @@ export default function HomeScreen() {
         }
       >
         <Animated.View entering={FadeInUp.duration(380).delay(40)}>
-          <AskSmileCard />
-        </Animated.View>
-        <Animated.View entering={FadeInUp.duration(380).delay(80)}>
           <PromoBanner
             banners={
               [...(data?.reward_banners ?? [])].sort((a, b) => {
@@ -141,10 +137,10 @@ export default function HomeScreen() {
             }
           />
         </Animated.View>
-        <Animated.View entering={FadeInUp.duration(380).delay(120)}>
+        <Animated.View entering={FadeInUp.duration(380).delay(80)}>
           <ServicesGrid cashbackRates={data?.cashback_rates} />
         </Animated.View>
-        <Animated.View entering={FadeInUp.duration(380).delay(160)}>
+        <Animated.View entering={FadeInUp.duration(380).delay(120)}>
           <RecentTransactions
             transactions={(data?.transaction_history ?? []).slice(0, 3)}
             loadFailed={loadFailed}

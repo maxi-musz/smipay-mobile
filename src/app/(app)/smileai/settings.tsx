@@ -141,16 +141,25 @@ export default function SmileaiSettingsScreen() {
       <Text className="mx-4 mt-6 text-xs uppercase text-muted-foreground">
         Display
       </Text>
-      <View className="mx-4 mt-2 flex-row items-center justify-between rounded-xl bg-card p-4">
-        <Text>Suggested replies</Text>
-        <Switch
-          value={ui.suggestedRepliesEnabled}
-          onValueChange={(v) =>
-            store.setState((s) => ({
-              ui: { ...s.ui, suggestedRepliesEnabled: v },
-            }))
-          }
-        />
+      <View className="mx-4 mt-2 rounded-xl bg-card p-4">
+        <View className="flex-row items-center justify-between">
+          <View className="mr-3 flex-1">
+            <Text className="font-semibold">Suggested replies</Text>
+            <Text className="mt-1 text-xs text-muted-foreground">
+              Show follow-up chips under Smile&apos;s replies and above the message
+              box.
+            </Text>
+          </View>
+          <Switch
+            value={ui.suggestedRepliesEnabled}
+            onValueChange={(v) =>
+              store.setState((s) => ({
+                ui: { ...s.ui, suggestedRepliesEnabled: v },
+                suggestions: v ? s.suggestions : {},
+              }))
+            }
+          />
+        </View>
       </View>
       <View className="mx-4 mt-3 flex-row items-center justify-between rounded-xl bg-card p-4">
         <Text>Sound</Text>

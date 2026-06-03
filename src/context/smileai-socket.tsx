@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useEffect, useRef, useState } from "
 import { io, type Socket } from "socket.io-client";
 
 import { useAuthStore } from "@/store";
-import type { SmileCitation } from "@/types/smileai";
+import type { SmileCitation, SmileConfirmRequestedPayload } from "@/types/smileai";
 
 function getSmileaiSocketUrl(): string {
   const base = __DEV__
@@ -47,13 +47,7 @@ export type SmileaiSocketHandlers = {
     ok: boolean;
     output_preview?: unknown;
   }) => void;
-  onConfirmRequested?: (payload: {
-    conversation_id: string;
-    confirmation_id: string;
-    action: string;
-    copy: string;
-    expires_at: string;
-  }) => void;
+  onConfirmRequested?: (payload: SmileConfirmRequestedPayload) => void;
   onHandoffRequested?: (payload: { conversation_id: string; trigger: string }) => void;
   onHandoffCompleted?: (payload: {
     conversation_id: string;

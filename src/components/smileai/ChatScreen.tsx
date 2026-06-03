@@ -3,11 +3,12 @@ import React, {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import {
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Pressable,
   ScrollView,
@@ -31,7 +32,7 @@ import { FullPageLoader } from "@/components/ui/loaders";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useToastStore } from "@/components/ui/toast";
 import { useAuthStore, useSmileaiStore } from "@/store";
-import type { SmileCitation, SmileMessage } from "@/types/smileai";
+import type { SmileCitation, SmileMessage, SmileConfirmRequestedPayload } from "@/types/smileai";
 import { MessageBubble } from "./MessageBubble";
 import { Composer } from "./Composer";
 import { ConfirmActionCard } from "./ConfirmActionCard";
@@ -40,6 +41,11 @@ import { WelcomeCard } from "./WelcomeCard";
 import { CitationsSheet } from "./CitationsSheet";
 import { RatingSheet } from "./RatingSheet";
 import { ConversationsDrawer } from "./ConversationsDrawer";
+import { SecurityNotice } from "./SecurityNotice";
+import { SmileAvatar } from "./SmileAvatar";
+import { QuickReplyBar } from "./QuickReplyBar";
+import { filterDisplayCitations } from "./citation-display";
+import { mergeSmileMessages, dedupeSmileMessages } from "./message-utils";
 
 const TOOL_LABELS: Record<string, string> = {
   list_recent_transactions: "Looking up your recent transactions…",
@@ -47,23 +53,19 @@ const TOOL_LABELS: Record<string, string> = {
   escalate_to_human: "Connecting you to support…",
 };
 
+/**
+ * Store bucket where optimistic user messages live before a real
+ * `AIConversation` row exists on the server. As soon as the server hands us
+ * a conversation_id we migrate everything in this bucket to that key.
+ */
+const PENDING_CONVERSATION_KEY = "__smileai_pending__";
+
 /** Server backfill uses `after` as a DB message id; optimistic client UUIDs are not valid. */
 function lastAssistantMessageId(messages: SmileMessage[]): string | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === "assistant") return messages[i].id;
   }
   return undefined;
-}
-
-function mergeSmileMessages(existing: SmileMessage[], incoming: SmileMessage[]): SmileMessage[] {
-  const byId = new Map<string, SmileMessage>();
-  for (const m of existing) byId.set(m.id, m);
-  for (const m of incoming) {
-    if (!byId.has(m.id)) byId.set(m.id, m);
-  }
-  return [...byId.values()].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-  );
 }
 
 type Props = {
@@ -115,7 +117,14 @@ export function ChatScreen({
   const ui = useSmileaiStore.use.ui();
 
   const convKey = conversationId ?? "";
-  const messages = messagesByConversation[convKey] ?? [];
+  // Until the server gives us a real `conversation_id`, render optimistic
+  // user bubbles from the dedicated pending bucket so the user sees their
+  // message immediately on tap instead of after the socket round-trip.
+  const messageKey = conversationId ?? PENDING_CONVERSATION_KEY;
+  const messages = useMemo(
+    () => dedupeSmileMessages(messagesByConversation[messageKey] ?? []),
+    [messagesByConversation, messageKey],
+  );
   const streamingText = streamingByConv[convKey] ?? "";
   const status = statusByConv[convKey] ?? "active";
   const pendingConfirmation = pendingByConv[convKey] ?? null;
@@ -123,9 +132,15 @@ export function ChatScreen({
   const suggestions = suggestionsByConv[convKey] ?? [];
   const toolBadge = toolBadgeByConv[convKey] ?? null;
   const draftText = ui.draftText;
+  const showSuggestedReplies = ui.suggestedRepliesEnabled;
 
   const setMessages = useSmileaiStore.use.setMessages();
   const appendUserMessage = useSmileaiStore.use.appendUserMessage();
+  const markMessageSent = useSmileaiStore.use.markMessageSent();
+  const markPendingUserMessagesSent =
+    useSmileaiStore.use.markPendingUserMessagesSent();
+  const migrateOptimisticMessages =
+    useSmileaiStore.use.migrateOptimisticMessages();
   const appendDelta = useSmileaiStore.use.appendDelta();
   const finalizeAssistant = useSmileaiStore.use.finalizeAssistant();
   const setSuggestions = useSmileaiStore.use.setSuggestions();
@@ -143,6 +158,7 @@ export function ChatScreen({
   const [ratingVisible, setRatingVisible] = useState(false);
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const pendingCitationsRef = useRef<SmileCitation[]>([]);
@@ -150,6 +166,8 @@ export function ChatScreen({
   const isHandedOff = status === "handed_off" || status === "handoff_pending";
   const showFullLoader =
     !!conversationId && messages.length === 0 && awaitingNetwork;
+  // Hide the welcome card the instant the user sends their first message —
+  // an optimistic bubble in the pending bucket already counts as activity.
   const showWelcome = !conversationId && messages.length === 0 && !awaitingNetwork;
 
   useLayoutEffect(() => {
@@ -160,6 +178,31 @@ export function ChatScreen({
     const cached = useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
     setAwaitingNetwork(cached.length === 0);
   }, [conversationId]);
+
+  // Sit the composer flush on the keyboard (same approach as support chat).
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => setKeyboardHeight(e.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardHeight(0),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (keyboardHeight <= 0) return;
+    const timer = setTimeout(
+      () => scrollRef.current?.scrollToEnd({ animated: true }),
+      Platform.OS === "ios" ? 50 : 100,
+    );
+    return () => clearTimeout(timer);
+  }, [keyboardHeight]);
 
   useEffect(() => {
     let cancelled = false;
@@ -251,6 +294,9 @@ export function ChatScreen({
       onDelta: ({ conversation_id, message_id, text }) => {
         if (conversation_id !== conversationId) return;
         setIsStreaming(true);
+        // First delta is the strongest "your message was processed" signal —
+        // promote any still-pending user bubble to delivered (single tick).
+        markPendingUserMessagesSent(conversation_id);
         appendDelta(conversation_id, message_id, text);
       },
       onCitations: ({ conversation_id, citations }) => {
@@ -273,7 +319,9 @@ export function ChatScreen({
           );
           pendingCitationsRef.current = [];
         }
-        if (sug?.length) setSuggestions(conversation_id, sug);
+        if (sug?.length && useSmileaiStore.getState().ui.suggestedRepliesEnabled) {
+          setSuggestions(conversation_id, sug);
+        }
         lastMessageIdRef.current = message_id;
       },
       onToolRequested: ({ conversation_id, action }) => {
@@ -290,7 +338,7 @@ export function ChatScreen({
         action,
         copy,
         safety,
-      }) => {
+      }: SmileConfirmRequestedPayload) => {
         if (conversation_id !== conversationId) return;
         setPendingConfirmation(conversation_id, {
           confirmation_id,
@@ -310,6 +358,7 @@ export function ChatScreen({
         setRatingVisible(true);
       },
       onError: ({ message }) => {
+        setIsStreaming(false);
         showToast({ variant: "error", title: message });
       },
     });
@@ -320,6 +369,7 @@ export function ChatScreen({
     setHandlers,
     appendDelta,
     finalizeAssistant,
+    markPendingUserMessagesSent,
     setSuggestions,
     setToolBadge,
     setPendingConfirmation,
@@ -353,34 +403,49 @@ export function ChatScreen({
   const sendUserText = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      if (!trimmed || isStreaming) return;
 
-      let convId = conversationId;
-      if (!convId) {
-        const created = await startConversation({ initial_text: trimmed });
-        if (!created) {
-          showToast({ variant: "error", title: "Could not start chat. Try again." });
-          return;
-        }
-        convId = created;
-        onConversationCreated(created);
-      }
-
+      // 1. Show the bubble immediately so the tap feels instant. If the chat
+      //    has no server id yet, park the optimistic message in the dedicated
+      //    pending bucket and migrate after creation.
       const clientMessageId = Crypto.randomUUID();
       const optimistic: SmileMessage = {
         id: clientMessageId,
         role: "user",
         content: trimmed,
         createdAt: new Date().toISOString(),
+        localStatus: "sending",
       };
-      appendUserMessage(convId, optimistic);
+      const initialKey = conversationId ?? PENDING_CONVERSATION_KEY;
+      appendUserMessage(initialKey, optimistic);
       setDraftText("");
       setIsStreaming(true);
 
+      // 2. Make sure a conversation exists. We deliberately do NOT pass
+      //    `initial_text` here: doing so makes the backend run the first
+      //    turn AND we'd separately emit `ai.message.user` below — producing
+      //    two assistant replies for the same prompt. One path only.
+      let convId = conversationId;
+      if (!convId) {
+        const created = await startConversation();
+        if (!created) {
+          showToast({ variant: "error", title: "Could not start chat. Try again." });
+          setIsStreaming(false);
+          return;
+        }
+        convId = created;
+        migrateOptimisticMessages(PENDING_CONVERSATION_KEY, convId);
+        onConversationCreated(convId);
+      }
+
+      // 3. Emit and flip the bubble status to delivered. If the socket is
+      //    still negotiating, retry briefly; we keep the clock icon during
+      //    retries so the user can see it's queued, not lost.
       let attempts = 0;
       const trySend = () => {
         if (socket?.connected) {
           emitSend(convId!, clientMessageId, trimmed);
+          markMessageSent(convId!, clientMessageId);
         } else if (attempts < 3) {
           attempts += 1;
           setTimeout(trySend, 800);
@@ -396,10 +461,13 @@ export function ChatScreen({
       startConversation,
       onConversationCreated,
       appendUserMessage,
+      migrateOptimisticMessages,
+      markMessageSent,
       setDraftText,
       emitSend,
       socket,
       showToast,
+      isStreaming,
     ],
   );
 
@@ -488,8 +556,15 @@ export function ChatScreen({
     );
   }
 
-  const statusLabel = isStreaming
-    ? "Smile is typing…"
+  const isSmileBusy =
+    isStreaming && !pendingConfirmation && !isHandedOff;
+
+  const statusLabel = isSmileBusy
+    ? streamingText
+      ? "Smile is typing…"
+      : toolBadge
+        ? "Working on it…"
+        : "Smile is thinking…"
     : pendingConfirmation
       ? "Waiting for you…"
       : toolBadge
@@ -498,12 +573,11 @@ export function ChatScreen({
           ? "Smile"
           : "Reconnecting…";
 
+  const footerBottomInset =
+    keyboardHeight > 0 ? keyboardHeight : Math.max(insets.bottom, 12);
+
   return (
-    <KeyboardAvoidingView
-      className="flex-1"
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={insets.top}
-    >
+    <View className="flex-1">
       <View
         className="flex-row items-center border-b border-border px-4 py-3"
         style={{ paddingTop: insets.top + 8 }}
@@ -522,18 +596,44 @@ export function ChatScreen({
             />
           </Pressable>
         ) : null}
-        <View className={showBackButton ? "ml-3 flex-1" : "flex-1"}>
-          <Text className="text-lg font-semibold">Smile</Text>
-          <Text className="text-xs text-muted-foreground">{statusLabel}</Text>
+        <View
+          className={showBackButton ? "ml-2 flex-1 flex-row items-center" : "flex-1 flex-row items-center"}
+          style={{ gap: 10 }}
+        >
+          <SmileAvatar size={36} />
+          <View style={{ flex: 1 }}>
+            <Text className="text-lg font-semibold">Smile</Text>
+            <Text
+              className={isSmileBusy ? "text-xs" : "text-xs text-muted-foreground"}
+              style={
+                isSmileBusy
+                  ? {
+                      color: isDark ? "#FB923C" : "#C2520A",
+                      fontWeight: "600",
+                    }
+                  : undefined
+              }
+            >
+              {statusLabel}
+            </Text>
+          </View>
         </View>
         <View className="flex-row items-center" style={{ gap: 4 }}>
           {onNewChat && conversationId ? (
             <Pressable
               onPress={onNewChat}
+              disabled={isSmileBusy}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="Start a new chat"
-              style={{ minWidth: 36, minHeight: 36, alignItems: "center", justifyContent: "center" }}
+              accessibilityState={{ disabled: isSmileBusy }}
+              style={{
+                minWidth: 36,
+                minHeight: 36,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: isSmileBusy ? 0.4 : 1,
+              }}
             >
               <Ionicons
                 name="create-outline"
@@ -545,10 +645,18 @@ export function ChatScreen({
           {onSelectConversation ? (
             <Pressable
               onPress={() => setDrawerOpen(true)}
+              disabled={isSmileBusy}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="View conversation history"
-              style={{ minWidth: 36, minHeight: 36, alignItems: "center", justifyContent: "center" }}
+              accessibilityState={{ disabled: isSmileBusy }}
+              style={{
+                minWidth: 36,
+                minHeight: 36,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: isSmileBusy ? 0.4 : 1,
+              }}
             >
               <Ionicons
                 name="time-outline"
@@ -559,6 +667,8 @@ export function ChatScreen({
           ) : null}
         </View>
       </View>
+
+      <SecurityNotice />
 
       {isHandedOff ? (
         <View className="px-4 pt-2">
@@ -577,16 +687,21 @@ export function ChatScreen({
         </View>
       ) : null}
 
-      <ScrollView
-        ref={scrollRef}
-        className="flex-1 px-4 pt-2"
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-        accessibilityLiveRegion="polite"
-      >
+      <View className="flex-1">
+        <ScrollView
+          ref={scrollRef}
+          className="flex-1 px-4 pt-2"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          contentContainerStyle={{ paddingBottom: 12 }}
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          accessibilityLiveRegion="polite"
+        >
         {showWelcome ? (
           <WelcomeCard
             firstName={user?.first_name ?? undefined}
             onChipPress={sendUserText}
+            disabled={isSmileBusy}
           />
         ) : null}
 
@@ -596,14 +711,25 @@ export function ChatScreen({
             role={m.role}
             content={m.content}
             citations={m.citations}
-            onCitationPress={(c) =>
-              setCitationSheet(m.citations ?? [c])
+            localStatus={m.localStatus}
+            createdAt={m.createdAt}
+            showCitationChips={showSuggestedReplies}
+            onCitationPress={
+              !showSuggestedReplies || isSmileBusy
+                ? undefined
+                : (c) =>
+                    setCitationSheet(filterDisplayCitations(m.citations ?? [c]))
             }
           />
         ))}
 
-        {streamingText ? (
-          <MessageBubble role="assistant" content={streamingText} />
+        {streamingText &&
+        !messages.some(
+          (m) =>
+            m.role === "assistant" &&
+            m.content.trim() === streamingText.trim(),
+        ) ? (
+          <MessageBubble role="assistant" content={streamingText} plainText />
         ) : null}
 
         {toolBadge ? (
@@ -621,34 +747,34 @@ export function ChatScreen({
             onConfirm={() => handleConfirm(true)}
           />
         ) : null}
-      </ScrollView>
-
-      {suggestions.length > 0 && !isHandedOff ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="px-3 py-2">
-          {suggestions.map((s) => (
-            <Pressable
-              key={s}
-              onPress={() => sendUserText(s)}
-              className="mr-2 rounded-full border border-border bg-card px-4 py-2"
-              style={{ minHeight: 44, justifyContent: "center" }}
-            >
-              <Text className="text-sm">{s}</Text>
-            </Pressable>
-          ))}
         </ScrollView>
-      ) : null}
 
-      <Composer
-        value={draftText}
-        onChange={setDraftText}
-        onSend={() => sendUserText(draftText)}
-        disabled={isHandedOff}
-        placeholder={
-          isHandedOff
-            ? "An agent will reply here soon"
-            : "Message Smile…"
-        }
-      />
+        <View
+          className="border-t border-border bg-background"
+          style={{ paddingBottom: footerBottomInset }}
+        >
+          {showSuggestedReplies && suggestions.length > 0 && !isHandedOff ? (
+            <QuickReplyBar
+              suggestions={suggestions}
+              onSelect={sendUserText}
+              disabled={isSmileBusy}
+            />
+          ) : null}
+
+          <Composer
+            value={draftText}
+            onChange={setDraftText}
+            onSend={() => sendUserText(draftText)}
+            disabled={isHandedOff || isSmileBusy}
+            isThinking={isSmileBusy && !isHandedOff}
+            placeholder={
+              isHandedOff
+                ? "An agent will reply here soon"
+                : "Message Smile…"
+            }
+          />
+        </View>
+      </View>
 
       <CitationsSheet
         visible={citationSheet != null}
@@ -690,6 +816,6 @@ export function ChatScreen({
           /* biometrics flow runs through verifyStepUpPin by typing PIN */
         }}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }

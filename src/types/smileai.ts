@@ -28,6 +28,12 @@ export interface SmileMessage {
   tokens_out?: number | null;
   latency_ms?: number | null;
   createdAt: string;
+  /**
+   * Client-only delivery state for optimistic UI. `sending` shows a clock,
+   * `sent` shows a single tick (WhatsApp-style). Server-fetched messages
+   * never carry this field.
+   */
+  localStatus?: "sending" | "sent";
 }
 
 export interface SmileConversationListItem {
@@ -35,6 +41,11 @@ export interface SmileConversationListItem {
   status: AIConversationStatus;
   last_message_at: string | null;
   createdAt: string;
+  /** Truncated first (or first two short) user messages — used as the row title. */
+  title_preview?: string | null;
+  /** Truncated latest user/assistant message — WhatsApp-style subtitle. */
+  last_message_preview?: string | null;
+  last_message_role?: "user" | "assistant" | null;
 }
 
 export interface SmileConversationDetail {
@@ -51,6 +62,16 @@ export interface PendingConfirmation {
   action: string;
   copy: string;
   expires_at?: string;
+  safety?: "read" | "write" | "sensitive";
+}
+
+/** Server → client `ai.confirm.requested` payload. */
+export interface SmileConfirmRequestedPayload {
+  conversation_id: string;
+  confirmation_id: string;
+  action: string;
+  copy: string;
+  expires_at: string;
   safety?: "read" | "write" | "sensitive";
 }
 

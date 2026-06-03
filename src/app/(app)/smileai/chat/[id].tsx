@@ -10,10 +10,10 @@ export default function SmileaiChatRoute() {
     <ChatScreen
       conversationId={conversationId}
       onConversationCreated={(newId) => {
-        router.replace({
-          pathname: "/(app)/smileai/chat/[id]",
-          params: { id: newId },
-        });
+        // `setParams` updates the URL in place without re-mounting the
+        // screen — preserves the user's optimistic bubble and avoids the
+        // visible navigation jump after the first send.
+        router.setParams({ id: newId });
       }}
       showBackButton
       onSelectConversation={(selectedId) => {

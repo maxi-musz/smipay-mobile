@@ -19,6 +19,7 @@ import type {
   AIConversationStatus,
   SmileConversationListItem,
 } from "@/types/smileai";
+import { ConversationListRow } from "./ConversationListRow";
 
 /**
  * Right-side drawer that lists every SmileAI conversation for the
@@ -291,57 +292,23 @@ export function ConversationsDrawer({
                 {resumable.map((item) => {
                   const isCurrent = item.id === activeConversationId;
                   return (
-                    <Pressable
+                    <ConversationListRow
                       key={item.id}
+                      item={item}
                       onPress={() => {
                         onClose();
                         if (!isCurrent) onSelectConversation(item.id);
                       }}
-                      style={{
-                        backgroundColor: cardBg,
-                        borderRadius: 12,
-                        padding: 12,
-                        marginBottom: 8,
-                        minHeight: 44,
-                        borderLeftWidth: isCurrent ? 3 : 0,
-                        borderLeftColor: railColor,
-                      }}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Smile conversation, ${STATUS_LABEL[item.status]}${isCurrent ? ", currently open" : ""}`}
-                    >
-                      <View
-                        className="flex-row items-center"
-                        style={{ gap: 8 }}
-                      >
-                        <View
-                          style={{
-                            backgroundColor: chipActiveBg,
-                            paddingHorizontal: 6,
-                            paddingVertical: 2,
-                            borderRadius: 999,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 10,
-                              fontWeight: "600",
-                              color: chipActiveText,
-                            }}
-                          >
-                            {STATUS_LABEL[item.status]}
-                          </Text>
-                        </View>
-                        <Text
-                          className="flex-1 text-sm font-medium"
-                          numberOfLines={1}
-                        >
-                          Smile chat
-                        </Text>
-                      </View>
-                      <Text className="mt-1 text-[11px] text-muted-foreground">
-                        {formatTimeAgo(item.last_message_at)}
-                      </Text>
-                    </Pressable>
+                      isDark={isDark}
+                      timeAgo={formatTimeAgo(item.last_message_at)}
+                      chipLabel={STATUS_LABEL[item.status]}
+                      chipBg={chipActiveBg}
+                      chipText={chipActiveText}
+                      cardBg={cardBg}
+                      isCurrent={isCurrent}
+                      railColor={railColor}
+                      compact
+                    />
                   );
                 })}
               </>
@@ -355,58 +322,24 @@ export function ConversationsDrawer({
                 {closed.map((item) => {
                   const isCurrent = item.id === activeConversationId;
                   return (
-                    <Pressable
+                    <ConversationListRow
                       key={item.id}
+                      item={item}
                       onPress={() => {
                         onClose();
                         if (!isCurrent) onSelectConversation(item.id);
                       }}
-                      style={{
-                        backgroundColor: cardBg,
-                        borderRadius: 12,
-                        padding: 12,
-                        marginBottom: 8,
-                        minHeight: 44,
-                        opacity: 0.85,
-                        borderLeftWidth: isCurrent ? 3 : 0,
-                        borderLeftColor: railColor,
-                      }}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Closed Smile conversation, ${STATUS_LABEL[item.status]}${isCurrent ? ", currently open" : ""}`}
-                    >
-                      <View
-                        className="flex-row items-center"
-                        style={{ gap: 8 }}
-                      >
-                        <View
-                          style={{
-                            backgroundColor: chipClosedBg,
-                            paddingHorizontal: 6,
-                            paddingVertical: 2,
-                            borderRadius: 999,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 10,
-                              fontWeight: "600",
-                              color: chipClosedText,
-                            }}
-                          >
-                            {STATUS_LABEL[item.status]}
-                          </Text>
-                        </View>
-                        <Text
-                          className="flex-1 text-sm font-medium"
-                          numberOfLines={1}
-                        >
-                          Smile chat
-                        </Text>
-                      </View>
-                      <Text className="mt-1 text-[11px] text-muted-foreground">
-                        {formatTimeAgo(item.last_message_at)}
-                      </Text>
-                    </Pressable>
+                      isDark={isDark}
+                      timeAgo={formatTimeAgo(item.last_message_at)}
+                      chipLabel={STATUS_LABEL[item.status]}
+                      chipBg={chipClosedBg}
+                      chipText={chipClosedText}
+                      cardBg={cardBg}
+                      isCurrent={isCurrent}
+                      railColor={railColor}
+                      opacity={0.85}
+                      compact
+                    />
                   );
                 })}
               </>

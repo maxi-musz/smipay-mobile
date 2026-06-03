@@ -9,6 +9,7 @@ import type {
 } from "@/types/smileai";
 import { createPersistConfig } from "./middleware";
 import { createSelectors } from "./create-selectors";
+import { dedupeSmileMessages } from "@/components/smileai/message-utils";
 
 interface SmileaiUiState {
   draftText: string;
@@ -41,6 +42,12 @@ interface SmileaiStoreActions {
   setConversations: (items: SmileConversationListItem[]) => void;
   setMessages: (conversationId: string, messages: SmileMessage[]) => void;
   appendUserMessage: (conversationId: string, message: SmileMessage) => void;
+  /** Mark every still-pending user message in the conversation as delivered. */
+  markPendingUserMessagesSent: (conversationId: string) => void;
+  /** Mark a single optimistic user message as delivered by id. */
+  markMessageSent: (conversationId: string, messageId: string) => void;
+  /** Migrate optimistic messages from one (placeholder) conversation key to another. */
+  migrateOptimisticMessages: (fromConversationId: string, toConversationId: string) => void;
   appendDelta: (conversationId: string, messageId: string, text: string) => void;
   finalizeAssistant: (
     conversationId: string,
@@ -185,22 +192,104 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
       setConversations: (items) => set({ conversations: sortConversationsByRecency(items) }),
 
       setMessages: (conversationId, messages) =>
-        set((s) => ({
-          messagesByConversation: {
-            ...s.messagesByConversation,
-            [conversationId]: messages,
-          },
-        })),
+        set((s) => {
+          const prev = s.messagesByConversation[conversationId] ?? [];
+          const serverIds = new Set(messages.map((m) => m.id));
+          const serverUserText = new Set(
+            messages
+              .filter((m) => m.role === "user")
+              .map((m) => m.content.trim()),
+          );
+          // Keep optimistic user bubbles until the server returns the same text.
+          // Previously we only kept `sending`, so a message marked `sent` on
+          // emit vanished when a fetch raced ahead of persistence.
+          const survivingOptimistic = prev.filter(
+            (m) =>
+              m.role === "user" &&
+              m.localStatus &&
+              !serverIds.has(m.id) &&
+              !serverUserText.has(m.content.trim()),
+          );
+          const merged = dedupeSmileMessages([
+            ...messages,
+            ...survivingOptimistic,
+          ]);
+          return {
+            messagesByConversation: {
+              ...s.messagesByConversation,
+              [conversationId]: merged,
+            },
+          };
+        }),
 
       appendUserMessage: (conversationId, message) =>
         set((s) => {
           const prev = s.messagesByConversation[conversationId] ?? [];
+          const last = prev[prev.length - 1];
+          if (
+            last?.role === "user" &&
+            last.content.trim() === message.content.trim() &&
+            last.localStatus === "sending"
+          ) {
+            return {};
+          }
           return {
             messagesByConversation: {
               ...s.messagesByConversation,
-              [conversationId]: [...prev, message],
+              [conversationId]: dedupeSmileMessages([...prev, message]),
             },
           };
+        }),
+
+      markPendingUserMessagesSent: (conversationId) =>
+        set((s) => {
+          const prev = s.messagesByConversation[conversationId] ?? [];
+          let changed = false;
+          const next = prev.map((m) => {
+            if (m.role === "user" && m.localStatus === "sending") {
+              changed = true;
+              return { ...m, localStatus: "sent" as const };
+            }
+            return m;
+          });
+          if (!changed) return {};
+          return {
+            messagesByConversation: {
+              ...s.messagesByConversation,
+              [conversationId]: next,
+            },
+          };
+        }),
+
+      markMessageSent: (conversationId, messageId) =>
+        set((s) => {
+          const prev = s.messagesByConversation[conversationId] ?? [];
+          const idx = prev.findIndex((m) => m.id === messageId);
+          if (idx === -1) return {};
+          const target = prev[idx];
+          if (target.localStatus === "sent") return {};
+          const next = prev.slice();
+          next[idx] = { ...target, localStatus: "sent" };
+          return {
+            messagesByConversation: {
+              ...s.messagesByConversation,
+              [conversationId]: next,
+            },
+          };
+        }),
+
+      migrateOptimisticMessages: (fromConversationId, toConversationId) =>
+        set((s) => {
+          if (fromConversationId === toConversationId) return {};
+          const carried = s.messagesByConversation[fromConversationId];
+          if (!carried || carried.length === 0) return {};
+          const target = s.messagesByConversation[toConversationId] ?? [];
+          const existingIds = new Set(target.map((m) => m.id));
+          const additions = carried.filter((m) => !existingIds.has(m.id));
+          const nextMap = { ...s.messagesByConversation };
+          delete nextMap[fromConversationId];
+          nextMap[toConversationId] = dedupeSmileMessages([...target, ...additions]);
+          return { messagesByConversation: nextMap };
         }),
 
       appendDelta: (conversationId, messageId, text) =>
@@ -219,19 +308,20 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
         set((s) => {
           const prev = s.messagesByConversation[conversationId] ?? [];
           const withoutDup = prev.filter((m) => m.id !== messageId);
+          const next = dedupeSmileMessages([
+            ...withoutDup,
+            {
+              id: messageId,
+              role: "assistant" as const,
+              content,
+              citations,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
           return {
             messagesByConversation: {
               ...s.messagesByConversation,
-              [conversationId]: [
-                ...withoutDup,
-                {
-                  id: messageId,
-                  role: "assistant",
-                  content,
-                  citations,
-                  createdAt: new Date().toISOString(),
-                },
-              ],
+              [conversationId]: next,
             },
             streamingText: { ...s.streamingText, [conversationId]: "" },
             streamingMessageId: {
