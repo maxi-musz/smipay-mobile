@@ -1,6 +1,13 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 import { createSelectors } from "@/store/create-selectors";
+import { createPersistConfig } from "@/store/middleware";
+import {
+  PROVIDER_CACHE_TTL,
+  PROVIDER_CACHE_VERSION,
+  isCacheFresh,
+} from "@/config/provider-cache";
 import {
   fetchEducationVariations,
   verifyJambProfile,
@@ -19,6 +26,8 @@ interface EducationState {
   selectedProduct: EducationProductID | null;
   variations: EducationVariation[];
   variationsByProduct: Record<string, CachedVariations>;
+  /** Epoch ms per product serviceID when its variations were last fetched. */
+  variationsFetchedAt: Record<string, number>;
   selectedVariation: EducationVariation | null;
   quantity: number;
 
@@ -49,6 +58,7 @@ const initialState: EducationState = {
   selectedProduct: null,
   variations: [],
   variationsByProduct: {},
+  variationsFetchedAt: {},
   selectedVariation: null,
   quantity: 1,
 
@@ -69,7 +79,9 @@ function getErrorMessage(e: unknown): string {
   return err?.response?.data?.message ?? err?.message ?? "Something went wrong";
 }
 
-const _useEducationStore = create<EducationStore>()((set, get) => ({
+const _useEducationStore = create<EducationStore>()(
+  persist(
+    (set, get) => ({
   ...initialState,
 
   setSelectedProduct: (id) =>
@@ -83,11 +95,16 @@ const _useEducationStore = create<EducationStore>()((set, get) => ({
     }),
 
   fetchVariations: async (serviceID, forceRefresh = false) => {
-    const { isLoadingVariations, variationsByProduct } = get();
+    const { isLoadingVariations, variationsByProduct, variationsFetchedAt } =
+      get();
     if (isLoadingVariations) return;
 
     const cached = variationsByProduct[serviceID];
-    if (!forceRefresh && cached) {
+    if (
+      !forceRefresh &&
+      cached &&
+      isCacheFresh(variationsFetchedAt[serviceID], PROVIDER_CACHE_TTL.education)
+    ) {
       set({ variations: cached.variations, variationsError: null });
       return;
     }
@@ -103,6 +120,10 @@ const _useEducationStore = create<EducationStore>()((set, get) => ({
           variationsByProduct: {
             ...s.variationsByProduct,
             [serviceID]: { variations },
+          },
+          variationsFetchedAt: {
+            ...s.variationsFetchedAt,
+            [serviceID]: Date.now(),
           },
           isLoadingVariations: false,
           variationsError: null,
@@ -156,6 +177,15 @@ const _useEducationStore = create<EducationStore>()((set, get) => ({
     set({ billersCode: "", verifyData: null, verifyError: null }),
 
   reset: () => set(initialState),
-}));
+    }),
+    createPersistConfig<EducationStore>("education-variations", {
+      version: PROVIDER_CACHE_VERSION,
+      partialize: (state) => ({
+        variationsByProduct: state.variationsByProduct,
+        variationsFetchedAt: state.variationsFetchedAt,
+      }),
+    }),
+  ),
+);
 
 export const useEducationStore = createSelectors(_useEducationStore);

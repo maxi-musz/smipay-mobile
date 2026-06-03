@@ -19,6 +19,7 @@ import { FullPageLoader } from "@/components/ui/loaders";
 import { useVersionGateContext } from "@/context/version-gate-context";
 import { useAuthStore, useHomepageStore, useProfileStore } from "@/store";
 import { colors } from "@/constants/colors";
+import { prefetchProviders } from "@/lib/provider-prefetch";
 
 export default function HomeScreen() {
   const isLocked = useAuthStore.use.isLocked();
@@ -30,6 +31,7 @@ export default function HomeScreen() {
   const fetchProfile = useProfileStore.use.fetchProfile();
   const { versionCheckComplete, effectiveLevel } = useVersionGateContext();
   const wasLockedRef = useRef(isLocked);
+  const didPrefetchRef = useRef(false);
 
   const [addMoneyModalVisible, setAddMoneyModalVisible] = useState(false);
   // const [fundWithCardModalVisible, setFundWithCardModalVisible] = useState(false);
@@ -48,6 +50,15 @@ export default function HomeScreen() {
       fetchHomepage();
     }
   }, [isLocked, data, fetchHomepage]);
+
+  // Once the homepage has loaded (auth confirmed) and we're unlocked, silently
+  // warm the utility provider caches in the background — sequentially, and only
+  // for caches that are missing or expired. Runs once per app session.
+  useEffect(() => {
+    if (didPrefetchRef.current || !data || isLocked) return;
+    didPrefetchRef.current = true;
+    void prefetchProviders();
+  }, [data, isLocked]);
 
   /**
    * PIN setup is mandatory, but a soft update prompt takes priority: we only

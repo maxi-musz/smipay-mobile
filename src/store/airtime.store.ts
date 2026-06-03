@@ -1,7 +1,14 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 import { fetchAirtimeServiceIds } from "@/api/services/vtpass-airtime";
 import type { AirtimeServiceItem } from "@/types/vtpass-airtime";
+import {
+  PROVIDER_CACHE_TTL,
+  PROVIDER_CACHE_VERSION,
+  isCacheFresh,
+} from "@/config/provider-cache";
+import { createPersistConfig } from "./middleware";
 import { createSelectors } from "./create-selectors";
 
 /** Exclude international/foreign airtime from domestic airtime network dropdown. */
@@ -22,6 +29,8 @@ function filterDomesticProviders(data: AirtimeServiceItem[]): AirtimeServiceItem
 
 interface AirtimeState {
   providers: AirtimeServiceItem[];
+  /** Epoch ms when `providers` was last fetched; drives TTL caching. */
+  providersFetchedAt: number | null;
   isLoading: boolean;
   error: string | null;
 }
@@ -35,40 +44,62 @@ type AirtimeStore = AirtimeState & AirtimeActions;
 
 const initialState: AirtimeState = {
   providers: [],
+  providersFetchedAt: null,
   isLoading: false,
   error: null,
 };
 
-const _useAirtimeStore = create<AirtimeStore>()((set, get) => ({
-  ...initialState,
+const _useAirtimeStore = create<AirtimeStore>()(
+  persist(
+    (set, get) => ({
+      ...initialState,
 
-  fetchAirtimeProviders: async (forceRefresh = false) => {
-    const { providers, isLoading } = get();
-    if (isLoading) return;
-    if (!forceRefresh && providers.length > 0) return;
+      fetchAirtimeProviders: async (forceRefresh = false) => {
+        const { providers, isLoading, providersFetchedAt } = get();
+        if (isLoading) return;
+        if (
+          !forceRefresh &&
+          providers.length > 0 &&
+          isCacheFresh(providersFetchedAt, PROVIDER_CACHE_TTL.airtime)
+        ) {
+          return;
+        }
 
-    set({ isLoading: true, error: null });
+        set({ isLoading: true, error: null });
 
-    try {
-      const res = await fetchAirtimeServiceIds();
-      if (res.success && res.data?.length) {
-        const filtered = filterDomesticProviders(res.data);
-        set({ providers: filtered, isLoading: false });
-      } else {
-        set({
-          error: "Unable to load networks. Tap to retry.",
-          isLoading: false,
-        });
-      }
-    } catch {
-      set({
-        error: "Unable to load networks. Tap to retry.",
-        isLoading: false,
-      });
-    }
-  },
+        try {
+          const res = await fetchAirtimeServiceIds();
+          if (res.success && res.data?.length) {
+            const filtered = filterDomesticProviders(res.data);
+            set({
+              providers: filtered,
+              providersFetchedAt: Date.now(),
+              isLoading: false,
+            });
+          } else {
+            set({
+              error: "Unable to load networks. Tap to retry.",
+              isLoading: false,
+            });
+          }
+        } catch {
+          set({
+            error: "Unable to load networks. Tap to retry.",
+            isLoading: false,
+          });
+        }
+      },
 
-  reset: () => set(initialState),
-}));
+      reset: () => set(initialState),
+    }),
+    createPersistConfig<AirtimeStore>("airtime-providers", {
+      version: PROVIDER_CACHE_VERSION,
+      partialize: (state) => ({
+        providers: state.providers,
+        providersFetchedAt: state.providersFetchedAt,
+      }),
+    }),
+  ),
+);
 
 export const useAirtimeStore = createSelectors(_useAirtimeStore);

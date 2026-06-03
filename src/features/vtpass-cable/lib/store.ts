@@ -1,6 +1,13 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 import { createSelectors } from "@/store/create-selectors";
+import { createPersistConfig } from "@/store/middleware";
+import {
+  PROVIDER_CACHE_TTL,
+  PROVIDER_CACHE_VERSION,
+  isCacheFresh,
+} from "@/config/provider-cache";
 import {
   fetchCableServiceIds,
   fetchCableVariationCodes,
@@ -19,6 +26,8 @@ interface CachedVariations {
 
 interface CableState {
   providers: CableServiceItem[];
+  /** Epoch ms when `providers` was last fetched; drives TTL caching. */
+  providersFetchedAt: number | null;
   variations: CableVariation[];
   variationsByProvider: Record<string, CachedVariations>;
 
@@ -56,6 +65,7 @@ type CableStore = CableState & CableActions;
 
 const initialState: CableState = {
   providers: [],
+  providersFetchedAt: null,
   variations: [],
   variationsByProvider: {},
 
@@ -84,20 +94,33 @@ function getErrorMessage(e: unknown): string {
   return err?.response?.data?.message ?? err?.message ?? "Something went wrong";
 }
 
-const _useCableStore = create<CableStore>()((set, get) => ({
+const _useCableStore = create<CableStore>()(
+  persist(
+    (set, get) => ({
   ...initialState,
 
   fetchProviders: async (forceRefresh = false) => {
-    const { providers, isLoadingProviders } = get();
+    const { providers, isLoadingProviders, providersFetchedAt } = get();
     if (isLoadingProviders) return;
-    if (!forceRefresh && providers.length > 0) return;
+    if (
+      !forceRefresh &&
+      providers.length > 0 &&
+      isCacheFresh(providersFetchedAt, PROVIDER_CACHE_TTL.cable)
+    ) {
+      return;
+    }
 
     set({ isLoadingProviders: true, providersError: null });
 
     try {
       const res = await fetchCableServiceIds();
       if (res.success && res.data?.length) {
-        set({ providers: res.data, isLoadingProviders: false, providersError: null });
+        set({
+          providers: res.data,
+          providersFetchedAt: Date.now(),
+          isLoadingProviders: false,
+          providersError: null,
+        });
       } else {
         set({
           providersError: (res as { message?: string }).message ?? "Failed to load providers",
@@ -199,6 +222,15 @@ const _useCableStore = create<CableStore>()((set, get) => ({
     set({ billersCode: "", verifyData: null, verifyError: null, subscriptionType: null }),
 
   reset: () => set(initialState),
-}));
+    }),
+    createPersistConfig<CableStore>("cable-providers", {
+      version: PROVIDER_CACHE_VERSION,
+      partialize: (state) => ({
+        providers: state.providers,
+        providersFetchedAt: state.providersFetchedAt,
+      }),
+    }),
+  ),
+);
 
 export const useCableStore = createSelectors(_useCableStore);

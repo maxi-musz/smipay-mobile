@@ -1,6 +1,13 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 import { createSelectors } from "@/store/create-selectors";
+import { createPersistConfig } from "@/store/middleware";
+import {
+  PROVIDER_CACHE_TTL,
+  PROVIDER_CACHE_VERSION,
+  isCacheFresh,
+} from "@/config/provider-cache";
 import {
   fetchElectricityServiceIds,
   verifyElectricityMeter,
@@ -13,6 +20,8 @@ import type {
 
 interface ElectricityState {
   providers: ElectricityServiceItem[];
+  /** Epoch ms when `providers` was last fetched; drives TTL caching. */
+  providersFetchedAt: number | null;
   selectedProvider: ElectricityServiceItem | null;
   meterType: MeterType;
 
@@ -42,6 +51,7 @@ type ElectricityStore = ElectricityState & ElectricityActions;
 
 const initialState: ElectricityState = {
   providers: [],
+  providersFetchedAt: null,
   selectedProvider: null,
   meterType: "prepaid",
 
@@ -62,13 +72,21 @@ function getErrorMessage(e: unknown): string {
   return err?.response?.data?.message ?? err?.message ?? "Something went wrong";
 }
 
-const _useElectricityStore = create<ElectricityStore>()((set, get) => ({
+const _useElectricityStore = create<ElectricityStore>()(
+  persist(
+    (set, get) => ({
   ...initialState,
 
   fetchProviders: async (forceRefresh = false) => {
-    const { providers, isLoadingProviders } = get();
+    const { providers, isLoadingProviders, providersFetchedAt } = get();
     if (isLoadingProviders) return;
-    if (!forceRefresh && providers.length > 0) return;
+    if (
+      !forceRefresh &&
+      providers.length > 0 &&
+      isCacheFresh(providersFetchedAt, PROVIDER_CACHE_TTL.electricity)
+    ) {
+      return;
+    }
 
     set({ isLoadingProviders: true, providersError: null });
 
@@ -77,6 +95,7 @@ const _useElectricityStore = create<ElectricityStore>()((set, get) => ({
       if (res.success && res.data?.length) {
         set({
           providers: res.data,
+          providersFetchedAt: Date.now(),
           isLoadingProviders: false,
           providersError: null,
         });
@@ -147,6 +166,15 @@ const _useElectricityStore = create<ElectricityStore>()((set, get) => ({
     set({ billersCode: "", verifyData: null, verifyError: null }),
 
   reset: () => set(initialState),
-}));
+    }),
+    createPersistConfig<ElectricityStore>("electricity-providers", {
+      version: PROVIDER_CACHE_VERSION,
+      partialize: (state) => ({
+        providers: state.providers,
+        providersFetchedAt: state.providersFetchedAt,
+      }),
+    }),
+  ),
+);
 
 export const useElectricityStore = createSelectors(_useElectricityStore);

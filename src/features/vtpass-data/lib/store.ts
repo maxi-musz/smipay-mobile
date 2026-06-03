@@ -1,6 +1,13 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 import { createSelectors } from "@/store/create-selectors";
+import { createPersistConfig } from "@/store/middleware";
+import {
+  PROVIDER_CACHE_TTL,
+  PROVIDER_CACHE_VERSION,
+  isCacheFresh,
+} from "@/config/provider-cache";
 import {
   fetchDataServiceIds,
   fetchDataVariationCodes,
@@ -14,6 +21,8 @@ interface CachedVariations {
 
 interface DataState {
   providers: DataServiceItem[];
+  /** Epoch ms when `providers` was last fetched; drives TTL caching. */
+  providersFetchedAt: number | null;
   variations: DataVariation[];
   variationsCategorized: Record<string, DataVariationCategory>;
 
@@ -42,6 +51,7 @@ type DataStore = DataState & DataActions;
 
 const initialState: DataState = {
   providers: [],
+  providersFetchedAt: null,
   variations: [],
   variationsCategorized: {},
   variationsByProvider: {},
@@ -64,13 +74,21 @@ function getErrorMessage(e: unknown): string {
   return err?.response?.data?.message ?? err?.message ?? "Something went wrong";
 }
 
-const _useDataStore = create<DataStore>()((set, get) => ({
+const _useDataStore = create<DataStore>()(
+  persist(
+    (set, get) => ({
   ...initialState,
 
   fetchProviders: async (forceRefresh = false) => {
-    const { providers, isLoadingProviders } = get();
+    const { providers, isLoadingProviders, providersFetchedAt } = get();
     if (isLoadingProviders) return;
-    if (!forceRefresh && providers.length > 0) return;
+    if (
+      !forceRefresh &&
+      providers.length > 0 &&
+      isCacheFresh(providersFetchedAt, PROVIDER_CACHE_TTL.data)
+    ) {
+      return;
+    }
 
     set({ isLoadingProviders: true, providersError: null });
 
@@ -79,6 +97,7 @@ const _useDataStore = create<DataStore>()((set, get) => ({
       if (res.success && res.data?.length) {
         set({
           providers: res.data,
+          providersFetchedAt: Date.now(),
           isLoadingProviders: false,
           providersError: null,
         });
@@ -168,6 +187,15 @@ const _useDataStore = create<DataStore>()((set, get) => ({
     }),
   setSelectedVariation: (v) => set({ selectedVariation: v }),
   reset: () => set(initialState),
-}));
+    }),
+    createPersistConfig<DataStore>("data-providers", {
+      version: PROVIDER_CACHE_VERSION,
+      partialize: (state) => ({
+        providers: state.providers,
+        providersFetchedAt: state.providersFetchedAt,
+      }),
+    }),
+  ),
+);
 
 export const useDataStore = createSelectors(_useDataStore);

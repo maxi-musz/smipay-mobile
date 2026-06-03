@@ -1,6 +1,13 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 import { createSelectors } from "@/store/create-selectors";
+import { createPersistConfig } from "@/store/middleware";
+import {
+  PROVIDER_CACHE_TTL,
+  PROVIDER_CACHE_VERSION,
+  isCacheFresh,
+} from "@/config/provider-cache";
 import {
   getIntlCountries,
   getIntlProductTypes,
@@ -16,6 +23,8 @@ import type {
 
 interface IntlAirtimeState {
   countries: IntlCountry[];
+  /** Epoch ms when `countries` was last fetched; drives TTL caching. */
+  countriesFetchedAt: number | null;
   productTypes: IntlProductType[];
   operators: IntlOperator[];
   variations: IntlVariation[];
@@ -55,6 +64,7 @@ type IntlAirtimeStore = IntlAirtimeState & IntlAirtimeActions;
 
 const initialState: IntlAirtimeState = {
   countries: [],
+  countriesFetchedAt: null,
   productTypes: [],
   operators: [],
   variations: [],
@@ -83,13 +93,21 @@ function getErrorMessage(e: unknown): string {
   return err?.response?.data?.message ?? err?.message ?? "Something went wrong";
 }
 
-const _useIntlAirtimeStore = create<IntlAirtimeStore>()((set, get) => ({
+const _useIntlAirtimeStore = create<IntlAirtimeStore>()(
+  persist(
+    (set, get) => ({
   ...initialState,
 
   fetchCountries: async (forceRefresh = false) => {
-    const { countries, isLoadingCountries } = get();
+    const { countries, isLoadingCountries, countriesFetchedAt } = get();
     if (isLoadingCountries) return;
-    if (!forceRefresh && countries.length > 0) return;
+    if (
+      !forceRefresh &&
+      countries.length > 0 &&
+      isCacheFresh(countriesFetchedAt, PROVIDER_CACHE_TTL.intlAirtime)
+    ) {
+      return;
+    }
 
     set({
       isLoadingCountries: true,
@@ -101,6 +119,7 @@ const _useIntlAirtimeStore = create<IntlAirtimeStore>()((set, get) => ({
       if (res.success && res.data?.countries) {
         set({
           countries: res.data.countries,
+          countriesFetchedAt: Date.now(),
           isLoadingCountries: false,
           countriesError: null,
         });
@@ -242,6 +261,15 @@ const _useIntlAirtimeStore = create<IntlAirtimeStore>()((set, get) => ({
     set({ selectedOperator: o, selectedVariation: null }),
   setSelectedVariation: (v) => set({ selectedVariation: v }),
   reset: () => set(initialState),
-}));
+    }),
+    createPersistConfig<IntlAirtimeStore>("intl-airtime-countries", {
+      version: PROVIDER_CACHE_VERSION,
+      partialize: (state) => ({
+        countries: state.countries,
+        countriesFetchedAt: state.countriesFetchedAt,
+      }),
+    }),
+  ),
+);
 
 export const useIntlAirtimeStore = createSelectors(_useIntlAirtimeStore);
