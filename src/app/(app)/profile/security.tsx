@@ -5,7 +5,6 @@ import { Stack, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { signIn } from "@/api";
-import { SetTransactionPinModal } from "@/components/dashboard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loaders";
@@ -41,10 +40,6 @@ export default function SecurityScreen() {
   const [enableLoading, setEnableLoading] = useState(false);
   const [enableError, setEnableError] = useState("");
   const [appLockExpanded, setAppLockExpanded] = useState(false);
-  /** "set" — first-time setup; "update" — change existing PIN; null — closed. */
-  const [pinModalMode, setPinModalMode] = useState<"set" | "update" | null>(
-    null,
-  );
 
   const profileData = useProfileStore.use.data();
   const fetchProfile = useProfileStore.use.fetchProfile();
@@ -255,14 +250,16 @@ export default function SecurityScreen() {
               <Button
                 variant="outline"
                 className="mt-3 rounded-xl"
-                onPress={() => setPinModalMode("update")}
+                onPress={() =>
+                  router.push("/(app)/profile/transaction-pin?mode=update")
+                }
               >
                 <Text className="font-semibold text-foreground">Update transaction PIN</Text>
               </Button>
             ) : (
               <Pressable
                 className="mt-3 active:opacity-70"
-                onPress={() => setPinModalMode("set")}
+                onPress={() => router.push("/(app)/profile/transaction-pin")}
                 accessibilityRole="button"
               >
                 <Text className="text-sm leading-5 text-muted-foreground">
@@ -274,22 +271,6 @@ export default function SecurityScreen() {
           </View>
         </ScrollView>
       </View>
-
-      {/*
-       * Reuses the dashboard's transaction PIN modal in dismissable mode. The
-       * dashboard owns the *compulsory* setup flow; here the user enters
-       * voluntarily, so they can close out and the modal is non-blocking.
-       */}
-      <SetTransactionPinModal
-        visible={pinModalMode !== null}
-        mode={pinModalMode ?? "set"}
-        dismissable
-        onClose={() => setPinModalMode(null)}
-        onSuccess={async () => {
-          setPinModalMode(null);
-          await fetchProfile();
-        }}
-      />
 
       {/* Enable biometrics modal */}
       <Modal

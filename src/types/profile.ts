@@ -42,9 +42,12 @@ export interface ProfileUser {
   totalCards?: number;
   totalAccounts?: number;
   wallet_balance?: number;
-  /** User's referral code for sharing (e.g. JOHN7ABC). Use smipay_tag if empty. */
+  /**
+   * The user's own shareable referral code. The backend now mirrors this to
+   * `smipay_tag`. Prefer `smipay_tag` as the source of truth for display/sharing.
+   */
   referral_code?: string;
-  /** Unique SmiPay tag (e.g. johndoe). Often used as shareable referral identifier. */
+  /** Unique SmiPay tag (e.g. johndoe). This IS the user's shareable referral code. */
   smipay_tag?: string;
   /** True if user has requested account deletion; show pending state and cancel option. */
   requested_account_deletion?: boolean;

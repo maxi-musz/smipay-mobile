@@ -2,10 +2,7 @@ import React, { useCallback, useRef, useState } from "react";
 import {
   Image,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   TextInput,
   View,
 } from "react-native";
@@ -27,6 +24,7 @@ import {
   ProfilePhotoSourceSheet,
 } from "@/components/profile";
 import { AuthCenteredForm } from "@/components/auth/auth-centered-form";
+import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loaders";
@@ -53,6 +51,24 @@ type Step = "email" | "otp" | "profile";
 
 const STEPS: Step[] = ["email", "otp", "profile"];
 const EMAIL_RE = /\S+@\S+\.\S+/;
+const TRANSACTION_PIN_DIGITS = 4;
+
+/**
+ * Clamp phone input as the user types. Accepts only digits plus a single leading
+ * `+`, and enforces length by format:
+ *   - local `0XXXXXXXXXX` → max 11 digits
+ *   - international `+234XXXXXXXXXX` → max 14 chars (`+234` + 10 digits)
+ */
+function sanitizePhone(input: string): string {
+  let v = input.replace(/[^\d+]/g, "");
+  if (v.includes("+")) v = "+" + v.replace(/\+/g, "");
+  return v.startsWith("+") ? v.slice(0, 14) : v.slice(0, 11);
+}
+
+/** Final-format validation for the two accepted Nigerian phone shapes. */
+function isValidPhone(phone: string): boolean {
+  return /^0\d{10}$/.test(phone) || /^\+234\d{10}$/.test(phone);
+}
 
 export default function SignUpScreen() {
   const { isDark } = useAppTheme();
@@ -70,6 +86,7 @@ export default function SignUpScreen() {
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [transactionPin, setTransactionPin] = useState("");
   const [referralCode, setReferralCode] = useState("");
   const [hasReferralCode, setHasReferralCode] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -83,6 +100,7 @@ export default function SignUpScreen() {
   const lastNameRef = useRef<TextInput>(null);
   const phoneRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
+  const transactionPinRef = useRef<TextInput>(null);
 
   function clearError(key: string) {
     if (errors[key])
@@ -100,6 +118,7 @@ export default function SignUpScreen() {
     lastName.trim().length > 0 &&
     phone.trim().length > 0 &&
     isAuthPasswordValid(password) &&
+    transactionPin.length === TRANSACTION_PIN_DIGITS &&
     agreedToTerms &&
     !loading;
 
@@ -184,9 +203,14 @@ export default function SignUpScreen() {
     const next: Record<string, string> = {};
     if (!firstName.trim()) next.firstName = "First name is required";
     if (!lastName.trim()) next.lastName = "Last name is required";
-    if (!phone.trim()) next.phone = "Phone number is required";
+    const trimmedPhone = phone.trim();
+    if (!trimmedPhone) next.phone = "Phone number is required";
+    else if (!isValidPhone(trimmedPhone))
+      next.phone = "Enter a valid phone (e.g. 08012345678 or +2348012345678)";
     if (!isAuthPasswordValid(password))
       next.password = `Use exactly ${AUTH_PASSWORD_DIGITS} digits (0–9)`;
+    if (transactionPin.length !== TRANSACTION_PIN_DIGITS)
+      next.transactionPin = `Use exactly ${TRANSACTION_PIN_DIGITS} digits (0–9)`;
     if (!agreedToTerms) next.terms = "You must accept the terms";
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -213,6 +237,7 @@ export default function SignUpScreen() {
       const payload = {
         email: email.trim().toLowerCase(),
         password,
+        transaction_pin: transactionPin,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         phone_number: phone.trim(),
@@ -311,23 +336,18 @@ export default function SignUpScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <KeyboardAvoidingView
-        enabled={Platform.OS === "ios"}
-        behavior="padding"
+      <KeyboardAwareScrollView
         className="flex-1"
-        style={{ flex: 1 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: step === "profile" ? "flex-start" : "center",
+          paddingVertical: 24,
+        }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        bottomOffset={28}
       >
-        <ScrollView
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: "center",
-            paddingVertical: 24,
-          }}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          automaticallyAdjustKeyboardInsets={false}
-          showsVerticalScrollIndicator={false}
-        >
           <AuthCenteredForm layout="top" className="px-6">
           {/* ── Header ── */}
           <Animated.View
@@ -455,10 +475,10 @@ export default function SignUpScreen() {
           {/* ── Step 3: Profile ── */}
           {step === "profile" && (
             <Animated.View
-              className="mt-6 gap-5"
+              className="mt-5 gap-4"
               entering={FadeInDown.delay(80).duration(220)}
             >
-              <View className="items-center pb-1">
+              <View className="items-center">
                 <LinearGradient
                   colors={[colors.orange[400], colors.orange[700], "#9A3412"]}
                   start={{ x: 0, y: 0 }}
@@ -486,27 +506,24 @@ export default function SignUpScreen() {
                       {registrationPhoto ? (
                         <Image
                           source={{ uri: registrationPhoto.uri }}
-                          style={{ width: 88, height: 88 }}
+                          style={{ width: 64, height: 64 }}
                           resizeMode="cover"
                         />
                       ) : (
-                        <View className="h-[88px] w-[88px] items-center justify-center bg-muted">
-                          <Ionicons name="person" size={38} color={colors.gray[400]} />
+                        <View className="h-[64px] w-[64px] items-center justify-center bg-muted">
+                          <Ionicons name="person" size={28} color={colors.gray[400]} />
                         </View>
                       )}
                     </View>
                     <View
-                      className="absolute -bottom-0.5 -right-0.5 h-[30px] w-[30px] items-center justify-center rounded-full border-2 border-background"
+                      className="absolute -bottom-0.5 -right-0.5 h-[26px] w-[26px] items-center justify-center rounded-full border-2 border-background"
                       style={{ backgroundColor: colors.orange[500] }}
                       pointerEvents="none"
                     >
-                      <Ionicons name="camera" size={16} color="#FFFFFF" />
+                      <Ionicons name="camera" size={14} color="#FFFFFF" />
                     </View>
                   </Pressable>
                 </LinearGradient>
-                <Text className="mt-3 text-center text-xs text-muted-foreground">
-                  Profile photo (optional)
-                </Text>
                 {registrationPhoto ? (
                   <Pressable
                     onPress={() => setRegistrationPhoto(null)}
@@ -515,7 +532,11 @@ export default function SignUpScreen() {
                   >
                     <Text className="text-xs font-medium text-primary">Remove photo</Text>
                   </Pressable>
-                ) : null}
+                ) : (
+                  <Text className="mt-2 text-center text-xs text-muted-foreground">
+                    Profile photo (optional)
+                  </Text>
+                )}
               </View>
 
               {/* Name — side by side */}
@@ -561,45 +582,57 @@ export default function SignUpScreen() {
                 placeholder="08012345678"
                 value={phone}
                 onChangeText={(v) => {
-                  setPhone(v);
+                  setPhone(sanitizePhone(v));
                   clearError("phone");
                 }}
                 error={errors.phone}
                 keyboardType="phone-pad"
+                maxLength={14}
                 autoComplete="tel"
                 returnKeyType="next"
                 onSubmitEditing={() => passwordRef.current?.focus()}
               />
 
-              {/* Divider */}
-              <View className="flex-row items-center gap-3">
-                <View className="h-px flex-1 bg-border" />
-                <Text className="text-xs text-muted-foreground">
-                  Password
-                </Text>
-                <View className="h-px flex-1 bg-border" />
-              </View>
+              <Input
+                ref={passwordRef}
+                label="Login Password"
+                placeholder="Enter 6-Digit Login Password"
+                value={password}
+                onChangeText={(v) => {
+                  setPassword(v.replace(/\D/g, "").slice(0, AUTH_PASSWORD_DIGITS));
+                  clearError("password");
+                }}
+                error={errors.password}
+                secureTextEntry
+                toggleable
+                keyboardType="number-pad"
+                maxLength={AUTH_PASSWORD_DIGITS}
+                returnKeyType="next"
+                onSubmitEditing={() => transactionPinRef.current?.focus()}
+              />
 
               <View>
                 <Input
-                  ref={passwordRef}
-                  label="Password"
-                  placeholder="••••••"
-                  value={password}
+                  ref={transactionPinRef}
+                  label="Transaction PIN"
+                  placeholder="Enter 4 digit transaction pin"
+                  value={transactionPin}
                   onChangeText={(v) => {
-                    setPassword(v.replace(/\D/g, "").slice(0, AUTH_PASSWORD_DIGITS));
-                    clearError("password");
+                    setTransactionPin(
+                      v.replace(/\D/g, "").slice(0, TRANSACTION_PIN_DIGITS),
+                    );
+                    clearError("transactionPin");
                   }}
-                  error={errors.password}
+                  error={errors.transactionPin}
                   secureTextEntry
                   toggleable
                   keyboardType="number-pad"
-                  maxLength={AUTH_PASSWORD_DIGITS}
+                  maxLength={TRANSACTION_PIN_DIGITS}
                   returnKeyType="done"
                   onSubmitEditing={canSubmitProfile ? handleRegister : undefined}
                 />
                 <Text className="mt-1.5 text-xs text-muted-foreground">
-                  Exactly {AUTH_PASSWORD_DIGITS} numbers — your app password
+                  {AUTH_PASSWORD_DIGITS}-digit password to log in · {TRANSACTION_PIN_DIGITS}-digit PIN to approve payments
                 </Text>
               </View>
 
@@ -704,8 +737,7 @@ export default function SignUpScreen() {
             </Animated.View>
           )}
           </AuthCenteredForm>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
 
       <ProfilePhotoSourceSheet
         visible={sourceSheetOpen}

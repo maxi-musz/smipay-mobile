@@ -40,7 +40,7 @@ interface VersionGateModalProps {
 
 /**
  * Top-level overlay that surfaces server-driven force / soft update prompts.
- * Mirrors the visual language of `SetTransactionPinModal`: a centred card with
+ * Mirrors the visual language of the transaction PIN prompts: a centred card with
  * a tinted icon, a "REQUIRED" chip (force only), title, body, and one or two
  * actions. There is intentionally no input keyboard handling — this screen is
  * read-only and CTA-driven.

@@ -20,8 +20,7 @@ export default function ReferralScreen() {
 
   const profileUser = profileData?.user;
   const smipayTag = profileUser?.smipay_tag ?? "";
-  const referralCode =
-    profileUser?.referral_code ?? (smipayTag ? `@${smipayTag}` : "");
+  const referralCode = smipayTag ? `@${smipayTag}` : "";
   const referralAnalysis = profileData?.referral_analysis;
   const programConfig = referralAnalysis?.program_config;
 

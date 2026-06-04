@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshControl, ScrollView } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
+import { router } from "expo-router";
 
 import {
   // AddMoneyModal,
@@ -12,12 +14,12 @@ import {
   PromoBanner,
   RecentTransactions,
   ServicesGrid,
-  SetTransactionPinModal,
+  TransactionPinRequiredModal,
 } from "@/components/dashboard";
 import { FullPageLoader } from "@/components/ui/loaders";
 // import { useToastStore } from "@/components/ui/toast/toast-store";
 import { useVersionGateContext } from "@/context/version-gate-context";
-import { useAuthStore, useHomepageStore, useProfileStore } from "@/store";
+import { useAuthStore, useHomepageStore } from "@/store";
 import { colors } from "@/constants/colors";
 import { prefetchProviders } from "@/lib/provider-prefetch";
 
@@ -27,8 +29,6 @@ export default function HomeScreen() {
   const isLoading = useHomepageStore.use.isLoading();
   const error = useHomepageStore.use.error();
   const fetchHomepage = useHomepageStore.use.fetchHomepage();
-  const refreshHomepageSilently = useHomepageStore.use.refreshHomepageSilently();
-  const fetchProfile = useProfileStore.use.fetchProfile();
   const { versionCheckComplete, effectiveLevel } = useVersionGateContext();
   const wasLockedRef = useRef(isLocked);
   const didPrefetchRef = useRef(false);
@@ -36,6 +36,19 @@ export default function HomeScreen() {
   const [addMoneyModalVisible, setAddMoneyModalVisible] = useState(false);
   // const [fundWithCardModalVisible, setFundWithCardModalVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  /**
+   * Hides the (otherwise mandatory) PIN prompt while we route the user to the
+   * dedicated setup screen — a native Modal would otherwise stay on top and
+   * cover that screen. We un-snooze whenever the dashboard regains focus, so a
+   * user who returns without finishing setup is prompted again.
+   */
+  const [pinPromptSnoozed, setPinPromptSnoozed] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      setPinPromptSnoozed(false);
+    }, []),
+  );
 
   // Fetch on mount only.
   useEffect(() => {
@@ -147,12 +160,11 @@ export default function HomeScreen() {
         onClose={() => setAddMoneyModalVisible(false)}
         accounts={data?.accounts ?? []}
       />
-      <SetTransactionPinModal
-        visible={pinModalVisible}
-        onSuccess={async () => {
-          // Silent refetch — once the homepage flips `is_four_digit_pin_set`
-          // to true, the modal unmounts on its own.
-          await Promise.all([refreshHomepageSilently(), fetchProfile()]);
+      <TransactionPinRequiredModal
+        visible={pinModalVisible && !pinPromptSnoozed}
+        onProceed={() => {
+          setPinPromptSnoozed(true);
+          router.push("/(app)/profile/transaction-pin");
         }}
       />
     </SafeAreaView>

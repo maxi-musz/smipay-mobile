@@ -23,6 +23,7 @@ export interface AuthResponse {
 export interface RegisterPayload {
   email: string;
   password: string;
+  transaction_pin?: string;
   first_name: string;
   last_name: string;
   phone_number: string;

@@ -42,6 +42,9 @@ export async function registerWithProfilePicture(
   const formData = new FormData();
   formData.append("email", payload.email);
   formData.append("password", payload.password);
+  if (payload.transaction_pin) {
+    formData.append("transaction_pin", payload.transaction_pin);
+  }
   formData.append("first_name", payload.first_name);
   formData.append("last_name", payload.last_name);
   formData.append("phone_number", payload.phone_number);

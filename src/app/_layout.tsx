@@ -1,7 +1,7 @@
 import "../global.css";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, View } from "react-native";
+import { LogBox, Platform, View } from "react-native";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -36,6 +36,15 @@ import {
 import { useAppStore, useAuthStore, useHomepageStore } from "@/store";
 import { registerPushToken } from "@/api";
 import * as Application from "expo-application";
+
+// Expo Go (SDK 53+) dropped Android remote push, so `expo-notifications` logs an
+// error/warning the moment it is imported. It's harmless here — push works in
+// development/production builds — so we silence just those two messages to keep
+// the dev LogBox clean. (LogBox only runs in __DEV__, so this is a no-op in prod.)
+LogBox.ignoreLogs([
+  /expo-notifications: Android Push notifications/,
+  /expo-notifications.*not fully supported in Expo Go/,
+]);
 
 let KBProvider: React.ComponentType<{ children: React.ReactNode }> | null = null;
 try {
