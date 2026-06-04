@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Modal, Pressable, TextInput, View } from "react-native";
 import {
   KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  TextInput,
-  View,
-} from "react-native";
+  KeyboardProvider,
+} from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -126,18 +123,26 @@ export function PaymentAuthorizationModal({
       onRequestClose={() => canDismiss && onClose()}
       statusBarTranslucent
     >
-      <KeyboardAvoidingView
-        className="flex-1 justify-end"
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
-      >
-        <Pressable
-          className="absolute inset-0 bg-black/55"
-          accessibilityRole="button"
-          accessibilityLabel="Dismiss"
-          disabled={!canDismiss}
-          onPress={() => canDismiss && onClose()}
-        />
+      {/*
+       * An RN `Modal` renders in a separate native window on Android, which the
+       * app-root `KeyboardProvider` does not reach. We mount a dedicated provider
+       * here so keyboard-controller's `KeyboardAvoidingView` receives keyboard
+       * events and pushes the sheet above the keyboard on Android too (iOS already
+       * worked). `statusBarTranslucent` mirrors the Modal so insets measure right.
+       */}
+      <KeyboardProvider statusBarTranslucent>
+        <KeyboardAvoidingView
+          className="flex-1 justify-end"
+          behavior="padding"
+          style={{ flex: 1 }}
+        >
+          <Pressable
+            className="absolute inset-0 bg-black/55"
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+            disabled={!canDismiss}
+            onPress={() => canDismiss && onClose()}
+          />
 
         <View
           style={{
@@ -297,7 +302,8 @@ export function PaymentAuthorizationModal({
             </Button>
           </View>
         </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </KeyboardProvider>
     </Modal>
   );
 }
