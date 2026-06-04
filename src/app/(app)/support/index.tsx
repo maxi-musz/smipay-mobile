@@ -159,9 +159,16 @@ export default function SupportListScreen() {
             </Text>
             <Button
               className="mt-6"
+              variant="outline"
+              onPress={() => router.push("/(app)/smileai")}
+            >
+              <Text className="font-semibold text-foreground">Ask Smile first</Text>
+            </Button>
+            <Button
+              className="mt-3"
               onPress={() => router.push("/(app)/support/chat")}
             >
-              <Text className="font-semibold text-primary-foreground">Start Chat</Text>
+              <Text className="font-semibold text-primary-foreground">Talk to a human</Text>
             </Button>
           </Animated.View>
         ) : (

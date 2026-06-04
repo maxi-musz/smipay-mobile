@@ -1,7 +1,16 @@
+import { useEffect } from "react";
 import { Image, Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import Animated, { FadeInUp, Layout } from "react-native-reanimated";
+import Animated, {
+  Easing,
+  FadeInUp,
+  Layout,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
@@ -19,6 +28,8 @@ interface RecentTransactionsProps {
   loadFailed?: boolean;
   /** Called when the user taps to retry after load failed. */
   onRetry?: () => void;
+  /** When true (only on first ever load with no cached data), show skeleton rows. */
+  isLoading?: boolean;
 }
 
 const STATUS_CONFIG: Record<
@@ -61,13 +72,16 @@ export function RecentTransactions({
   transactions,
   loadFailed = false,
   onRetry,
+  isLoading = false,
 }: RecentTransactionsProps) {
   const { isDark } = useAppTheme();
   const { s } = useResponsiveScale();
 
   return (
     <View style={{ marginTop: s(12), paddingHorizontal: s(12) }}>
-      {loadFailed ? (
+      {isLoading ? (
+        <SkeletonList isDark={isDark} />
+      ) : loadFailed ? (
         <Pressable
           onPress={onRetry}
           className="items-center rounded-2xl bg-card"
@@ -108,6 +122,103 @@ export function RecentTransactions({
           ))}
         </Animated.View>
       )}
+    </View>
+  );
+}
+
+function SkeletonList({ isDark }: { isDark: boolean }) {
+  const { s } = useResponsiveScale();
+  const shimmer = useSharedValue(0);
+
+  useEffect(() => {
+    shimmer.value = withRepeat(
+      withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true,
+    );
+  }, [shimmer]);
+
+  const shimmerStyle = useAnimatedStyle(() => ({
+    opacity: 0.35 + shimmer.value * 0.45,
+  }));
+
+  const block = isDark ? "rgba(255,255,255,0.08)" : "#E5E7EB";
+
+  return (
+    <View
+      className="overflow-hidden rounded-2xl bg-card"
+      style={{ paddingVertical: s(4) }}
+    >
+      {[0, 1, 2].map((i) => (
+        <View
+          key={i}
+          className="flex-row items-center"
+          style={{ paddingHorizontal: s(16), paddingVertical: s(10) }}
+        >
+          <Animated.View
+            style={[
+              {
+                width: s(40),
+                height: s(40),
+                borderRadius: s(20),
+                backgroundColor: block,
+                marginRight: s(12),
+              },
+              shimmerStyle,
+            ]}
+          />
+          <View className="flex-1">
+            <Animated.View
+              style={[
+                {
+                  width: "55%",
+                  height: s(12),
+                  borderRadius: s(6),
+                  backgroundColor: block,
+                },
+                shimmerStyle,
+              ]}
+            />
+            <Animated.View
+              style={[
+                {
+                  marginTop: s(6),
+                  width: "35%",
+                  height: s(10),
+                  borderRadius: s(5),
+                  backgroundColor: block,
+                },
+                shimmerStyle,
+              ]}
+            />
+          </View>
+          <View className="items-end">
+            <Animated.View
+              style={[
+                {
+                  width: s(64),
+                  height: s(12),
+                  borderRadius: s(6),
+                  backgroundColor: block,
+                },
+                shimmerStyle,
+              ]}
+            />
+            <Animated.View
+              style={[
+                {
+                  marginTop: s(6),
+                  width: s(44),
+                  height: s(10),
+                  borderRadius: s(5),
+                  backgroundColor: block,
+                },
+                shimmerStyle,
+              ]}
+            />
+          </View>
+        </View>
+      ))}
     </View>
   );
 }

@@ -113,7 +113,7 @@ export default function ProfileScreen() {
     } else if (id === "notifications") {
       router.push("/(app)/profile/notifications");
     } else if (id === "help") {
-      router.push("/(app)/support");
+      router.push("/(app)/smileai");
     } else if (id === "privacy") {
       try {
         const canOpen = await Linking.canOpenURL(PRIVACY_POLICY_URL);
@@ -172,13 +172,13 @@ export default function ProfileScreen() {
         <View className="flex-row items-center gap-1">
           <Pressable
             className="p-1.5"
-            onPress={() => router.push("/(app)/support")}
+            onPress={() => router.push("/(app)/smileai")}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Chat with support"
+            accessibilityLabel="Chat with Smile"
           >
             <Ionicons
-              name="headset-outline"
+              name="chatbubble-ellipses-outline"
               size={18}
               color={colors.info}
             />

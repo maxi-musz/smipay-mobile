@@ -16,6 +16,7 @@ import { ToastContainer } from "@/components/ui/toast";
 import { VersionGateModal } from "@/components/version-gate-modal";
 import { VersionGateProvider, useVersionGateContext } from "@/context/version-gate-context";
 import { SupportSocketProvider } from "@/context/support-socket";
+import { SmileaiSocketProvider } from "@/context/smileai-socket";
 import { ThemeProvider } from "@/context/theme-context";
 import { WebhookEventsSocketProvider } from "@/context/webhook-events-socket";
 import { useAppTheme } from "@/hooks/use-app-theme";
@@ -229,11 +230,13 @@ export default function RootLayout() {
   const inner = (
     <ThemeProvider>
       <SupportSocketProvider>
-        <WebhookEventsSocketProvider>
-          <VersionGateProvider>
-            <InnerLayout />
-          </VersionGateProvider>
-        </WebhookEventsSocketProvider>
+        <SmileaiSocketProvider>
+          <WebhookEventsSocketProvider>
+            <VersionGateProvider>
+              <InnerLayout />
+            </VersionGateProvider>
+          </WebhookEventsSocketProvider>
+        </SmileaiSocketProvider>
       </SupportSocketProvider>
     </ThemeProvider>
   );

@@ -14,7 +14,6 @@ import {
 } from "@/constants/ota-debug-marker";
 import { useAuthStore, useHomepageStore, useInboxStore } from "@/store";
 
-const SUPPORT_ICON_COLOR = "#2563EB";
 const NOTIFICATION_ICON_COLOR = colors.orange[500];
 
 export function DashboardHeader() {
@@ -111,19 +110,6 @@ export function DashboardHeader() {
       ) : null}
 
       <View className="flex-row items-center" style={{ gap: s(4) }}>
-        <Pressable
-          style={{ padding: s(6) }}
-          onPress={() => router.push("/(app)/support")}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Chat with support"
-        >
-          <Ionicons
-            name="headset-outline"
-            size={s(18)}
-            color={SUPPORT_ICON_COLOR}
-          />
-        </Pressable>
         <Pressable
           style={{ padding: s(6) }}
           onPress={() => router.push("/(app)/notifications")}
