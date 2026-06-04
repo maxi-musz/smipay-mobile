@@ -8,6 +8,10 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useResponsiveScale } from "@/hooks/use-responsive-scale";
 import { resolveProfileImageUrl } from "@/lib/profile-image-url";
 import { colors } from "@/constants/colors";
+import {
+  isOtaDebugUser,
+  OTA_DEBUG_BUILD_MARKER,
+} from "@/constants/ota-debug-marker";
 import { useAuthStore, useHomepageStore, useInboxStore } from "@/store";
 
 const SUPPORT_ICON_COLOR = "#2563EB";
@@ -27,6 +31,8 @@ export function DashboardHeader() {
 
   const firstName =
     homepageData?.user?.first_name ?? authUser?.first_name ?? "there";
+
+  const email = authUser?.email ?? null;
 
   const profileImageUrl = resolveProfileImageUrl(
     homepageData?.user?.profile_image ?? authUser?.profile_image ?? null,
@@ -79,6 +85,30 @@ export function DashboardHeader() {
           Hi, {firstName}
         </Text>
       </Pressable>
+
+      {/* OTA build marker — centered, debug user only. Absolutely positioned so
+          it never shifts the existing left/right header layout. */}
+      {isOtaDebugUser(email) ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text
+            className="text-muted-foreground"
+            style={{ fontSize: s(11), fontWeight: "700" }}
+          >
+            OTA:{OTA_DEBUG_BUILD_MARKER}
+          </Text>
+        </View>
+      ) : null}
 
       <View className="flex-row items-center" style={{ gap: s(4) }}>
         <Pressable
