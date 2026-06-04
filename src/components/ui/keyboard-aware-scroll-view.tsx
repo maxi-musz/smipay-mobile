@@ -1,32 +1,37 @@
+import { ScrollView, type ScrollViewProps } from "react-native";
 import { cssInterop } from "nativewind";
-import {
-  KeyboardAwareScrollView as KCScrollView,
-  type KeyboardAwareScrollViewProps,
-} from "react-native-keyboard-controller";
 
-/**
- * Drop-in replacement for `ScrollView` on screens with text inputs.
- *
- * Powered by react-native-keyboard-controller, it scrolls the focused field
- * just above the keyboard (consistently on iOS + Android) with a small,
- * centrally-tunable gap. NativeWind `className` / `contentContainerClassName`
- * keep working via the interop registration below, so swapping a screen's
- * `ScrollView` for this is just an import + tag-name change.
- */
-const StyledKeyboardAwareScrollView = cssInterop(KCScrollView, {
+let KCScrollView: typeof ScrollView | null = null;
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mod = require("react-native-keyboard-controller");
+  if (mod?.KeyboardAwareScrollView) {
+    KCScrollView = cssInterop(mod.KeyboardAwareScrollView, {
+      className: "style",
+      contentContainerClassName: "contentContainerStyle",
+    }) as typeof ScrollView;
+  }
+} catch {
+  // Native module not linked yet — fall back to plain ScrollView.
+}
+
+const StyledScrollView = cssInterop(ScrollView, {
   className: "style",
   contentContainerClassName: "contentContainerStyle",
-}) as typeof KCScrollView;
+}) as typeof ScrollView;
 
-export function KeyboardAwareScrollView(props: KeyboardAwareScrollViewProps) {
+const BaseComponent = KCScrollView ?? StyledScrollView;
+
+export function KeyboardAwareScrollView(props: ScrollViewProps & { bottomOffset?: number }) {
+  const { bottomOffset: _bottomOffset, ...rest } = props;
+
   return (
-    <StyledKeyboardAwareScrollView
+    <BaseComponent
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
-      // Small gap between the focused input and the keyboard top. Tweak here to
-      // adjust spacing for every purchase screen at once.
-      bottomOffset={24}
-      {...props}
+      {...(KCScrollView ? { bottomOffset: _bottomOffset ?? 24 } : {})}
+      {...rest}
     />
   );
 }

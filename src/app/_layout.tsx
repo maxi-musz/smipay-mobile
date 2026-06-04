@@ -8,7 +8,6 @@ import { StatusBar } from "expo-status-bar";
 import { PortalHost } from "@rn-primitives/portal";
 import { useColorScheme } from "nativewind";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { KeyboardProvider } from "react-native-keyboard-controller";
 
 import { LockScreen } from "@/components/lock-screen";
 import { FullPageLoader } from "@/components/ui/loaders";
@@ -37,6 +36,15 @@ import {
 import { useAppStore, useAuthStore, useHomepageStore } from "@/store";
 import { registerPushToken } from "@/api";
 import * as Application from "expo-application";
+
+let KBProvider: React.ComponentType<{ children: React.ReactNode }> | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mod = require("react-native-keyboard-controller");
+  if (mod?.KeyboardProvider) KBProvider = mod.KeyboardProvider;
+} catch {
+  // Native module not linked yet — graceful no-op.
+}
 
 // Wrapped in catch: on iOS, presenting a React Native Modal (e.g. the required
 // transaction-PIN sheet) creates a separate view controller, and the native
@@ -209,19 +217,21 @@ function InnerLayout() {
 }
 
 export default function RootLayout() {
+  const inner = (
+    <ThemeProvider>
+      <SupportSocketProvider>
+        <WebhookEventsSocketProvider>
+          <VersionGateProvider>
+            <InnerLayout />
+          </VersionGateProvider>
+        </WebhookEventsSocketProvider>
+      </SupportSocketProvider>
+    </ThemeProvider>
+  );
+
   return (
     <SafeAreaProvider>
-      <KeyboardProvider>
-        <ThemeProvider>
-          <SupportSocketProvider>
-            <WebhookEventsSocketProvider>
-              <VersionGateProvider>
-                <InnerLayout />
-              </VersionGateProvider>
-            </WebhookEventsSocketProvider>
-          </SupportSocketProvider>
-        </ThemeProvider>
-      </KeyboardProvider>
+      {KBProvider ? <KBProvider>{inner}</KBProvider> : inner}
     </SafeAreaProvider>
   );
 }
