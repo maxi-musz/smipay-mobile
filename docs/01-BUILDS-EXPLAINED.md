@@ -71,7 +71,7 @@ You can do most of your work in Expo Go and only use a development build when yo
    ```bash
    npx expo install expo-dev-client
    ```
-
+=
 4. **Link the project to EAS** (creates `eas.json`)
    ```bash
    cd /path/to/smipay-mobile
