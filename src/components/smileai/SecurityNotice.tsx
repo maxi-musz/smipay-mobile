@@ -2,6 +2,7 @@ import { View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "@/components/ui/text";
+import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import { useAppTheme } from "@/hooks/use-app-theme";
 
 /**
@@ -21,7 +22,7 @@ export function SecurityNotice() {
   return (
     <View
       accessibilityRole="text"
-      accessibilityLabel="You are chatting with Smile, SmiPay's customer support AI. Your messages are encrypted and securely stored."
+      accessibilityLabel={`You are chatting with ${SMILEY_ASSISTANT_NAME}, SmiPay's customer support AI. Your messages are encrypted and securely stored.`}
       style={{
         flexDirection: "row",
         alignItems: "center",
@@ -43,7 +44,7 @@ export function SecurityNotice() {
           color: textColor,
         }}
       >
-        You're chatting with Smile, SmiPay's customer support AI. Your messages
+        You're chatting with {SMILEY_ASSISTANT_NAME}, SmiPay's customer support AI. Your messages
         are encrypted and securely stored.
       </Text>
     </View>

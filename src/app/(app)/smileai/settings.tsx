@@ -10,6 +10,7 @@ import {
   updateSmilePreferences,
 } from "@/api/services/smileai";
 import { SmileaiSocketContext } from "@/context/smileai-socket";
+import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import { Text } from "@/components/ui/text";
 import { useToastStore } from "@/components/ui/toast";
 import { useAppTheme } from "@/hooks/use-app-theme";
@@ -97,7 +98,7 @@ export default function SmileaiSettingsScreen() {
         <Pressable onPress={() => router.back()} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={isDark ? "#F8FAFC" : "#0F172A"} />
         </Pressable>
-        <Text className="ml-3 text-xl font-bold">Smile settings</Text>
+        <Text className="ml-3 text-xl font-bold">{SMILEY_ASSISTANT_NAME} settings</Text>
       </View>
 
       <Text className="mx-4 mt-4 text-xs uppercase text-muted-foreground">
@@ -107,11 +108,13 @@ export default function SmileaiSettingsScreen() {
       <View className="mx-4 mt-2 rounded-xl bg-card p-4">
         <View className="flex-row items-center justify-between">
           <View className="mr-3 flex-1">
-            <Text className="font-semibold">Allow Smile to perform actions</Text>
+            <Text className="font-semibold">
+              Allow {SMILEY_ASSISTANT_NAME} to perform actions
+            </Text>
             <Text className="mt-1 text-xs text-muted-foreground">
               {adminReadOnly
-                ? "Disabled by admin. Smile is in read-only mode for everyone right now."
-                : "Lets Smile help with airtime top-ups, transfers, and other write actions on your behalf."}
+                ? `Disabled by admin. ${SMILEY_ASSISTANT_NAME} is in read-only mode for everyone right now.`
+                : `Lets ${SMILEY_ASSISTANT_NAME} help with airtime top-ups, transfers, and other write actions on your behalf.`}
             </Text>
           </View>
           <Switch
@@ -125,9 +128,9 @@ export default function SmileaiSettingsScreen() {
       <View className="mx-4 mt-3 rounded-xl bg-card p-4">
         <View className="flex-row items-center justify-between">
           <View className="mr-3 flex-1">
-            <Text className="font-semibold">Pause Smile</Text>
+            <Text className="font-semibold">Pause {SMILEY_ASSISTANT_NAME}</Text>
             <Text className="mt-1 text-xs text-muted-foreground">
-              Hides Smile and stops responses until you turn it back on.
+              Hides {SMILEY_ASSISTANT_NAME} and stops responses until you turn it back on.
             </Text>
           </View>
           <Switch
@@ -146,7 +149,7 @@ export default function SmileaiSettingsScreen() {
           <View className="mr-3 flex-1">
             <Text className="font-semibold">Suggested replies</Text>
             <Text className="mt-1 text-xs text-muted-foreground">
-              Show follow-up chips under Smile&apos;s replies and above the message
+              Show follow-up chips under {SMILEY_ASSISTANT_NAME}&apos;s replies and above the message
               box.
             </Text>
           </View>

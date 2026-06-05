@@ -54,6 +54,7 @@ export interface SmileConversationDetail {
   persona_id: string | null;
   last_message_at: string | null;
   support_conversation_id: string | null;
+  user_has_rated?: boolean;
   messages: SmileMessage[];
 }
 

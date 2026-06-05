@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
+import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import { useAppTheme } from "@/hooks/use-app-theme";
 
 type Props = {
@@ -35,7 +36,7 @@ export function RatingSheet({ visible, onSubmit, onDismiss, submitting }: Props)
             paddingTop: 16,
           }}
         >
-          <Text className="text-lg font-semibold">How was Smile?</Text>
+          <Text className="text-lg font-semibold">How was {SMILEY_ASSISTANT_NAME}?</Text>
           <View className="my-4 flex-row justify-center gap-2">
             {[1, 2, 3, 4, 5].map((n) => (
               <Pressable

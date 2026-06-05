@@ -32,6 +32,8 @@ interface SmileaiStoreState {
   pendingConfirmation: Record<string, PendingConfirmation | null>;
   supportConversationId: Record<string, string | null>;
   statusByConversation: Record<string, string>;
+  /** Conversation ids the user has already left a star rating for. */
+  ratedConversationIds: Record<string, boolean>;
   toolBadge: Record<string, string | null>;
   ui: SmileaiUiState;
 }
@@ -62,6 +64,7 @@ interface SmileaiStoreActions {
   ) => void;
   setSupportConversationId: (conversationId: string, supportId: string | null) => void;
   setStatus: (conversationId: string, status: string) => void;
+  markConversationRated: (conversationId: string) => void;
   setToolBadge: (conversationId: string, label: string | null) => void;
   setDraftText: (text: string) => void;
   setLastOpenConversationId: (id: string | null) => void;
@@ -109,6 +112,7 @@ function buildSmilePersistSnapshot(state: SmileaiStoreState) {
     messagesByConversation,
     statusByConversation,
     supportConversationId,
+    ratedConversationIds: state.ratedConversationIds,
   };
 }
 
@@ -126,6 +130,7 @@ const initialState: SmileaiStoreState = {
   pendingConfirmation: {},
   supportConversationId: {},
   statusByConversation: {},
+  ratedConversationIds: {},
   toolBadge: {},
   ui: {
     draftText: "",
@@ -361,6 +366,14 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
           },
         })),
 
+      markConversationRated: (conversationId) =>
+        set((s) => ({
+          ratedConversationIds: {
+            ...s.ratedConversationIds,
+            [conversationId]: true,
+          },
+        })),
+
       setToolBadge: (conversationId, label) =>
         set((s) => ({
           toolBadge: { ...s.toolBadge, [conversationId]: label },
@@ -408,6 +421,10 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
           supportConversationId: {
             ...(persisted?.supportConversationId ?? {}),
             ...currentState.supportConversationId,
+          },
+          ratedConversationIds: {
+            ...(persisted?.ratedConversationIds ?? {}),
+            ...currentState.ratedConversationIds,
           },
         };
       },

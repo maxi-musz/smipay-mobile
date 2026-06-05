@@ -8,6 +8,7 @@ import { MarkdownContent } from "./MarkdownContent";
 import { CitationRow } from "./CitationRow";
 import { filterDisplayCitations } from "./citation-display";
 import { MessageCopyToolbar, type MessageCopyAnchor } from "./MessageCopyToolbar";
+import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import type { SmileCitation, SmileMessage } from "@/types/smileai";
 
 const LONG_PRESS_MS = 2000;
@@ -92,7 +93,9 @@ export function MessageBubble({
       className={`mb-3 max-w-[88%] ${isUser ? "self-end" : "self-start"}`}
       accessibilityRole="text"
       accessibilityLabel={
-        isUser ? `You: ${content}${accessibilityStatus}` : `Smile: ${content}`
+        isUser
+          ? `You: ${content}${accessibilityStatus}`
+          : `${SMILEY_ASSISTANT_NAME}: ${content}`
       }
     >
       <Pressable

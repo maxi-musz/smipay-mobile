@@ -17,6 +17,7 @@ import {
 import * as Crypto from "expo-crypto";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 
 import {
@@ -27,6 +28,7 @@ import {
 } from "@/api/services/smileai";
 import { PaymentAuthorizationModal } from "@/features/payment-authorization/payment-authorization-modal";
 import { SmileaiSocketContext } from "@/context/smileai-socket";
+import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import { Text } from "@/components/ui/text";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { useAppTheme } from "@/hooks/use-app-theme";
@@ -39,7 +41,8 @@ import { ConfirmActionCard } from "./ConfirmActionCard";
 import { HandoffBanner } from "./HandoffBanner";
 import { WelcomeCard } from "./WelcomeCard";
 import { CitationsSheet } from "./CitationsSheet";
-import { RatingSheet } from "./RatingSheet";
+import { ClosedConversationFooter } from "./ClosedConversationFooter";
+import { isTerminalConversationStatus } from "./conversation-status";
 import { ConversationsDrawer } from "./ConversationsDrawer";
 import { SecurityNotice } from "./SecurityNotice";
 import { SmileAvatar } from "./SmileAvatar";
@@ -147,6 +150,8 @@ export function ChatScreen({
   const setPendingConfirmation = useSmileaiStore.use.setPendingConfirmation();
   const setSupportConversationId = useSmileaiStore.use.setSupportConversationId();
   const setStatus = useSmileaiStore.use.setStatus();
+  const ratedConversationIds = useSmileaiStore.use.ratedConversationIds();
+  const markConversationRated = useSmileaiStore.use.markConversationRated();
   const setToolBadge = useSmileaiStore.use.setToolBadge();
   const setDraftText = useSmileaiStore.use.setDraftText();
   const setLastOpenConversationId = useSmileaiStore.use.setLastOpenConversationId();
@@ -155,7 +160,6 @@ export function ChatScreen({
   const [awaitingNetwork, setAwaitingNetwork] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [citationSheet, setCitationSheet] = useState<SmileCitation[] | null>(null);
-  const [ratingVisible, setRatingVisible] = useState(false);
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -164,6 +168,10 @@ export function ChatScreen({
   const pendingCitationsRef = useRef<SmileCitation[]>([]);
 
   const isHandedOff = status === "handed_off" || status === "handoff_pending";
+  const isClosed = isTerminalConversationStatus(status);
+  const hasRated = conversationId
+    ? !!ratedConversationIds[conversationId]
+    : false;
   const showFullLoader =
     !!conversationId && messages.length === 0 && awaitingNetwork;
   // Hide the welcome card the instant the user sends their first message —
@@ -212,63 +220,68 @@ export function ChatScreen({
       return;
     }
 
-    const fullFetch = async () => {
-      try {
-        const res = await fetchSmileConversation(conversationId);
-        if (cancelled) return;
-        const data = res.data;
-        setMessages(conversationId, data.messages ?? []);
-        setStatus(conversationId, data.status);
-        if (data.support_conversation_id) {
-          setSupportConversationId(conversationId, data.support_conversation_id);
-        }
-        const last = data.messages?.[data.messages.length - 1];
-        lastMessageIdRef.current = last?.id ?? null;
-        setLastOpenConversationId(conversationId);
-        joinConversation(conversationId);
-      } catch {
-        if (!cancelled) {
-          setError("Smile is offline. Try again or talk to a human.");
-        }
-      } finally {
-        if (!cancelled) setAwaitingNetwork(false);
-      }
-    };
-
     const run = async () => {
       setError(null);
-      const cached = useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
+      const cached =
+        useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
 
       if (cached.length > 0) {
         const last = cached[cached.length - 1];
         lastMessageIdRef.current = last?.id ?? null;
         setLastOpenConversationId(conversationId);
         joinConversation(conversationId);
-
-        const after = lastAssistantMessageId(cached);
-        try {
-          if (after) {
-            const res = await backfillSmileMessages(conversationId, { after });
-            if (cancelled) return;
-            const items = res.data?.items ?? [];
-            if (items.length > 0) {
-              const current =
-                useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
-              const merged = mergeSmileMessages(current, items);
-              setMessages(conversationId, merged);
-              const tail = merged[merged.length - 1];
-              lastMessageIdRef.current = tail?.id ?? lastMessageIdRef.current;
-            }
-          } else {
-            await fullFetch();
-          }
-        } catch {
-          if (!cancelled) await fullFetch();
-        }
-        return;
       }
 
-      await fullFetch();
+      try {
+        const res = await fetchSmileConversation(conversationId);
+        if (cancelled) return;
+        const data = res.data;
+        const serverMessages = data.messages ?? [];
+        const merged =
+          cached.length > 0
+            ? mergeSmileMessages(cached, serverMessages)
+            : serverMessages;
+        setMessages(conversationId, merged);
+        setStatus(conversationId, data.status);
+        if (data.user_has_rated) {
+          markConversationRated(conversationId);
+        }
+        if (data.support_conversation_id) {
+          setSupportConversationId(conversationId, data.support_conversation_id);
+        }
+        const tail = merged[merged.length - 1];
+        lastMessageIdRef.current = tail?.id ?? null;
+        setLastOpenConversationId(conversationId);
+        if (cached.length === 0) joinConversation(conversationId);
+
+        const after = lastAssistantMessageId(merged);
+        if (after) {
+          try {
+            const back = await backfillSmileMessages(conversationId, { after });
+            if (cancelled) return;
+            const items = back.data?.items ?? [];
+            if (items.length > 0) {
+              const current =
+                useSmileaiStore.getState().messagesByConversation[conversationId] ??
+                [];
+              const withBackfill = mergeSmileMessages(current, items);
+              setMessages(conversationId, withBackfill);
+              lastMessageIdRef.current =
+                withBackfill[withBackfill.length - 1]?.id ?? lastMessageIdRef.current;
+            }
+          } catch {
+            /* backfill is best-effort */
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setError(
+            `${SMILEY_ASSISTANT_NAME} is offline. Try again or talk to a human.`,
+          );
+        }
+      } finally {
+        if (!cancelled) setAwaitingNetwork(false);
+      }
     };
 
     void run();
@@ -285,7 +298,31 @@ export function ChatScreen({
     setStatus,
     setSupportConversationId,
     setLastOpenConversationId,
+    markConversationRated,
   ]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!conversationId) return;
+      let cancelled = false;
+      (async () => {
+        try {
+          const res = await fetchSmileConversation(conversationId);
+          if (cancelled) return;
+          const data = res.data;
+          setStatus(conversationId, data.status);
+          if (data.user_has_rated) {
+            markConversationRated(conversationId);
+          }
+        } catch {
+          /* best-effort refresh when returning to a closed chat */
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [conversationId, setStatus, markConversationRated]),
+  );
 
   useEffect(() => {
     if (!conversationId) return;
@@ -355,7 +392,6 @@ export function ChatScreen({
       onConversationClosed: ({ conversation_id }) => {
         if (conversation_id !== conversationId) return;
         setStatus(conversation_id, "closed");
-        setRatingVisible(true);
       },
       onError: ({ message }) => {
         setIsStreaming(false);
@@ -403,7 +439,7 @@ export function ChatScreen({
   const sendUserText = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || isStreaming) return;
+      if (!trimmed || isStreaming || isClosed) return;
 
       // 1. Show the bubble immediately so the tap feels instant. If the chat
       //    has no server id yet, park the optimistic message in the dedicated
@@ -468,6 +504,7 @@ export function ChatScreen({
       socket,
       showToast,
       isStreaming,
+      isClosed,
     ],
   );
 
@@ -527,7 +564,7 @@ export function ChatScreen({
     setRatingSubmitting(true);
     try {
       await submitSmileRating(conversationId, { rating, feedback });
-      setRatingVisible(false);
+      markConversationRated(conversationId);
       showToast({ variant: "success", title: "Thanks for your feedback!" });
     } catch {
       showToast({ variant: "error", title: "Could not save rating." });
@@ -537,7 +574,7 @@ export function ChatScreen({
   };
 
   if (showFullLoader) {
-    return <FullPageLoader message="Loading Smile…" />;
+    return <FullPageLoader message={`Loading ${SMILEY_ASSISTANT_NAME}…`} />;
   }
 
   if (error) {
@@ -559,19 +596,21 @@ export function ChatScreen({
   const isSmileBusy =
     isStreaming && !pendingConfirmation && !isHandedOff;
 
-  const statusLabel = isSmileBusy
-    ? streamingText
-      ? "Smile is typing…"
-      : toolBadge
-        ? "Working on it…"
-        : "Smile is thinking…"
-    : pendingConfirmation
-      ? "Waiting for you…"
-      : toolBadge
-        ? "Working on it…"
-        : isConnected
-          ? "Smile"
-          : "Reconnecting…";
+  const statusLabel = isClosed
+    ? "Closed"
+    : isSmileBusy
+      ? streamingText
+        ? `${SMILEY_ASSISTANT_NAME} is typing…`
+        : toolBadge
+          ? "Working on it…"
+          : `${SMILEY_ASSISTANT_NAME} is thinking…`
+      : pendingConfirmation
+        ? "Waiting for you…"
+        : toolBadge
+          ? "Working on it…"
+          : isConnected
+            ? SMILEY_ASSISTANT_NAME
+            : "Reconnecting…";
 
   const footerBottomInset =
     keyboardHeight > 0 ? keyboardHeight : Math.max(insets.bottom, 12);
@@ -602,7 +641,7 @@ export function ChatScreen({
         >
           <SmileAvatar size={36} />
           <View style={{ flex: 1 }}>
-            <Text className="text-lg font-semibold">Smile</Text>
+            <Text className="text-lg font-semibold">{SMILEY_ASSISTANT_NAME}</Text>
             <Text
               className={isSmileBusy ? "text-xs" : "text-xs text-muted-foreground"}
               style={
@@ -753,26 +792,36 @@ export function ChatScreen({
           className="border-t border-border bg-background"
           style={{ paddingBottom: footerBottomInset }}
         >
-          {showSuggestedReplies && suggestions.length > 0 && !isHandedOff ? (
-            <QuickReplyBar
-              suggestions={suggestions}
-              onSelect={sendUserText}
-              disabled={isSmileBusy}
+          {isClosed ? (
+            <ClosedConversationFooter
+              hasRated={hasRated}
+              onSubmit={handleRatingSubmit}
+              submitting={ratingSubmitting}
             />
-          ) : null}
+          ) : (
+            <>
+              {showSuggestedReplies && suggestions.length > 0 && !isHandedOff ? (
+                <QuickReplyBar
+                  suggestions={suggestions}
+                  onSelect={sendUserText}
+                  disabled={isSmileBusy}
+                />
+              ) : null}
 
-          <Composer
-            value={draftText}
-            onChange={setDraftText}
-            onSend={() => sendUserText(draftText)}
-            disabled={isHandedOff || isSmileBusy}
-            isThinking={isSmileBusy && !isHandedOff}
-            placeholder={
-              isHandedOff
-                ? "An agent will reply here soon"
-                : "Message Smile…"
-            }
-          />
+              <Composer
+                value={draftText}
+                onChange={setDraftText}
+                onSend={() => sendUserText(draftText)}
+                disabled={isHandedOff || isSmileBusy}
+                isThinking={isSmileBusy && !isHandedOff}
+                placeholder={
+                  isHandedOff
+                    ? "An agent will reply here soon"
+                    : `Message ${SMILEY_ASSISTANT_NAME}…`
+                }
+              />
+            </>
+          )}
         </View>
       </View>
 
@@ -780,13 +829,6 @@ export function ChatScreen({
         visible={citationSheet != null}
         citations={citationSheet ?? []}
         onClose={() => setCitationSheet(null)}
-      />
-
-      <RatingSheet
-        visible={ratingVisible}
-        onDismiss={() => setRatingVisible(false)}
-        onSubmit={handleRatingSubmit}
-        submitting={ratingSubmitting}
       />
 
       {onSelectConversation ? (

@@ -2,6 +2,7 @@ import { Pressable, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "@/components/ui/text";
+import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useToastStore } from "@/components/ui/toast";
 
@@ -24,7 +25,7 @@ export function Composer({
   onSend,
   disabled,
   isThinking = false,
-  placeholder = "Message Smile…",
+  placeholder = `Message ${SMILEY_ASSISTANT_NAME}…`,
 }: Props) {
   const { isDark } = useAppTheme();
   const showToast = useToastStore((s) => s.show);
@@ -87,7 +88,9 @@ export function Composer({
           editable={!disabled}
           pointerEvents={disabled ? "none" : "auto"}
           accessibilityLabel={
-            showThinkingStatus ? "Smile is thinking" : placeholder
+            showThinkingStatus
+              ? `${SMILEY_ASSISTANT_NAME} is thinking`
+              : placeholder
           }
           className="max-h-28 flex-1 bg-transparent px-4 text-base text-foreground"
           style={{
@@ -110,7 +113,7 @@ export function Composer({
                 fontWeight: "600",
               }}
             >
-              Smile is thinking…
+              {SMILEY_ASSISTANT_NAME} is thinking…
             </Text>
           </View>
         ) : null}

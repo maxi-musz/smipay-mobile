@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, router } from "expo-router";
 
+import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
@@ -71,6 +72,7 @@ export default function SmileLandingScreen() {
   const conversationsLoadError = useSmileaiStore.use.conversationsLoadError();
   const loadConversations = useSmileaiStore.use.loadConversations();
   const refreshConversationsSilently = useSmileaiStore.use.refreshConversationsSilently();
+  const setStatus = useSmileaiStore.use.setStatus();
   const [showClosed, setShowClosed] = useState(false);
 
   useEffect(() => {
@@ -92,6 +94,7 @@ export default function SmileLandingScreen() {
   };
 
   const openConversation = (item: SmileConversationListItem) => {
+    setStatus(item.id, item.status);
     router.push({
       pathname: "/(app)/smileai/chat/[id]",
       params: { id: item.id },
@@ -103,7 +106,7 @@ export default function SmileLandingScreen() {
   if (showSkeleton) {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-        <FullPageLoader message="Loading Smile…" />
+        <FullPageLoader message={`Loading ${SMILEY_ASSISTANT_NAME}…`} />
       </SafeAreaView>
     );
   }
@@ -140,7 +143,7 @@ export default function SmileLandingScreen() {
             color={isDark ? "#F8FAFC" : "#0F172A"}
           />
         </Pressable>
-        <Text className="text-xl font-bold">Smile</Text>
+        <Text className="text-xl font-bold">{SMILEY_ASSISTANT_NAME}</Text>
         <View className="flex-row items-center" style={{ gap: 8 }}>
           <Pressable
             onPress={startNewChat}
@@ -173,7 +176,7 @@ export default function SmileLandingScreen() {
             onPress={() => router.push("/(app)/smileai/settings")}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Smile settings"
+            accessibilityLabel={`${SMILEY_ASSISTANT_NAME} settings`}
             style={{
               width: 36,
               height: 36,
@@ -229,7 +232,7 @@ export default function SmileLandingScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text className="text-base font-semibold">
-              Welcome to Smile, your SmiPay assistant
+              Welcome to {SMILEY_ASSISTANT_NAME}, your SmiPay assistant
             </Text>
             <Text
               className="mt-1 text-xs text-muted-foreground"
@@ -273,7 +276,7 @@ export default function SmileLandingScreen() {
                 onPress={() => openConversation(item)}
                 isDark={isDark}
                 timeAgo={formatTimeAgo(item.last_message_at)}
-                chipLabel="Smile"
+                chipLabel={SMILEY_ASSISTANT_NAME}
                 chipBg={chipBg}
                 chipText={chipText}
                 cardBg={cardBg}
@@ -306,7 +309,7 @@ export default function SmileLandingScreen() {
               />
             </View>
             <Text className="text-center text-base font-semibold">
-              Start a conversation with Smile
+              Start a conversation with {SMILEY_ASSISTANT_NAME}
             </Text>
             <Text className="text-center text-xs text-muted-foreground">
               Ask about your wallet, KYC, transactions, airtime, data, cards

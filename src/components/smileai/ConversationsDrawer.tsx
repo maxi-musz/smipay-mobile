@@ -95,6 +95,7 @@ export function ConversationsDrawer({
   const { isDark } = useAppTheme();
   const cachedConversations = useSmileaiStore.use.conversations();
   const setConversations = useSmileaiStore.use.setConversations();
+  const setStatus = useSmileaiStore.use.setStatus();
 
   const [items, setItems] = useState<SmileConversationListItem[]>(
     cachedConversations ?? [],
@@ -297,7 +298,10 @@ export function ConversationsDrawer({
                       item={item}
                       onPress={() => {
                         onClose();
-                        if (!isCurrent) onSelectConversation(item.id);
+                        if (!isCurrent) {
+                          setStatus(item.id, item.status);
+                          onSelectConversation(item.id);
+                        }
                       }}
                       isDark={isDark}
                       timeAgo={formatTimeAgo(item.last_message_at)}
@@ -327,7 +331,10 @@ export function ConversationsDrawer({
                       item={item}
                       onPress={() => {
                         onClose();
-                        if (!isCurrent) onSelectConversation(item.id);
+                        if (!isCurrent) {
+                          setStatus(item.id, item.status);
+                          onSelectConversation(item.id);
+                        }
                       }}
                       isDark={isDark}
                       timeAgo={formatTimeAgo(item.last_message_at)}

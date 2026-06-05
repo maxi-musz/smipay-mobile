@@ -2,6 +2,7 @@ import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
+import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
 
@@ -13,7 +14,7 @@ export function AskSmileCard() {
     <Pressable
       onPress={() => router.push("/(app)/smileai")}
       accessibilityRole="button"
-      accessibilityLabel="Ask Smile anything"
+      accessibilityLabel={`Ask ${SMILEY_ASSISTANT_NAME} anything`}
       className="mx-4 mb-4"
       style={{
         backgroundColor: bg,
@@ -39,7 +40,7 @@ export function AskSmileCard() {
         <Ionicons name="happy" size={22} color="#FFFFFF" />
       </View>
       <View className="ml-3 flex-1">
-        <Text className="font-semibold">Ask Smile anything</Text>
+        <Text className="font-semibold">Ask {SMILEY_ASSISTANT_NAME} anything</Text>
         <Text className="mt-0.5 text-sm text-muted-foreground">
           Transactions, KYC, limits — or talk to a human
         </Text>

@@ -14,6 +14,7 @@ import { fetchConversations } from "@/api";
 import { SupportSocketContext } from "@/context/support-socket";
 import { Button } from "@/components/ui/button";
 import { FullPageLoader } from "@/components/ui/loaders";
+import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import type { ConversationListItem } from "@/types";
@@ -162,7 +163,9 @@ export default function SupportListScreen() {
               variant="outline"
               onPress={() => router.push("/(app)/smileai")}
             >
-              <Text className="font-semibold text-foreground">Ask Smile first</Text>
+              <Text className="font-semibold text-foreground">
+                Ask {SMILEY_ASSISTANT_NAME} first
+              </Text>
             </Button>
             <Button
               className="mt-3"

@@ -13,6 +13,8 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
+
 /**
  * Floating AI assistant entry point (Siri-style breathing orb).
  *
@@ -135,7 +137,7 @@ export function FloatingSmileButton() {
           }}
           hitSlop={10}
           accessibilityRole="button"
-          accessibilityLabel="Open Smile, your AI assistant"
+          accessibilityLabel={`Open ${SMILEY_ASSISTANT_NAME}, your AI assistant`}
         >
           <Animated.View
             style={[

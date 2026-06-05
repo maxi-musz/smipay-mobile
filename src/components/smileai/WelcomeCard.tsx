@@ -1,6 +1,7 @@
 import { Pressable, View } from "react-native";
 
 import { Text } from "@/components/ui/text";
+import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import { DisclaimerBanner } from "./DisclaimerBanner";
 
 const DEFAULT_CHIPS = [
@@ -18,8 +19,8 @@ type Props = {
 
 export function WelcomeCard({ firstName, onChipPress, disabled }: Props) {
   const greeting = firstName?.trim()
-    ? `Hi ${firstName.trim()}, I'm Smile.`
-    : "Hi, I'm Smile.";
+    ? `Hi ${firstName.trim()}, I'm ${SMILEY_ASSISTANT_NAME}.`
+    : `Hi, I'm ${SMILEY_ASSISTANT_NAME}.`;
 
   return (
     <View className="px-4 pt-6">

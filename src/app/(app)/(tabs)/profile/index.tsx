@@ -17,6 +17,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useToastStore } from "@/components/ui/toast";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { colors } from "@/constants/colors";
+import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import {
   isOtaDebugUser,
   OTA_DEBUG_BUILD_MARKER,
@@ -175,7 +176,7 @@ export default function ProfileScreen() {
             onPress={() => router.push("/(app)/smileai")}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Chat with Smile"
+            accessibilityLabel={`Chat with ${SMILEY_ASSISTANT_NAME}`}
           >
             <Ionicons
               name="chatbubble-ellipses-outline"
