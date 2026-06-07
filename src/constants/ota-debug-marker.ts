@@ -5,9 +5,10 @@
 export const OTA_DEBUG_EMAIL = "bernardmayowaa@gmail.com";
 
 /** Change this string whenever you ship an update you want to verify (e.g. "5", "6", …). */
-export const OTA_DEBUG_BUILD_MARKER = "7";
+export const OTA_DEBUG_BUILD_MARKER = "7.2";
 
 export function isOtaDebugUser(email: string | null | undefined): boolean {
   if (!email) return false;
   return email.trim().toLowerCase() === OTA_DEBUG_EMAIL.trim().toLowerCase();
 }
+
