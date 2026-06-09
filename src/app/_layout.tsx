@@ -7,6 +7,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { PortalHost } from "@rn-primitives/portal";
 import { useColorScheme } from "nativewind";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { LockScreen } from "@/components/lock-screen";
@@ -45,15 +46,6 @@ LogBox.ignoreLogs([
   /expo-notifications: Android Push notifications/,
   /expo-notifications.*not fully supported in Expo Go/,
 ]);
-
-let KBProvider: React.ComponentType<{ children: React.ReactNode }> | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require("react-native-keyboard-controller");
-  if (mod?.KeyboardProvider) KBProvider = mod.KeyboardProvider;
-} catch {
-  // Native module not linked yet — graceful no-op.
-}
 
 // Wrapped in catch: on iOS, presenting a React Native Modal (e.g. the required
 // transaction-PIN sheet) creates a separate view controller, and the native
@@ -240,7 +232,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      {KBProvider ? <KBProvider>{inner}</KBProvider> : inner}
+      <KeyboardProvider>{inner}</KeyboardProvider>
     </SafeAreaProvider>
   );
 }

@@ -22,9 +22,8 @@ export const useToastStore = create<ToastStore>((set) => ({
 
   show: (toast) => {
     const id = `toast_${++_counter}_${Date.now()}`;
-    set((state) => ({
-      toasts: [...state.toasts, { ...toast, id }],
-    }));
+    // Only one toast at a time — replace any visible toast instead of stacking.
+    set({ toasts: [{ ...toast, id }] });
   },
 
   dismiss: (id) => {

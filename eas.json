@@ -8,7 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://scabby-kinetic-excess.ngrok-free.dev",
+        "EXPO_PUBLIC_API_BASE_URL": "https://prod-server.smipay.ng",
         "EXPO_PUBLIC_API_VERSION": "/api/v1",
         "EXPO_PUBLIC_AIRTIME_PROVIDER": "vtpass",
         "EXPO_PUBLIC_DATA_PROVIDER": "vtpass",
@@ -21,7 +21,7 @@
       "channel": "staging",
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://prod-railwayp.smipay.ng",
+        "EXPO_PUBLIC_API_BASE_URL": "https://prod-server.smipay.ng",
         "EXPO_PUBLIC_API_VERSION": "/api/v1",
         "EXPO_PUBLIC_AIRTIME_PROVIDER": "vtpass",
         "EXPO_PUBLIC_DATA_PROVIDER": "vtpass",
@@ -34,7 +34,7 @@
       "channel": "production",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://prod-railway.smipay.ng",
+        "EXPO_PUBLIC_API_BASE_URL": "https://prod-server.smipay.ng",
         "EXPO_PUBLIC_API_VERSION": "/api/v1",
         "EXPO_PUBLIC_AIRTIME_PROVIDER": "vtpass",
         "EXPO_PUBLIC_DATA_PROVIDER": "vtpass",
