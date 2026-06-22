@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useHomepageStore } from "@/store";
+import { logPurchaseSuccess } from "@/lib/analytics";
 import { handleApiError } from "@/lib/errors";
 import { colors } from "@/constants/colors";
 
@@ -196,6 +197,13 @@ export default function ElectricityPurchaseScreen() {
 
             const token = res.data.electricity_token;
             if (token && meterType === "prepaid") {
+              void logPurchaseSuccess(
+                "electricity",
+                amount,
+                selectedProvider
+                  ? getDiscoShortName(selectedProvider.serviceID)
+                  : undefined,
+              );
               setTokenModal({
                 visible: true,
                 token,
@@ -203,6 +211,13 @@ export default function ElectricityPurchaseScreen() {
                 amount: res.data.amount,
               });
             } else {
+              void logPurchaseSuccess(
+                "electricity",
+                amount,
+                selectedProvider
+                  ? getDiscoShortName(selectedProvider.serviceID)
+                  : undefined,
+              );
               setSuccessModal({
                 visible: true,
                 message: "Your electricity bill has been paid!",
@@ -358,6 +373,11 @@ export default function ElectricityPurchaseScreen() {
           } else if (status === "delivered" || code === "000") {
             const token = res.data.electricity_token;
             if (token && meterType === "prepaid") {
+              void logPurchaseSuccess(
+                "electricity",
+                amount,
+                getDiscoShortName(selectedProvider.serviceID),
+              );
               setTokenModal({
                 visible: true,
                 token,
@@ -366,6 +386,11 @@ export default function ElectricityPurchaseScreen() {
                 amount: res.data.amount,
               });
             } else {
+              void logPurchaseSuccess(
+                "electricity",
+                amount,
+                getDiscoShortName(selectedProvider.serviceID),
+              );
               setSuccessModal({
                 visible: true,
                 message: "Your electricity bill has been paid!",

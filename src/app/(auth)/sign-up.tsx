@@ -36,6 +36,7 @@ import {
   AUTH_PASSWORD_DIGITS,
   isAuthPasswordValid,
 } from "@/lib/auth-password";
+import { logSignUpComplete, setAnalyticsUser } from "@/lib/analytics";
 import { handleApiError } from "@/lib/errors";
 import {
   pickFromCamera,
@@ -266,6 +267,8 @@ export default function SignUpScreen() {
         refreshToken: res.data.refresh_token,
       });
       await storeCredentials(trimmedEmail, password);
+      void logSignUpComplete();
+      void setAnalyticsUser(res.data.user.id);
 
       router.replace("/(app)/(tabs)");
     } catch (e) {

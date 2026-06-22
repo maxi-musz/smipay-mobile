@@ -31,6 +31,7 @@ import {
 import { FullPageLoader } from "@/components/ui/loaders";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { useAirtimeStore, useHomepageStore } from "@/store";
+import { logPurchaseSuccess } from "@/lib/analytics";
 import { classifyError } from "@/lib/errors";
 import type { AirtimeServiceItem } from "@/types/vtpass-airtime";
 
@@ -248,6 +249,7 @@ export default function VtpassAirtimeScreen() {
                 "Your airtime purchase is being processed. You'll receive a confirmation shortly.",
             });
           } else {
+            void logPurchaseSuccess("airtime", amount, selectedProvider.name);
             setSuccessModal({
               visible: true,
               message: `${selectedProvider.name} airtime of ₦${amount.toLocaleString()} has been sent to ${phoneNorm}.`,

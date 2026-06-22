@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useHomepageStore } from "@/store";
+import { logPurchaseSuccess } from "@/lib/analytics";
 import { handleApiError } from "@/lib/errors";
 import { colors } from "@/constants/colors";
 import { isDstvGotvContent } from "@/types/vtpass-cable";
@@ -219,6 +220,7 @@ export default function CablePurchaseScreen() {
           if (status === "delivered" || code === "000") {
             stopPolling();
             setProcessingModal({ visible: false, requestId: null, message: "" });
+            void logPurchaseSuccess("cable", amount, selectedProvider?.name);
             setSuccessModal({
               visible: true,
               message: "Your cable subscription has been activated!",
@@ -356,6 +358,7 @@ export default function CablePurchaseScreen() {
             res.data.voucher_codes?.[0];
 
           if (voucherCode) {
+            void logPurchaseSuccess("cable", amount, selectedProvider?.name);
             setVoucherModal({ visible: true, code: voucherCode });
             return;
           }
@@ -383,6 +386,7 @@ export default function CablePurchaseScreen() {
             });
             pollStatus(requestId, true);
           } else if (status === "delivered" || code === "000") {
+            void logPurchaseSuccess("cable", amount, selectedProvider?.name);
             setSuccessModal({
               visible: true,
               message: `Your ${selectedProvider.name.replace(" Subscription", "")} subscription has been activated!`,

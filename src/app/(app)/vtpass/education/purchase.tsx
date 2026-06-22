@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useHomepageStore } from "@/store";
+import { logPurchaseSuccess } from "@/lib/analytics";
 import { handleApiError } from "@/lib/errors";
 import { colors } from "@/constants/colors";
 import type { EducationCredentials } from "@/types/vtpass-education";
@@ -177,6 +178,7 @@ export default function EducationPurchaseScreen() {
           if (status === "delivered" || code === "000") {
             stopPolling();
             setProcessingModal({ visible: false, requestId: null, message: "" });
+            void logPurchaseSuccess("education", amount);
             setSuccessModal({
               visible: true,
               credentials: res.data.credentials ?? null,
@@ -307,6 +309,7 @@ export default function EducationPurchaseScreen() {
             credentials &&
             (credentials.pin || credentials.cards?.length)
           ) {
+            void logPurchaseSuccess("education", amount);
             setSuccessModal({ visible: true, credentials });
           } else if (isProcessing && requestId) {
             pollStartRef.current = Date.now();
@@ -318,6 +321,7 @@ export default function EducationPurchaseScreen() {
             });
             pollStatus(requestId, true);
           } else if (status === "delivered" || code === "000") {
+            void logPurchaseSuccess("education", amount);
             setSuccessModal({ visible: true, credentials });
           } else {
             setSuccessModal({ visible: true, credentials });

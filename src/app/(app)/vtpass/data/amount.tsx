@@ -41,6 +41,7 @@ import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useHomepageStore } from "@/store";
+import { logPurchaseSuccess } from "@/lib/analytics";
 import { handleApiError } from "@/lib/errors";
 
 export default function DataAmountScreen() {
@@ -140,6 +141,7 @@ export default function DataAmountScreen() {
               successPayloadRef.current = null;
             }
             setProcessingModal({ visible: false, requestId: null, message: "" });
+            void logPurchaseSuccess("data", amount, selectedProvider?.name);
             setSuccessModal({
               visible: true,
               message: "Your data purchase was successful.",
@@ -318,6 +320,7 @@ export default function DataAmountScreen() {
             addRecentData(phoneNorm, selectedProvider.serviceID).then(() => {
               getRecentData().then(setRecentList);
             });
+            void logPurchaseSuccess("data", amount, selectedProvider?.name);
             setSuccessModal({
               visible: true,
               message: `Data plan ${formatNaira(amount)} has been purchased successfully.`,

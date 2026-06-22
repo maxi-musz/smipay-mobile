@@ -24,6 +24,7 @@ import { Text } from "@/components/ui/text";
 import { authenticate, getBiometricsAvailability, getBiometricLabel } from "@/lib/biometrics";
 import { ApiClientError } from "@/lib/api";
 import { handleApiError } from "@/lib/errors";
+import { logSignIn, setAnalyticsUser } from "@/lib/analytics";
 import { canUseRequireAuthentication, secureStorage, SECURE_KEYS } from "@/lib/secure-storage";
 import { useAuthStore, useAppStore } from "@/store";
 
@@ -79,6 +80,8 @@ export default function SignInScreen() {
         },
       );
       await storeCredentials(trimmedEmail, password);
+      void logSignIn();
+      void setAnalyticsUser(res.data.user.id);
 
       const availability = await getBiometricsAvailability();
       if (!availability.available) {

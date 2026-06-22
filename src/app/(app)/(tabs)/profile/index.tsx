@@ -6,6 +6,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { logout as logoutApi, removePushToken } from "@/api";
+import { clearAnalyticsUser, logSignOut } from "@/lib/analytics";
 import {
   clearLastRegisteredToken,
   getLastRegisteredToken,
@@ -95,6 +96,8 @@ export default function ProfileScreen() {
       // Silently ignore
     }
     await storeLogout();
+    void logSignOut();
+    void clearAnalyticsUser();
     useToastStore.getState().show({
       variant: "success",
       title: "Signed Out",
