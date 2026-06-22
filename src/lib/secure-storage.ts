@@ -60,4 +60,6 @@ export const SECURE_KEYS = {
   REFRESH_TOKEN: "refresh_token",
   USER_EMAIL: "user_email",
   USER_PASSWORD: "user_password",
+  /** Transient identifier (email or phone) between sign-in steps. Cleared after login or back. */
+  SIGN_IN_IDENTIFIER: "sign_in_identifier",
 } as const;
