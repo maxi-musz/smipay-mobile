@@ -2,7 +2,7 @@
   "expo": {
     "name": "SmiPay",
     "slug": "smipay-mobile",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "smipay",
@@ -11,6 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.smipay.mobile",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSFaceIDUsageDescription": "SmiPay uses Face ID to unlock the app securely.",
         "ITSAppUsesNonExemptEncryption": false
@@ -86,7 +87,17 @@
           "cameraPermission": "Allow SmiPay to use your camera to take a profile photo."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/analytics"
     ],
     "runtimeVersion": {
       "policy": "appVersion"

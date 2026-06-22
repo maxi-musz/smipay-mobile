@@ -53,3 +53,6 @@ yarn-error.*
 
 /docs
 docs/
+
+GoogleService-Info.plist
+google-services.json
