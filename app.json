@@ -2,7 +2,7 @@
   "expo": {
     "name": "SmiPay",
     "slug": "smipay-mobile",
-    "version": "2.3.0",
+    "version": "2.4.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "smipay",
@@ -23,7 +23,7 @@
       "icon": "./assets/images/icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png"
+        "backgroundColor": "#FFFFFF"
       },
       "package": "com.smipay.mobile",
       "permissions": [
@@ -88,16 +88,20 @@
         }
       ],
       "expo-asset",
+      "@react-native-firebase/app",
+      "@react-native-firebase/analytics",
       [
         "expo-build-properties",
         {
           "ios": {
-            "useFrameworks": "static"
+            "useFrameworks": "static",
+            "forceStaticLinking": [
+              "RNFBApp",
+              "RNFBAnalytics"
+            ]
           }
         }
-      ],
-      "@react-native-firebase/app",
-      "@react-native-firebase/analytics"
+      ]
     ],
     "runtimeVersion": {
       "policy": "appVersion"
