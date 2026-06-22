@@ -81,19 +81,23 @@ export interface KycVerification {
 }
 
 export interface TierLimits {
-  singleTransaction: number;
-  daily: number;
-  monthly: number;
-  airtimeDaily: number;
+  singleTransaction: number | null;
+  daily: number | null;
+  monthly: number | null;
+  airtimeDaily: number | null;
 }
+
+import type { TierProperty } from "./profile";
 
 export interface CurrentTier {
   tier: string;
   name: string;
   description: string;
   requirements: string[];
+  properties?: TierProperty[];
   limits: TierLimits;
   is_active: boolean;
+  requirements_met?: boolean;
 }
 
 export interface RewardBanner {
