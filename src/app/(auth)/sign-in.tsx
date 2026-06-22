@@ -221,8 +221,8 @@ export default function SignInScreen() {
               entering={FadeInDown.delay(40).duration(220)}
             >
               <Input
-                label="Email or Phone number"
-                placeholder="Email or Phone number"
+                label="Email or Phone"
+                placeholder="Email or Phone"
                 value={identifier}
                 onChangeText={(v) => {
                   setIdentifier(sanitizeAuthIdentifier(v));

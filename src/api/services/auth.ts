@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { postMultipart } from "@/lib/multipart-upload";
 import type {
   ApiResponse,
   AuthResponse,
@@ -39,51 +40,37 @@ export async function registerWithProfilePicture(
     throw new Error("Image must be 5 MB or smaller.");
   }
 
-  const formData = new FormData();
-  formData.append("email", payload.email);
-  formData.append("password", payload.password);
+  if (!file) {
+    return register(payload);
+  }
+
+  const parameters: Record<string, string> = {
+    email: payload.email,
+    password: payload.password,
+    first_name: payload.first_name,
+    last_name: payload.last_name,
+    phone_number: payload.phone_number,
+    agree_to_terms: payload.agree_to_terms ? "true" : "false",
+  };
+
   if (payload.transaction_pin) {
-    formData.append("transaction_pin", payload.transaction_pin);
+    parameters.transaction_pin = payload.transaction_pin;
   }
-  formData.append("first_name", payload.first_name);
-  formData.append("last_name", payload.last_name);
-  formData.append("phone_number", payload.phone_number);
-  formData.append("agree_to_terms", payload.agree_to_terms ? "true" : "false");
   if (payload.country != null && payload.country !== "") {
-    formData.append("country", payload.country);
+    parameters.country = payload.country;
   }
-  if (payload.middle_name) formData.append("middle_name", payload.middle_name);
-  if (payload.gender) formData.append("gender", payload.gender);
-  if (payload.referral_code) formData.append("referral_code", payload.referral_code);
+  if (payload.middle_name) parameters.middle_name = payload.middle_name;
+  if (payload.gender) parameters.gender = payload.gender;
+  if (payload.referral_code) parameters.referral_code = payload.referral_code;
   if (payload.updates_opt_in !== undefined) {
-    formData.append("updates_opt_in", payload.updates_opt_in ? "true" : "false");
+    parameters.updates_opt_in = payload.updates_opt_in ? "true" : "false";
   }
 
-  if (file) {
-    formData.append(
-      "file",
-      {
-        uri: file.uri,
-        name: file.name,
-        type: file.type,
-      } as unknown as Blob,
-    );
-  }
-
-  const { data } = await api.post<ApiResponse<AuthResponse>>(
-    `${AUTH}/register-with-profile-picture`,
-    formData,
-    {
-      timeout: 90_000,
-      transformRequest: (body, headers) => {
-        if (headers && typeof headers === "object" && "Content-Type" in headers) {
-          delete (headers as Record<string, unknown>)["Content-Type"];
-        }
-        return body;
-      },
-    },
-  );
-  return data;
+  return postMultipart<ApiResponse<AuthResponse>>({
+    path: `${AUTH}/register-with-profile-picture`,
+    file,
+    parameters,
+  });
 }
 
 export async function signIn(payload: SignInPayload) {

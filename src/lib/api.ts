@@ -34,7 +34,7 @@ const BASE_URL = __DEV__
   ? (process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:1500")
   : process.env.EXPO_PUBLIC_API_BASE_URL!;
 const API_VERSION = process.env.EXPO_PUBLIC_API_VERSION ?? "/api/v1";
-const API_BASE_URL = `${BASE_URL}${API_VERSION}`;
+export const API_BASE_URL = `${BASE_URL}${API_VERSION}`;
 
 if (__DEV__) {
   console.log(`[API] Base URL: ${API_BASE_URL}`);
@@ -50,24 +50,20 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// ── Request interceptor ──────────────────────────────────────────
+/** Auth, signing, device, and location headers shared by axios and native uploads. */
+export async function buildRequestHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
 
-api.interceptors.request.use(async (config) => {
-  if (__DEV__) {
-    console.log(`→ ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
-  }
-
-  // Required by backend SecurityHeadersValidator for all requests
   const timestamp = String(Date.now());
   const nonce = Crypto.randomUUID();
-  config.headers["X-Timestamp"] = timestamp;
-  config.headers["X-Nonce"] = nonce;
-  config.headers["X-Request-ID"] = nonce;
-  config.headers["X-Signature"] = computeRequestSignature(timestamp, nonce);
+  headers["X-Timestamp"] = timestamp;
+  headers["X-Nonce"] = nonce;
+  headers["X-Request-ID"] = nonce;
+  headers["X-Signature"] = computeRequestSignature(timestamp, nonce);
 
   try {
     const device = await getDeviceMetadata();
-    Object.assign(config.headers, device);
+    Object.assign(headers, device);
   } catch (e) {
     if (__DEV__) console.warn("[API] Failed to get device metadata:", e);
   }
@@ -75,8 +71,8 @@ api.interceptors.request.use(async (config) => {
   try {
     const location = await getLocation();
     if (location) {
-      config.headers["x-latitude"] = String(location.latitude);
-      config.headers["x-longitude"] = String(location.longitude);
+      headers["x-latitude"] = String(location.latitude);
+      headers["x-longitude"] = String(location.longitude);
     }
   } catch (e) {
     if (__DEV__) console.warn("[API] Failed to get location:", e);
@@ -84,8 +80,21 @@ api.interceptors.request.use(async (config) => {
 
   const token = useAuthStore.getState().tokens?.accessToken;
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
+
+  return headers;
+}
+
+// ── Request interceptor ──────────────────────────────────────────
+
+api.interceptors.request.use(async (config) => {
+  if (__DEV__) {
+    console.log(`→ ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+  }
+
+  const headers = await buildRequestHeaders();
+  Object.assign(config.headers, headers);
 
   return config;
 });

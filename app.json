@@ -22,8 +22,8 @@
       "googleServicesFile": "./google-services.json",
       "icon": "./assets/images/icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
-        "backgroundColor": "#FFFFFF"
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png"
       },
       "package": "com.smipay.mobile",
       "permissions": [
