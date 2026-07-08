@@ -25,13 +25,17 @@ export function TransactionReceiptCard({
   payload: ReceiptPayload;
   tx?: SingleTransaction | null;
 }) {
-  const amountColor = payload.isCredit ? colors.green[500] : colors.error;
+  // Receipt is always a light card; keep the amount neutral (dark). The +/-
+  // prefix still signals credit vs debit, and the status badge carries colour.
+  const amountColor = colors.gray[900];
   const statusColor =
     payload.statusKey === "success"
       ? colors.green[500]
       : payload.statusKey === "pending"
         ? colors.warning
-        : colors.error;
+        : payload.statusKey === "reversed"
+          ? colors.info
+          : colors.error;
 
   const debitBg = payload.isCredit ? "#DCFCE7" : "#FEE2E2";
   const debitFg = payload.isCredit ? colors.green[500] : "#B91C1C";
@@ -187,7 +191,9 @@ export function TransactionReceiptCard({
                   ? "#DCFCE7"
                   : payload.statusKey === "pending"
                     ? "#FEF3C7"
-                    : "#FEE2E2",
+                    : payload.statusKey === "reversed"
+                      ? "#EFF6FF"
+                      : "#FEE2E2",
               marginBottom: 16,
             }}
           >

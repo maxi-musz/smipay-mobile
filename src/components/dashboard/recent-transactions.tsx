@@ -11,7 +11,7 @@ import { getProviderLogo } from "@/lib/provider-logo";
 import { isUnsuccessfulTransactionStatus } from "@/lib/transaction-display";
 import type { TransactionItem } from "@/types";
 
-type TransactionStatus = "success" | "successful" | "pending" | "failed" | "cancelled";
+type TransactionStatus = "success" | "successful" | "pending" | "failed" | "cancelled" | "reversed";
 
 interface RecentTransactionsProps {
   transactions: TransactionItem[];
@@ -49,6 +49,11 @@ const STATUS_CONFIG: Record<
     label: "CANCELLED",
     color: colors.error,
     bgColor: "#FEF2F2",
+  },
+  reversed: {
+    label: "REVERSED",
+    color: colors.info,
+    bgColor: "#EFF6FF",
   },
 };
 
@@ -145,12 +150,9 @@ function TransactionRow({
   const statusKey = transaction.status as TransactionStatus;
   const status = STATUS_CONFIG[statusKey] ?? STATUS_CONFIG.pending;
   const isUnsuccessful = isUnsuccessfulTransactionStatus(transaction.status);
-  const amountColor =
-    isUnsuccessful
-      ? colors.error
-      : transaction.credit_debit === "credit"
-        ? colors.green[500]
-        : colors.error;
+  // Amount stays neutral (theme-based); the status badge already carries colour.
+  // The +/- sign still signals credit vs debit.
+  const amountColor = isDark ? colors.white : colors.gray[900];
 
   const localLogo = getProviderLogo(transaction.description);
   const isCredit = transaction.credit_debit === "credit";

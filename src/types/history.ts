@@ -18,7 +18,7 @@ export interface HistoryPagination {
   activeFilter: string;
 }
 
-export type HistoryStatus = "pending" | "success" | "failed" | "cancelled";
+export type HistoryStatus = "pending" | "success" | "failed" | "cancelled" | "reversed";
 
 export type HistoryDirection = "credit" | "debit";
 

@@ -31,7 +31,7 @@ export function buildReceiptHtml(
     "linear-gradient(145deg, #FFF7ED 0%, #FFFFFF 35%, #ECFDF5 70%, #FFF7ED 100%)";
   const card = "#FFFFFF";
   const panel = "#F3F4F6";
-  const amountColor = payload.isCredit ? green : "#DC2626";
+  const amountColor = "#111827";
 
   const rows = payload.lines
     .map(
@@ -59,13 +59,17 @@ export function buildReceiptHtml(
       ? "#DCFCE7"
       : payload.statusKey === "pending"
         ? "#FEF3C7"
-        : "#FEE2E2";
+        : payload.statusKey === "reversed"
+          ? "#EFF6FF"
+          : "#FEE2E2";
   const statusFg =
     payload.statusKey === "success"
       ? "#166534"
       : payload.statusKey === "pending"
         ? "#B45309"
-        : "#B91C1C";
+        : payload.statusKey === "reversed"
+          ? "#1D4ED8"
+          : "#B91C1C";
 
   return `<!DOCTYPE html>
 <html lang="en">

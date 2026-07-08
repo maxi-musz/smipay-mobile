@@ -134,6 +134,7 @@ const STATUS_LABELS: Record<HistoryStatus, string> = {
   pending: "Pending",
   failed: "Failed",
   cancelled: "Cancelled",
+  reversed: "Reversed",
 };
 
 export function buildReceiptPayload(tx: SingleTransaction): ReceiptPayload {

@@ -73,7 +73,9 @@ export default function TransactionDetailScreen() {
     (tx.credit_debit != null
       ? tx.credit_debit === "credit"
       : tx.type === "deposit" || tx.type === "referral_bonus");
-  const heroAmountColor = heroCredit ? colors.green[500] : colors.error;
+  // Neutral hero amount (theme-based); the status text below carries the colour.
+  // The +/- prefix still signals credit vs debit.
+  const heroAmountColor = isDark ? colors.white : colors.gray[900];
   const heroAmountPrefix = heroCredit ? "+" : "-";
   const metaAddress = getMetaAddress(tx?.meta);
   const walletRows = tx ? walletCashbackRows(tx) : [];
@@ -233,6 +235,25 @@ export default function TransactionDetailScreen() {
               <Text className="mb-3 text-sm font-semibold text-foreground">
                 Transaction Details
               </Text>
+
+              {tx.type === "electricity" && tx.status === "success" && (
+                <DetailRow
+                  label="Token"
+                  value={tx.meta?.electricity_token || "Not available"}
+                  isMono={Boolean(tx.meta?.electricity_token)}
+                  onCopy={
+                    tx.meta?.electricity_token
+                      ? () =>
+                          copyText(
+                            tx.meta!.electricity_token!,
+                            "elec-token",
+                            "Token",
+                          )
+                      : undefined
+                  }
+                  isCopied={copiedField === "elec-token"}
+                />
+              )}
 
               {tx.description && (
                 <DetailRow label="Description" value={tx.description} />
@@ -473,36 +494,6 @@ export default function TransactionDetailScreen() {
                     ))}
                 </View>
               )}
-
-            {/* Electricity Token Card */}
-            {tx.type === "electricity" && tx.status === "success" && (
-              <View
-                className="mx-5 mt-4 rounded-2xl px-5 py-4"
-                style={{ backgroundColor: cardBg }}
-              >
-                <Text className="mb-3 text-sm font-semibold text-foreground">
-                  Electricity Token
-                </Text>
-                {tx.meta?.electricity_token ? (
-                  <CredentialCopyRow
-                    label="Token"
-                    value={tx.meta.electricity_token}
-                    fieldKey="elec-token"
-                    onCopy={copyText}
-                    isCopied={copiedField === "elec-token"}
-                  />
-                ) : (
-                  <View className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 px-4 py-3">
-                    <Text className="text-[13px] font-medium text-foreground">
-                      Token not available
-                    </Text>
-                    <Text className="mt-1.5 text-xs text-muted-foreground">
-                      If you completed payment, contact support through the app and our team can help.
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
 
           </ScrollView>
         )}
@@ -746,6 +737,7 @@ const STATUS_MAP: Record<
   pending: { label: "Pending", color: colors.warning, icon: "time" },
   failed: { label: "Failed", color: colors.error, icon: "close-circle" },
   cancelled: { label: "Cancelled", color: colors.gray[500], icon: "close-circle" },
+  reversed: { label: "Reversed", color: colors.info, icon: "arrow-undo-circle" },
 };
 
 function getProviderLabel(tx: SingleTransaction): string {
