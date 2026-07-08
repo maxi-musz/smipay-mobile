@@ -8,6 +8,8 @@ import {
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
+import * as Application from "expo-application";
 import { Link, router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -50,6 +52,16 @@ export default function SignInScreen() {
 
   const passwordRef = useRef<TextInput>(null);
   const keyboardVisible = useKeyboardVisible();
+
+  // App version for the login footer, e.g. "2.4.0" -> "v2.4".
+  const appVersionLabel = (() => {
+    const raw =
+      Constants.expoConfig?.version ??
+      Application.nativeApplicationVersion ??
+      "";
+    const short = raw.split(".").slice(0, 2).join(".");
+    return short ? `v${short}` : "";
+  })();
 
   const canProceed =
     isValidAuthIdentifier(identifier) && !loading;
@@ -349,6 +361,15 @@ export default function SignInScreen() {
           )}
         </AuthCenteredForm>
       </KeyboardAwareScrollView>
+
+      {!keyboardVisible && appVersionLabel ? (
+        <View
+          pointerEvents="none"
+          className="absolute bottom-6 left-0 right-0 items-center"
+        >
+          <Text className="text-xs text-muted-foreground">{appVersionLabel}</Text>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

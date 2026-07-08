@@ -465,7 +465,9 @@ function StatusPill({
   status: HistoryStatus;
   isDark: boolean;
 }) {
-  const config = STATUS_CONFIG[status];
+  // Fallback protects against any unknown/new backend status (e.g. a future
+  // status the shipped build doesn't know) — a missing entry must never crash.
+  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
   const bgColor = isDark ? `${config.color}20` : config.bgColor;
 
   return (
