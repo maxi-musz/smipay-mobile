@@ -1,5 +1,6 @@
 import { verifyPaystackFunding } from "@/api";
 import { useToastStore } from "@/components/ui/toast/toast-store";
+import { logFundingSuccess } from "@/lib/analytics";
 import { handleApiError } from "@/lib/errors";
 import {
   getPendingFundingReference,
@@ -30,6 +31,7 @@ export async function verifyFundingAndGetResult(
 
     if (response.success && data && "balance_after" in data) {
       const successData = data as VerifyPaystackSuccessData;
+      void logFundingSuccess('paystack', parseFloat(successData.amount));
       return { status: "success", balance_after: successData.balance_after };
     }
 
@@ -75,6 +77,7 @@ export async function verifyPendingFundingAndHandleResult(
 
     if (response.success && data && "balance_after" in data) {
       const successData = data as VerifyPaystackSuccessData;
+      void logFundingSuccess('paystack', parseFloat(successData.amount));
       show({
         variant: "success",
         title: "Wallet funded",

@@ -16,6 +16,12 @@ import { useToastStore } from "@/components/ui/toast";
 import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { formatTierRequirement } from "@/lib/format-tier-requirement";
+import {
+  formatTierPropertyValue,
+  getFeatureProperties,
+  getLimitProperties,
+  getVerificationProperties,
+} from "@/lib/format-tier-property";
 import { ApiClientError } from "@/lib/api";
 import {
   pickFromCamera,
@@ -649,29 +655,153 @@ export default function BasicInformationScreen() {
                     </LinearGradient>
                   </View>
 
-                  {profile.current_tier.requirements?.length > 0 ? (
-                    <View>
-                      <Text className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                        Requirements
-                      </Text>
-                      <View className="flex-row flex-wrap gap-2">
-                        {profile.current_tier.requirements.map((r, i) => (
-                          <View
-                            key={`${r}-${i}`}
-                            className="rounded-full border px-3.5 py-2"
-                            style={{
-                              borderColor: isDark ? "rgba(148,163,184,0.25)" : colors.gray[200],
-                              backgroundColor: isDark ? "rgba(255,255,255,0.04)" : colors.gray[50],
-                            }}
-                          >
-                            <Text className="text-[13px] font-medium text-foreground">
-                              {formatTierRequirement(r)}
+                  {(() => {
+                    const verificationProps = getVerificationProperties(
+                      profile.current_tier.properties,
+                    );
+                    const limitProps = getLimitProperties(
+                      profile.current_tier.properties,
+                    );
+                    const featureProps = getFeatureProperties(
+                      profile.current_tier.properties,
+                    );
+                    const legacyRequirements =
+                      profile.current_tier.requirements ?? [];
+
+                    if (
+                      verificationProps.length === 0 &&
+                      limitProps.length === 0 &&
+                      featureProps.length === 0 &&
+                      legacyRequirements.length === 0
+                    ) {
+                      return null;
+                    }
+
+                    return (
+                      <View className="space-y-4">
+                        {verificationProps.length > 0 ? (
+                          <View>
+                            <Text className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                              Verification requirements
                             </Text>
+                            <View className="flex-row flex-wrap gap-2">
+                              {verificationProps.map((property) => (
+                                <View
+                                  key={property.id}
+                                  className="rounded-full border px-3.5 py-2 flex-row items-center gap-2"
+                                  style={{
+                                    borderColor: isDark
+                                      ? "rgba(148,163,184,0.25)"
+                                      : colors.gray[200],
+                                    backgroundColor: isDark
+                                      ? "rgba(255,255,255,0.04)"
+                                      : colors.gray[50],
+                                  }}
+                                >
+                                  <Ionicons
+                                    name={
+                                      property.is_met ? "checkmark-circle" : "ellipse-outline"
+                                    }
+                                    size={14}
+                                    color={
+                                      property.is_met
+                                        ? colors.green[600]
+                                        : colors.gray[400]
+                                    }
+                                  />
+                                  <Text className="text-[13px] font-medium text-foreground">
+                                    {property.label}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
                           </View>
-                        ))}
+                        ) : legacyRequirements.length > 0 ? (
+                          <View>
+                            <Text className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                              Requirements
+                            </Text>
+                            <View className="flex-row flex-wrap gap-2">
+                              {legacyRequirements.map((r, i) => (
+                                <View
+                                  key={`${r}-${i}`}
+                                  className="rounded-full border px-3.5 py-2"
+                                  style={{
+                                    borderColor: isDark
+                                      ? "rgba(148,163,184,0.25)"
+                                      : colors.gray[200],
+                                    backgroundColor: isDark
+                                      ? "rgba(255,255,255,0.04)"
+                                      : colors.gray[50],
+                                  }}
+                                >
+                                  <Text className="text-[13px] font-medium text-foreground">
+                                    {formatTierRequirement(r)}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        ) : null}
+
+                        {limitProps.length > 0 ? (
+                          <View>
+                            <Text className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                              Limits
+                            </Text>
+                            <View className="gap-2">
+                              {limitProps.map((property) => (
+                                <View
+                                  key={property.id}
+                                  className="flex-row items-center justify-between rounded-xl border px-3.5 py-2.5"
+                                  style={{
+                                    borderColor: isDark
+                                      ? "rgba(148,163,184,0.25)"
+                                      : colors.gray[200],
+                                  }}
+                                >
+                                  <Text className="text-[13px] text-muted-foreground">
+                                    {property.label}
+                                  </Text>
+                                  <Text className="text-[13px] font-semibold text-foreground">
+                                    {formatTierPropertyValue(property)}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        ) : null}
+
+                        {featureProps.length > 0 ? (
+                          <View>
+                            <Text className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                              Features
+                            </Text>
+                            <View className="flex-row flex-wrap gap-2">
+                              {featureProps.map((property) => (
+                                <View
+                                  key={property.id}
+                                  className="rounded-full border px-3.5 py-2"
+                                  style={{
+                                    borderColor: isDark
+                                      ? "rgba(148,163,184,0.25)"
+                                      : colors.gray[200],
+                                    backgroundColor: isDark
+                                      ? "rgba(255,255,255,0.04)"
+                                      : colors.gray[50],
+                                  }}
+                                >
+                                  <Text className="text-[13px] font-medium text-foreground">
+                                    {property.label}: {formatTierPropertyValue(property)}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        ) : null}
                       </View>
-                    </View>
-                  ) : null}
+                    );
+                  })()}
                 </View>
               </View>
             </LinearGradient>

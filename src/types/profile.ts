@@ -83,6 +83,18 @@ export interface ProfileWalletCard {
   updatedAt: string;
 }
 
+export interface TierProperty {
+  id: string;
+  key: string;
+  label: string;
+  description?: string | null;
+  value_type: "NUMBER" | "BOOLEAN" | "STRING" | "VERIFICATION";
+  unit?: string | null;
+  category?: string | null;
+  value?: unknown;
+  is_met?: boolean;
+}
+
 export interface ProfileTier {
   id?: string;
   tier: string;
@@ -90,9 +102,11 @@ export interface ProfileTier {
   description: string;
   order?: number;
   requirements: string[];
+  properties?: TierProperty[];
   limits: TierLimits;
   is_active?: boolean;
   is_current?: boolean;
+  requirements_met?: boolean;
 }
 
 export interface UserProfileData {

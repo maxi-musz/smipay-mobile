@@ -1,5 +1,6 @@
-import { api } from "@/lib/api";
 import type { ApiResponse, HomepageData, UserProfileData } from "@/types";
+import { api } from "@/lib/api";
+import { postMultipart } from "@/lib/multipart-upload";
 
 const USER = "/user";
 
@@ -22,27 +23,10 @@ export async function updateDisplayPicture(
     throw new Error("Image must be 5 MB or smaller.");
   }
 
-  const formData = new FormData();
-  formData.append("file", {
-    uri: file.uri,
-    name: file.name,
-    type: file.type,
-  } as unknown as Blob);
-
-  const { data } = await api.post<ApiResponse<UpdateDisplayPictureResponseData>>(
-    `${USER}/update-display-picture`,
-    formData,
-    {
-      timeout: 90_000,
-      transformRequest: (payload, headers) => {
-        if (headers && typeof headers === "object" && "Content-Type" in headers) {
-          delete (headers as Record<string, unknown>)["Content-Type"];
-        }
-        return payload;
-      },
-    },
-  );
-  return data;
+  return postMultipart<ApiResponse<UpdateDisplayPictureResponseData>>({
+    path: `${USER}/update-display-picture`,
+    file,
+  });
 }
 
 export async function fetchHomepageDetails() {

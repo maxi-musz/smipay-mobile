@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { io, type Socket } from "socket.io-client";
 
 import { useToastStore } from "@/components/ui/toast/toast-store";
+import { logFundingSuccess } from "@/lib/analytics";
 import { formatNairaNumberForDisplay } from "@/lib/money";
 import { useAuthStore, useHomepageStore } from "@/store";
 
@@ -73,6 +74,10 @@ export function WebhookEventsSocketProvider({
       if (!payload?.reference) return;
       if (handledRefsRef.current.has(payload.reference)) return;
       handledRefsRef.current.add(payload.reference);
+
+      if (payload.source === "dva_transfer") {
+        void logFundingSuccess("dva", payload.amount);
+      }
 
       void useHomepageStore.getState().refreshHomepageSilently();
 

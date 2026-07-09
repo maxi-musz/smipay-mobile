@@ -32,6 +32,7 @@ import {
 import { FullPageLoader } from "@/components/ui/loaders";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { useHomepageStore } from "@/store";
+import { logPurchaseSuccess } from "@/lib/analytics";
 import { handleApiError } from "@/lib/errors";
 
 export default function IntlAirtimeAmountScreen() {
@@ -115,6 +116,7 @@ export default function IntlAirtimeAmountScreen() {
           if (status === "delivered" || code === "000") {
             stopPolling();
             setProcessingModal({ visible: false, requestId: null, message: "" });
+            void logPurchaseSuccess("intl_airtime", amount);
             setSuccessModal({
               visible: true,
               message: "Your international airtime purchase was successful.",
@@ -330,6 +332,7 @@ export default function IntlAirtimeAmountScreen() {
             });
             pollStatus(requestId, true);
           } else if (status === "delivered" || code === "000") {
+            void logPurchaseSuccess("intl_airtime", amount);
             setSuccessModal({
               visible: true,
               message: `International airtime of ${formatNaira(amount)} has been sent successfully.`,

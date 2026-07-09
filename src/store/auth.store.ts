@@ -53,6 +53,7 @@ async function clearAllSecureData() {
     SECURE_KEYS.REFRESH_TOKEN,
     SECURE_KEYS.USER_EMAIL,
     SECURE_KEYS.USER_PASSWORD,
+    SECURE_KEYS.SIGN_IN_IDENTIFIER,
   ]);
 }
 

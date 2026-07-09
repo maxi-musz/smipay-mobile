@@ -79,6 +79,11 @@ const STATUS_CONFIG: Record<HistoryStatus, StatusConfig> = {
     color: colors.gray[500],
     bgColor: "#F3F4F6",
   },
+  reversed: {
+    label: "REVERSED",
+    color: colors.info,
+    bgColor: "#EFF6FF",
+  },
 };
 
 export default function HistoryScreen() {
@@ -291,12 +296,8 @@ export default function HistoryScreen() {
           <Text
             className="text-[14px] font-semibold"
             style={{
-              color:
-                isUnsuccessful
-                  ? colors.error
-                  : isCredit
-                    ? colors.green[500]
-                    : colors.error,
+              // Neutral amount (theme-based); status pill carries the colour.
+              color: isDark ? colors.white : colors.gray[900],
             }}
           >
             {formatAmount(item.raw_amount, item.credit_debit)}
@@ -464,7 +465,9 @@ function StatusPill({
   status: HistoryStatus;
   isDark: boolean;
 }) {
-  const config = STATUS_CONFIG[status];
+  // Fallback protects against any unknown/new backend status (e.g. a future
+  // status the shipped build doesn't know) — a missing entry must never crash.
+  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
   const bgColor = isDark ? `${config.color}20` : config.bgColor;
 
   return (
