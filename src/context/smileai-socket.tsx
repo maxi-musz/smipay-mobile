@@ -28,10 +28,19 @@ export type SmileaiSocketHandlers = {
     message_id: string;
     citations: SmileCitation[];
   }) => void;
+  /** Fired when the assistant reply row is created, before deltas stream. */
+  onQueued?: (payload: {
+    conversation_id: string;
+    message_id: string;
+    reply_to_message_id?: string;
+    reply_to_snippet?: string;
+  }) => void;
   onComplete?: (payload: {
     conversation_id: string;
     message_id: string;
     suggestions?: string[];
+    reply_to_message_id?: string;
+    reply_to_snippet?: string;
   }) => void;
   onToolRequested?: (payload: {
     conversation_id: string;
@@ -70,7 +79,7 @@ interface SmileaiSocketContextValue {
     conversationId: string,
     clientMessageId: string,
     text: string,
-  ) => void;
+  ) => "sent" | "queued";
   respondConfirm: (
     conversationId: string,
     confirmationId: string,
@@ -88,7 +97,7 @@ export const SmileaiSocketContext = createContext<SmileaiSocketContextValue>({
   startConversation: async () => null,
   joinConversation: () => {},
   leaveConversation: () => {},
-  sendMessage: () => {},
+  sendMessage: () => "queued",
   respondConfirm: () => {},
   requestHandoff: () => {},
   setHandlers: () => {},
@@ -101,6 +110,14 @@ export function SmileaiSocketProvider({ children }: { children: React.ReactNode 
   const [isConnected, setIsConnected] = useState(false);
   const joinedIdRef = useRef<string | null>(null);
   const handlersRef = useRef<SmileaiSocketHandlers | null>(null);
+  /**
+   * Messages the user sent while the socket was down. Flushed (in order,
+   * after the room re-join) on the next `connect` so nothing is lost — the
+   * user can send on a spotty connection and the reply arrives once online.
+   */
+  const outboundQueueRef = useRef<
+    { conversation_id: string; client_message_id: string; text: string; surface: string }[]
+  >([]);
 
   const setHandlers = useCallback((handlers: SmileaiSocketHandlers | null) => {
     handlersRef.current = handlers;
@@ -130,10 +147,17 @@ export function SmileaiSocketProvider({ children }: { children: React.ReactNode 
       if (joinedIdRef.current) {
         s.emit("ai.conversation.join", { conversation_id: joinedIdRef.current });
       }
+      // Flush queued messages after the room join so their replies are received.
+      const queued = outboundQueueRef.current;
+      outboundQueueRef.current = [];
+      for (const payload of queued) {
+        s.emit("ai.message.user", payload);
+      }
     });
     s.on("disconnect", () => setIsConnected(false));
     s.on("connect_error", () => setIsConnected(false));
 
+    s.on("ai.message.queued", (p) => handlersRef.current?.onQueued?.(p));
     s.on("ai.message.delta", (p) => handlersRef.current?.onDelta?.(p));
     s.on("ai.message.citations", (p) => handlersRef.current?.onCitations?.(p));
     s.on("ai.message.complete", (p) => handlersRef.current?.onComplete?.(p));
@@ -207,13 +231,24 @@ export function SmileaiSocketProvider({ children }: { children: React.ReactNode 
   );
 
   const sendMessage = useCallback(
-    (conversationId: string, clientMessageId: string, text: string) => {
-      socket?.emit("ai.message.user", {
+    (
+      conversationId: string,
+      clientMessageId: string,
+      text: string,
+    ): "sent" | "queued" => {
+      const payload = {
         conversation_id: conversationId,
         client_message_id: clientMessageId,
         text,
         surface: "mobile",
-      });
+      };
+      if (socket?.connected) {
+        socket.emit("ai.message.user", payload);
+        return "sent";
+      }
+      // Offline: hold it and flush on reconnect instead of dropping it.
+      outboundQueueRef.current.push(payload);
+      return "queued";
     },
     [socket],
   );

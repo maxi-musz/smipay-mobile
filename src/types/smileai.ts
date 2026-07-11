@@ -34,6 +34,13 @@ export interface SmileMessage {
    * never carry this field.
    */
   localStatus?: "sending" | "sent";
+  /**
+   * When set, this assistant reply answers an earlier user message. The UI
+   * shows a WhatsApp-style quote strip when that message is not directly
+   * above the reply (i.e. the user sent more messages while Smiley worked).
+   */
+  reply_to_message_id?: string | null;
+  reply_to_snippet?: string | null;
 }
 
 export interface SmileConversationListItem {

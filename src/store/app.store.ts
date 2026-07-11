@@ -42,7 +42,9 @@ const initialState: AppState = {
   isHydrated: false,
   isGlobalLoading: false,
   notificationCount: 0,
-  themeMode: "dark",
+  // Light is the default on a fresh install. Existing users keep whatever they
+  // previously chose (this initial value only applies before anything persists).
+  themeMode: "light",
   lockTimeout: "60min",
   biometricsEnabled: false,
   pushNotificationsEnabled: true,

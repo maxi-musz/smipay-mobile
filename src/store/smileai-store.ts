@@ -56,6 +56,7 @@ interface SmileaiStoreActions {
     messageId: string,
     content: string,
     citations?: SmileMessage["citations"],
+    replyTo?: { message_id?: string | null; snippet?: string | null },
   ) => void;
   setSuggestions: (conversationId: string, suggestions: string[]) => void;
   setPendingConfirmation: (
@@ -309,7 +310,7 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
           },
         })),
 
-      finalizeAssistant: (conversationId, messageId, content, citations) =>
+      finalizeAssistant: (conversationId, messageId, content, citations, replyTo) =>
         set((s) => {
           const prev = s.messagesByConversation[conversationId] ?? [];
           const withoutDup = prev.filter((m) => m.id !== messageId);
@@ -320,6 +321,8 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
               role: "assistant" as const,
               content,
               citations,
+              reply_to_message_id: replyTo?.message_id ?? null,
+              reply_to_snippet: replyTo?.snippet ?? null,
               createdAt: new Date().toISOString(),
             },
           ]);

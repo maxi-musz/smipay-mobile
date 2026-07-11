@@ -1,7 +1,6 @@
 import { Pressable, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { Text } from "@/components/ui/text";
 import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useToastStore } from "@/components/ui/toast";
@@ -13,26 +12,28 @@ type Props = {
   value: string;
   onChange: (text: string) => void;
   onSend: () => void;
+  /** Only true when the chat is handed off to a human or closed — never while Smiley is replying. */
   disabled?: boolean;
-  /** When Smile is generating a reply — shows a high-contrast status in the input. */
-  isThinking?: boolean;
   placeholder?: string;
 };
 
+/**
+ * Message input. Intentionally never locks while Smiley is generating a
+ * reply — the user can keep typing and firing off messages, WhatsApp-style;
+ * the backend coalesces them. `disabled` is reserved for handed-off / closed
+ * conversations where the composer genuinely shouldn't accept input.
+ */
 export function Composer({
   value,
   onChange,
   onSend,
   disabled,
-  isThinking = false,
   placeholder = `Message ${SMILEY_ASSISTANT_NAME}…`,
 }: Props) {
   const { isDark } = useAppTheme();
   const showToast = useToastStore((s) => s.show);
   const canSend = value.trim().length > 0 && !disabled;
   const muted = isDark ? "#64748B" : "#94A3B8";
-  const thinkingColor = isDark ? "#FB923C" : "#C2520A";
-  const showThinkingStatus = isThinking && !value.trim();
 
   const handleChange = (text: string) => {
     if (disabled) return;
@@ -68,55 +69,24 @@ export function Composer({
       >
         <Ionicons name="attach" size={24} color={muted} />
       </Pressable>
-      <View
-        className="relative max-h-28 min-h-[48px] flex-1 rounded-2xl border border-border bg-card"
-        style={
-          showThinkingStatus
-            ? {
-                backgroundColor: isDark ? "rgba(251,146,60,0.08)" : "#FFF7ED",
-                borderColor: isDark ? "rgba(251,146,60,0.35)" : "#FED7AA",
-              }
-            : undefined
-        }
-      >
+      <View className="relative max-h-28 min-h-[48px] flex-1 rounded-2xl border border-border bg-card">
         <TextInput
           value={value}
           onChangeText={handleChange}
-          placeholder={showThinkingStatus ? "" : placeholder}
+          placeholder={placeholder}
           placeholderTextColor={muted}
           multiline
           editable={!disabled}
           pointerEvents={disabled ? "none" : "auto"}
-          accessibilityLabel={
-            showThinkingStatus
-              ? `${SMILEY_ASSISTANT_NAME} is thinking`
-              : placeholder
-          }
+          accessibilityLabel={placeholder}
           className="max-h-28 flex-1 bg-transparent px-4 text-base text-foreground"
           style={{
             minHeight: 48,
             paddingTop: 12,
             paddingBottom: 12,
-            ...(disabled && !isThinking ? { opacity: 0.7 } : null),
+            ...(disabled ? { opacity: 0.7 } : null),
           }}
         />
-        {showThinkingStatus ? (
-          <View
-            pointerEvents="none"
-            className="absolute inset-0 justify-center rounded-2xl px-4"
-            style={{ zIndex: 1 }}
-          >
-            <Text
-              style={{
-                color: thinkingColor,
-                fontSize: 16,
-                fontWeight: "600",
-              }}
-            >
-              {SMILEY_ASSISTANT_NAME} is thinking…
-            </Text>
-          </View>
-        ) : null}
       </View>
       <Pressable
         onPress={onSend}

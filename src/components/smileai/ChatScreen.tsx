@@ -2,22 +2,23 @@ import React, {
   useCallback,
   useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import {
+  ActivityIndicator,
   Keyboard,
   Platform,
   Pressable,
   ScrollView,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import * as Crypto from "expo-crypto";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 
 import {
@@ -30,7 +31,6 @@ import { PaymentAuthorizationModal } from "@/features/payment-authorization/paym
 import { SmileaiSocketContext } from "@/context/smileai-socket";
 import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import { Text } from "@/components/ui/text";
-import { FullPageLoader } from "@/components/ui/loaders";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useToastStore } from "@/components/ui/toast";
 import { useAuthStore, useSmileaiStore } from "@/store";
@@ -63,12 +63,38 @@ const TOOL_LABELS: Record<string, string> = {
  */
 const PENDING_CONVERSATION_KEY = "__smileai_pending__";
 
+/** Skip refetch when reopening the same chat within this window. */
+const CONVERSATION_STALE_MS = 60_000;
+
+const conversationFetchedAt = new Map<string, number>();
+const conversationFetchInflight = new Map<string, Promise<void>>();
+
 /** Server backfill uses `after` as a DB message id; optimistic client UUIDs are not valid. */
 function lastAssistantMessageId(messages: SmileMessage[]): string | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === "assistant") return messages[i].id;
   }
   return undefined;
+}
+
+/**
+ * A reply should show its WhatsApp-style quote only when the message it
+ * answers is NOT directly above it — i.e. the user fired off more messages
+ * while Smiley was working. `prev` is the message immediately before the
+ * reply in the list. Snippets are truncated server-side, so we match on the
+ * id or on a prefix of the previous user message's text.
+ */
+function shouldShowReplyQuote(
+  snippet: string | null | undefined,
+  replyToId: string | null | undefined,
+  prev: SmileMessage | undefined,
+): boolean {
+  if (!snippet) return false;
+  if (!prev || prev.role !== "user") return true;
+  if (replyToId && prev.id === replyToId) return false;
+  const core = snippet.replace(/…$/, "").trim();
+  if (core.length > 0 && prev.content.trim().startsWith(core)) return false;
+  return true;
 }
 
 type Props = {
@@ -99,7 +125,6 @@ export function ChatScreen({
   const showToast = useToastStore((s) => s.show);
   const user = useAuthStore.use.user();
   const {
-    socket,
     isConnected,
     joinConversation,
     leaveConversation,
@@ -124,10 +149,19 @@ export function ChatScreen({
   // user bubbles from the dedicated pending bucket so the user sees their
   // message immediately on tap instead of after the socket round-trip.
   const messageKey = conversationId ?? PENDING_CONVERSATION_KEY;
-  const messages = useMemo(
-    () => dedupeSmileMessages(messagesByConversation[messageKey] ?? []),
-    [messagesByConversation, messageKey],
-  );
+  const messages = useMemo(() => {
+    const own = messagesByConversation[messageKey] ?? [];
+    // While a freshly-created conversation's optimistic bubbles are still in
+    // the pending bucket (before the migration effect runs), fold them in so
+    // a burst of first messages never flashes out during the id transition.
+    if (conversationId) {
+      const pending = messagesByConversation[PENDING_CONVERSATION_KEY] ?? [];
+      if (pending.length > 0) {
+        return dedupeSmileMessages([...own, ...pending]);
+      }
+    }
+    return dedupeSmileMessages(own);
+  }, [messagesByConversation, messageKey, conversationId]);
   const streamingText = streamingByConv[convKey] ?? "";
   const status = statusByConv[convKey] ?? "active";
   const pendingConfirmation = pendingByConv[convKey] ?? null;
@@ -156,36 +190,51 @@ export function ChatScreen({
   const setDraftText = useSmileaiStore.use.setDraftText();
   const setLastOpenConversationId = useSmileaiStore.use.setLastOpenConversationId();
 
-  /** True only when we must block the UI with a full loader (no cached messages for this chat). */
+  /** True only while the message list area is waiting on its first fetch. */
   const [awaitingNetwork, setAwaitingNetwork] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [citationSheet, setCitationSheet] = useState<SmileCitation[] | null>(null);
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  /** Reply target for the in-flight assistant turn (from ai.message.queued). */
+  const [streamingReply, setStreamingReply] = useState<{
+    messageId: string;
+    replyToMessageId?: string | null;
+    snippet?: string | null;
+  } | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const pendingCitationsRef = useRef<SmileCitation[]>([]);
+  const activeConversationRef = useRef(conversationId);
+  activeConversationRef.current = conversationId;
+  // Memoise conversation creation so a burst of first messages never spawns
+  // more than one conversation (each send awaits the same in-flight create).
+  const createdConvIdRef = useRef<string | null>(null);
+  const creatingConvPromiseRef = useRef<Promise<string | null> | null>(null);
+  // Whether the user is pinned to the latest message. We only auto-scroll on
+  // new content when true, so reading older history is never yanked down.
+  const atBottomRef = useRef(true);
+
+  const scrollToBottom = useCallback((animated: boolean) => {
+    scrollRef.current?.scrollToEnd({ animated });
+  }, []);
+
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+      atBottomRef.current =
+        contentOffset.y + layoutMeasurement.height >= contentSize.height - 120;
+    },
+    [],
+  );
 
   const isHandedOff = status === "handed_off" || status === "handoff_pending";
   const isClosed = isTerminalConversationStatus(status);
   const hasRated = conversationId
     ? !!ratedConversationIds[conversationId]
     : false;
-  const showFullLoader =
-    !!conversationId && messages.length === 0 && awaitingNetwork;
-  // Hide the welcome card the instant the user sends their first message —
-  // an optimistic bubble in the pending bucket already counts as activity.
   const showWelcome = !conversationId && messages.length === 0 && !awaitingNetwork;
-
-  useLayoutEffect(() => {
-    if (!conversationId) {
-      setAwaitingNetwork(false);
-      return;
-    }
-    const cached = useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
-    setAwaitingNetwork(cached.length === 0);
-  }, [conversationId]);
 
   // Sit the composer flush on the keyboard (same approach as support chat).
   useEffect(() => {
@@ -212,122 +261,175 @@ export function ChatScreen({
     return () => clearTimeout(timer);
   }, [keyboardHeight]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadConversation = useCallback(
+    async (convId: string, opts?: { force?: boolean }) => {
+      const force = opts?.force === true;
+      const cached =
+        useSmileaiStore.getState().messagesByConversation[convId] ?? [];
+      const lastFetch = conversationFetchedAt.get(convId) ?? 0;
+      const isFresh = Date.now() - lastFetch < CONVERSATION_STALE_MS;
 
+      if (!force && cached.length > 0 && isFresh) {
+        const tail = cached[cached.length - 1];
+        lastMessageIdRef.current = tail?.id ?? null;
+        setLastOpenConversationId(convId);
+        joinConversation(convId);
+        setAwaitingNetwork(false);
+        return;
+      }
+
+      if (cached.length === 0) {
+        setAwaitingNetwork(true);
+      }
+      setError(null);
+
+      const existing = conversationFetchInflight.get(convId);
+      if (existing && !force) {
+        await existing;
+        return;
+      }
+
+      const fetchPromise = (async () => {
+        try {
+          const res = await fetchSmileConversation(convId);
+          if (activeConversationRef.current !== convId) return;
+          const data = res.data;
+          const serverMessages = data.messages ?? [];
+          const current =
+            useSmileaiStore.getState().messagesByConversation[convId] ?? [];
+          const merged =
+            current.length > 0
+              ? mergeSmileMessages(current, serverMessages)
+              : serverMessages;
+          setMessages(convId, merged);
+          setStatus(convId, data.status);
+          if (data.user_has_rated) {
+            markConversationRated(convId);
+          }
+          if (data.support_conversation_id) {
+            setSupportConversationId(convId, data.support_conversation_id);
+          }
+          const tail = merged[merged.length - 1];
+          lastMessageIdRef.current = tail?.id ?? null;
+          setLastOpenConversationId(convId);
+          joinConversation(convId);
+          conversationFetchedAt.set(convId, Date.now());
+
+          const after = lastAssistantMessageId(merged);
+          if (after) {
+            try {
+              const back = await backfillSmileMessages(convId, { after });
+              if (activeConversationRef.current !== convId) return;
+              const items = back.data?.items ?? [];
+              if (items.length > 0) {
+                const latest =
+                  useSmileaiStore.getState().messagesByConversation[convId] ?? [];
+                const withBackfill = mergeSmileMessages(latest, items);
+                setMessages(convId, withBackfill);
+                lastMessageIdRef.current =
+                  withBackfill[withBackfill.length - 1]?.id ??
+                  lastMessageIdRef.current;
+              }
+            } catch {
+              /* backfill is best-effort */
+            }
+          }
+        } catch {
+          if (activeConversationRef.current === convId) {
+            setError(
+              `${SMILEY_ASSISTANT_NAME} is offline. Try again or talk to a human.`,
+            );
+          }
+        } finally {
+          if (activeConversationRef.current === convId) {
+            setAwaitingNetwork(false);
+          }
+        }
+      })();
+
+      conversationFetchInflight.set(convId, fetchPromise);
+      try {
+        await fetchPromise;
+      } finally {
+        conversationFetchInflight.delete(convId);
+      }
+    },
+    [
+      joinConversation,
+      setMessages,
+      setStatus,
+      setSupportConversationId,
+      setLastOpenConversationId,
+      markConversationRated,
+    ],
+  );
+
+  useEffect(() => {
     if (!conversationId) {
       setError(null);
+      setAwaitingNetwork(false);
       return;
     }
 
-    const run = async () => {
-      setError(null);
-      const cached =
-        useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
-
-      if (cached.length > 0) {
-        const last = cached[cached.length - 1];
-        lastMessageIdRef.current = last?.id ?? null;
-        setLastOpenConversationId(conversationId);
-        joinConversation(conversationId);
-      }
-
-      try {
-        const res = await fetchSmileConversation(conversationId);
-        if (cancelled) return;
-        const data = res.data;
-        const serverMessages = data.messages ?? [];
-        const merged =
-          cached.length > 0
-            ? mergeSmileMessages(cached, serverMessages)
-            : serverMessages;
-        setMessages(conversationId, merged);
-        setStatus(conversationId, data.status);
-        if (data.user_has_rated) {
-          markConversationRated(conversationId);
-        }
-        if (data.support_conversation_id) {
-          setSupportConversationId(conversationId, data.support_conversation_id);
-        }
-        const tail = merged[merged.length - 1];
-        lastMessageIdRef.current = tail?.id ?? null;
-        setLastOpenConversationId(conversationId);
-        if (cached.length === 0) joinConversation(conversationId);
-
-        const after = lastAssistantMessageId(merged);
-        if (after) {
-          try {
-            const back = await backfillSmileMessages(conversationId, { after });
-            if (cancelled) return;
-            const items = back.data?.items ?? [];
-            if (items.length > 0) {
-              const current =
-                useSmileaiStore.getState().messagesByConversation[conversationId] ??
-                [];
-              const withBackfill = mergeSmileMessages(current, items);
-              setMessages(conversationId, withBackfill);
-              lastMessageIdRef.current =
-                withBackfill[withBackfill.length - 1]?.id ?? lastMessageIdRef.current;
-            }
-          } catch {
-            /* backfill is best-effort */
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          setError(
-            `${SMILEY_ASSISTANT_NAME} is offline. Try again or talk to a human.`,
-          );
-        }
-      } finally {
-        if (!cancelled) setAwaitingNetwork(false);
-      }
-    };
-
-    void run();
+    const cached =
+      useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
+    setAwaitingNetwork(cached.length === 0);
+    void loadConversation(conversationId);
 
     return () => {
-      cancelled = true;
-      if (conversationId) leaveConversation(conversationId);
+      leaveConversation(conversationId);
     };
-  }, [
-    conversationId,
-    joinConversation,
-    leaveConversation,
-    setMessages,
-    setStatus,
-    setSupportConversationId,
-    setLastOpenConversationId,
-    markConversationRated,
-  ]);
+  }, [conversationId, loadConversation, leaveConversation]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!conversationId) return;
-      let cancelled = false;
-      (async () => {
-        try {
-          const res = await fetchSmileConversation(conversationId);
-          if (cancelled) return;
-          const data = res.data;
-          setStatus(conversationId, data.status);
-          if (data.user_has_rated) {
-            markConversationRated(conversationId);
-          }
-        } catch {
-          /* best-effort refresh when returning to a closed chat */
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, [conversationId, setStatus, markConversationRated]),
-  );
+  // Reset the memoised conversation-creation state whenever we're back on a
+  // brand-new chat (e.g. the user tapped "new chat").
+  useEffect(() => {
+    if (!conversationId) {
+      createdConvIdRef.current = null;
+      creatingConvPromiseRef.current = null;
+    }
+  }, [conversationId]);
+
+  // Once the server hands us a real conversation id, migrate any optimistic
+  // bubbles parked in the pending bucket — covers a burst of messages sent
+  // before the conversation existed.
+  useEffect(() => {
+    if (conversationId) {
+      migrateOptimisticMessages(PENDING_CONVERSATION_KEY, conversationId);
+    }
+  }, [conversationId, migrateOptimisticMessages]);
+
+  // On opening a different conversation, pin to the bottom and jump to the
+  // latest message once its content has laid out. Uses a non-animated scroll
+  // so the view can never be stranded in empty space above the composer.
+  useEffect(() => {
+    atBottomRef.current = true;
+    const t = setTimeout(() => scrollToBottom(false), 60);
+    return () => clearTimeout(t);
+  }, [conversationId, awaitingNetwork, scrollToBottom]);
 
   useEffect(() => {
     if (!conversationId) return;
 
     setHandlers({
+      onQueued: ({
+        conversation_id,
+        message_id,
+        reply_to_message_id,
+        reply_to_snippet,
+      }) => {
+        if (conversation_id !== conversationId) return;
+        setIsStreaming(true);
+        // The assistant row exists now — promote pending user bubbles to
+        // delivered and remember which message this turn is answering so the
+        // quote can show as the reply streams in.
+        markPendingUserMessagesSent(conversation_id);
+        setStreamingReply({
+          messageId: message_id,
+          replyToMessageId: reply_to_message_id ?? null,
+          snippet: reply_to_snippet ?? null,
+        });
+      },
       onDelta: ({ conversation_id, message_id, text }) => {
         if (conversation_id !== conversationId) return;
         setIsStreaming(true);
@@ -340,9 +442,16 @@ export function ChatScreen({
         if (conversation_id !== conversationId) return;
         pendingCitationsRef.current = citations;
       },
-      onComplete: ({ conversation_id, message_id, suggestions: sug }) => {
+      onComplete: ({
+        conversation_id,
+        message_id,
+        suggestions: sug,
+        reply_to_message_id,
+        reply_to_snippet,
+      }) => {
         if (conversation_id !== conversationId) return;
         setIsStreaming(false);
+        setStreamingReply(null);
         const streamContent =
           useSmileaiStore.getState().streamingText[conversation_id] ?? "";
         if (streamContent) {
@@ -353,6 +462,10 @@ export function ChatScreen({
             pendingCitationsRef.current.length > 0
               ? pendingCitationsRef.current
               : undefined,
+            {
+              message_id: reply_to_message_id ?? null,
+              snippet: reply_to_snippet ?? null,
+            },
           );
           pendingCitationsRef.current = [];
         }
@@ -395,6 +508,7 @@ export function ChatScreen({
       },
       onError: ({ message }) => {
         setIsStreaming(false);
+        setStreamingReply(null);
         showToast({ variant: "error", title: message });
       },
     });
@@ -414,14 +528,20 @@ export function ChatScreen({
     showToast,
   ]);
 
+  const wasSocketConnectedRef = useRef(isConnected);
   useEffect(() => {
-    if (!isConnected || !conversationId) return;
+    if (!conversationId) return;
+    const reconnected = !wasSocketConnectedRef.current && isConnected;
+    wasSocketConnectedRef.current = isConnected;
+    if (!reconnected) return;
+
     const reconnectBackfill = async () => {
       const msgs = useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
       const after = lastAssistantMessageId(msgs);
       if (!after) return;
       try {
         const res = await backfillSmileMessages(conversationId, { after });
+        if (activeConversationRef.current !== conversationId) return;
         const items = res.data?.items ?? [];
         if (items.length > 0) {
           const current = useSmileaiStore.getState().messagesByConversation[conversationId] ?? [];
@@ -436,14 +556,36 @@ export function ChatScreen({
     reconnectBackfill();
   }, [isConnected, conversationId, setMessages]);
 
+  // Memoised: the first send creates the conversation; concurrent sends in
+  // the same burst await the same promise instead of spawning duplicates.
+  const ensureConversation = useCallback(async (): Promise<string | null> => {
+    if (conversationId) return conversationId;
+    if (createdConvIdRef.current) return createdConvIdRef.current;
+    if (!creatingConvPromiseRef.current) {
+      creatingConvPromiseRef.current = (async () => {
+        const created = await startConversation();
+        if (created) {
+          createdConvIdRef.current = created;
+          onConversationCreated(created);
+        } else {
+          creatingConvPromiseRef.current = null;
+        }
+        return created;
+      })();
+    }
+    return creatingConvPromiseRef.current;
+  }, [conversationId, startConversation, onConversationCreated]);
+
   const sendUserText = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || isStreaming || isClosed) return;
+      // Never lock on a streaming reply — the user can keep firing messages
+      // and the backend coalesces them. Only block closed / handed-off chats.
+      if (!trimmed || isClosed || isHandedOff) return;
 
-      // 1. Show the bubble immediately so the tap feels instant. If the chat
-      //    has no server id yet, park the optimistic message in the dedicated
-      //    pending bucket and migrate after creation.
+      // 1. Show the bubble immediately. Until a server id exists, park it in
+      //    the shared pending bucket (migrated on conversation creation by the
+      //    effect above, which flips the render key at the same time).
       const clientMessageId = Crypto.randomUUID();
       const optimistic: SmileMessage = {
         id: clientMessageId,
@@ -452,59 +594,44 @@ export function ChatScreen({
         createdAt: new Date().toISOString(),
         localStatus: "sending",
       };
-      const initialKey = conversationId ?? PENDING_CONVERSATION_KEY;
-      appendUserMessage(initialKey, optimistic);
+      const optimisticKey = conversationId ?? PENDING_CONVERSATION_KEY;
+      appendUserMessage(optimisticKey, optimistic);
+      atBottomRef.current = true;
+      requestAnimationFrame(() => scrollToBottom(false));
       setDraftText("");
       setIsStreaming(true);
 
-      // 2. Make sure a conversation exists. We deliberately do NOT pass
-      //    `initial_text` here: doing so makes the backend run the first
-      //    turn AND we'd separately emit `ai.message.user` below — producing
-      //    two assistant replies for the same prompt. One path only.
-      let convId = conversationId;
+      // 2. Ensure a conversation exists (memoised so a burst can't create
+      //    duplicates). We deliberately do NOT pass `initial_text`.
+      const convId = await ensureConversation();
       if (!convId) {
-        const created = await startConversation();
-        if (!created) {
-          showToast({ variant: "error", title: "Could not start chat. Try again." });
-          setIsStreaming(false);
-          return;
-        }
-        convId = created;
-        migrateOptimisticMessages(PENDING_CONVERSATION_KEY, convId);
-        onConversationCreated(convId);
+        showToast({ variant: "error", title: "Could not start chat. Try again." });
+        setIsStreaming(false);
+        return;
       }
 
-      // 3. Emit and flip the bubble status to delivered. If the socket is
-      //    still negotiating, retry briefly; we keep the clock icon during
-      //    retries so the user can see it's queued, not lost.
-      let attempts = 0;
-      const trySend = () => {
-        if (socket?.connected) {
-          emitSend(convId!, clientMessageId, trimmed);
-          markMessageSent(convId!, clientMessageId);
-        } else if (attempts < 3) {
-          attempts += 1;
-          setTimeout(trySend, 800);
-        } else {
-          showToast({ variant: "error", title: "Connection lost. Pull to refresh." });
-          setIsStreaming(false);
-        }
-      };
-      trySend();
+      // 3. Emit. If the socket is down the message is queued and flushed on
+      //    reconnect — never dropped. Tick to delivered only when it actually
+      //    went out; a queued message keeps its clock until the reply lands.
+      const delivery = emitSend(convId, clientMessageId, trimmed);
+      if (delivery === "sent") {
+        markMessageSent(convId, clientMessageId);
+      } else {
+        // Queued offline: don't imply Smiley is already replying.
+        setIsStreaming(false);
+      }
     },
     [
       conversationId,
-      startConversation,
-      onConversationCreated,
+      ensureConversation,
       appendUserMessage,
-      migrateOptimisticMessages,
       markMessageSent,
       setDraftText,
       emitSend,
-      socket,
       showToast,
-      isStreaming,
       isClosed,
+      isHandedOff,
+      scrollToBottom,
     ],
   );
 
@@ -573,43 +700,32 @@ export function ChatScreen({
     }
   };
 
-  if (showFullLoader) {
-    return <FullPageLoader message={`Loading ${SMILEY_ASSISTANT_NAME}…`} />;
-  }
-
-  if (error) {
-    return (
-      <View className="flex-1 items-center justify-center px-6">
-        <Text className="text-center text-lg">{error}</Text>
-        <Pressable
-          className="mt-4"
-          onPress={() => router.push("/(app)/support/chat")}
-          accessibilityRole="button"
-          accessibilityLabel="Talk to a human"
-        >
-          <Text className="font-semibold text-primary">Talk to a human</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
   const isSmileBusy =
     isStreaming && !pendingConfirmation && !isHandedOff;
 
+  // Title shown under "Smiley" in the header — derived from the first user
+  // message (same basis the server uses for the conversation-list title), so
+  // the user sees what this chat is about instead of a second "Smiley".
+  const conversationTitle = useMemo(() => {
+    const firstUser = messages.find((m) => m.role === "user");
+    const t = firstUser?.content.trim();
+    if (!t) return null;
+    return t.length > 32 ? `${t.slice(0, 31).trimEnd()}…` : t;
+  }, [messages]);
+
+  // While Smiley prepares a reply (thinking, running an action, or streaming),
+  // the header reads like a human support queue rather than a chatbot status —
+  // no "is typing…"/"is thinking…" personification.
   const statusLabel = isClosed
     ? "Closed"
     : isSmileBusy
-      ? streamingText
-        ? `${SMILEY_ASSISTANT_NAME} is typing…`
-        : toolBadge
-          ? "Working on it…"
-          : `${SMILEY_ASSISTANT_NAME} is thinking…`
+      ? "Awaiting support response"
       : pendingConfirmation
         ? "Waiting for you…"
         : toolBadge
-          ? "Working on it…"
+          ? "Awaiting support response"
           : isConnected
-            ? SMILEY_ASSISTANT_NAME
+            ? (conversationTitle ?? "Customer support")
             : "Reconnecting…";
 
   const footerBottomInset =
@@ -641,8 +757,11 @@ export function ChatScreen({
         >
           <SmileAvatar size={36} />
           <View style={{ flex: 1 }}>
-            <Text className="text-lg font-semibold">{SMILEY_ASSISTANT_NAME}</Text>
+            <Text className="text-lg font-semibold" numberOfLines={1}>
+              {SMILEY_ASSISTANT_NAME}
+            </Text>
             <Text
+              numberOfLines={1}
               className={isSmileBusy ? "text-xs" : "text-xs text-muted-foreground"}
               style={
                 isSmileBusy
@@ -733,7 +852,11 @@ export function ChatScreen({
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           contentContainerStyle={{ paddingBottom: 12 }}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          onScroll={handleScroll}
+          scrollEventThrottle={64}
+          onContentSizeChange={() => {
+            if (atBottomRef.current) scrollToBottom(false);
+          }}
           accessibilityLiveRegion="polite"
         >
         {showWelcome ? (
@@ -744,7 +867,43 @@ export function ChatScreen({
           />
         ) : null}
 
-        {messages.map((m) => (
+        {awaitingNetwork && messages.length === 0 ? (
+          <View className="items-center justify-center py-16">
+            <ActivityIndicator
+              size="large"
+              color={isDark ? "#FB923C" : "#F58220"}
+            />
+            <Text className="mt-3 text-sm text-muted-foreground">
+              Loading conversation…
+            </Text>
+          </View>
+        ) : null}
+
+        {error && messages.length === 0 && !awaitingNetwork ? (
+          <View className="items-center px-4 py-12">
+            <Text className="text-center text-base">{error}</Text>
+            <Pressable
+              className="mt-4"
+              onPress={() => router.push("/(app)/support/chat")}
+              accessibilityRole="button"
+              accessibilityLabel="Talk to a human"
+            >
+              <Text className="font-semibold text-primary">Talk to a human</Text>
+            </Pressable>
+            {conversationId ? (
+              <Pressable
+                className="mt-3"
+                onPress={() => void loadConversation(conversationId, { force: true })}
+                accessibilityRole="button"
+                accessibilityLabel="Retry loading conversation"
+              >
+                <Text className="font-semibold text-primary">Try again</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        {messages.map((m, idx) => (
           <MessageBubble
             key={m.id}
             role={m.role}
@@ -752,6 +911,16 @@ export function ChatScreen({
             citations={m.citations}
             localStatus={m.localStatus}
             createdAt={m.createdAt}
+            replyToSnippet={
+              m.role === "assistant" &&
+              shouldShowReplyQuote(
+                m.reply_to_snippet,
+                m.reply_to_message_id,
+                messages[idx - 1],
+              )
+                ? m.reply_to_snippet ?? undefined
+                : undefined
+            }
             showCitationChips={showSuggestedReplies}
             onCitationPress={
               !showSuggestedReplies || isSmileBusy
@@ -768,7 +937,21 @@ export function ChatScreen({
             m.role === "assistant" &&
             m.content.trim() === streamingText.trim(),
         ) ? (
-          <MessageBubble role="assistant" content={streamingText} plainText />
+          <MessageBubble
+            role="assistant"
+            content={streamingText}
+            plainText
+            replyToSnippet={
+              streamingReply &&
+              shouldShowReplyQuote(
+                streamingReply.snippet,
+                streamingReply.replyToMessageId,
+                messages[messages.length - 1],
+              )
+                ? streamingReply.snippet ?? undefined
+                : undefined
+            }
+          />
         ) : null}
 
         {toolBadge ? (
@@ -804,7 +987,7 @@ export function ChatScreen({
                 <QuickReplyBar
                   suggestions={suggestions}
                   onSelect={sendUserText}
-                  disabled={isSmileBusy}
+                  disabled={false}
                 />
               ) : null}
 
@@ -812,8 +995,7 @@ export function ChatScreen({
                 value={draftText}
                 onChange={setDraftText}
                 onSend={() => sendUserText(draftText)}
-                disabled={isHandedOff || isSmileBusy}
-                isThinking={isSmileBusy && !isHandedOff}
+                disabled={isHandedOff}
                 placeholder={
                   isHandedOff
                     ? "An agent will reply here soon"

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, router } from "expo-router";
 
@@ -78,6 +79,20 @@ export default function SmileLandingScreen() {
   useEffect(() => {
     void loadConversations();
   }, [loadConversations]);
+
+  // When the user returns from a chat, silently refresh so a newly created
+  // conversation appears without a manual reload. Skip the first focus (mount
+  // already loads above) and never show a spinner — the list just updates.
+  const isFirstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return;
+      }
+      void refreshConversationsSilently();
+    }, [refreshConversationsSilently]),
+  );
 
   const { resumable, closed } = useMemo(() => {
     const r: SmileConversationListItem[] = [];
@@ -312,8 +327,8 @@ export default function SmileLandingScreen() {
               Start a conversation with {SMILEY_ASSISTANT_NAME}
             </Text>
             <Text className="text-center text-xs text-muted-foreground">
-              Ask about your wallet, KYC, transactions, airtime, data, cards
-              and bills — or talk to a human.
+              Ask about your airtime, data, bills, transactions and cashback —
+              or talk to a human.
             </Text>
           </Pressable>
         ) : null}

@@ -42,7 +42,7 @@ export function AskSmileCard() {
       <View className="ml-3 flex-1">
         <Text className="font-semibold">Ask {SMILEY_ASSISTANT_NAME} anything</Text>
         <Text className="mt-0.5 text-sm text-muted-foreground">
-          Transactions, KYC, limits — or talk to a human
+          Transactions, airtime, data, cashback — or talk to a human
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color={isDark ? "#94A3B8" : "#64748B"} />

@@ -28,6 +28,12 @@ type Props = {
   showCitationChips?: boolean;
   /** When false, long-press copy is disabled (e.g. non-text cards). */
   copyable?: boolean;
+  /**
+   * WhatsApp-style quote of the user message this assistant reply answers.
+   * Shown only when that message isn't directly above the reply (i.e. the
+   * user sent more messages while Smiley was working).
+   */
+  replyToSnippet?: string;
 };
 
 function formatBubbleTime(iso?: string): string | null {
@@ -51,6 +57,7 @@ export function MessageBubble({
   onCitationPress,
   showCitationChips = true,
   copyable = true,
+  replyToSnippet,
 }: Props) {
   const { isDark } = useAppTheme();
   const bubbleRef = useRef<View>(null);
@@ -114,6 +121,37 @@ export function MessageBubble({
             paddingBottom: 6,
           }}
         >
+        {!isUser && replyToSnippet ? (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              borderLeftWidth: 3,
+              borderLeftColor: isDark ? "#FB923C" : "#F97316",
+              backgroundColor: isDark
+                ? "rgba(255,255,255,0.06)"
+                : "rgba(15,23,42,0.05)",
+              borderRadius: 6,
+              paddingVertical: 4,
+              paddingHorizontal: 8,
+              marginBottom: 8,
+            }}
+          >
+            <Ionicons
+              name="arrow-undo-outline"
+              size={12}
+              color={isDark ? "#FB923C" : "#C2520A"}
+            />
+            <Text
+              numberOfLines={1}
+              style={{ flex: 1, fontSize: 12, color: isDark ? "#CBD5E1" : "#475569" }}
+            >
+              <Text style={{ fontWeight: "600" }}>You: </Text>
+              {replyToSnippet}
+            </Text>
+          </View>
+        ) : null}
         {isUser ? (
           <Text style={{ color: textColor, fontSize: 15, lineHeight: 22 }}>{content}</Text>
         ) : (

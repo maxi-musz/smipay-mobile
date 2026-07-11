@@ -114,7 +114,7 @@ export default function SmileaiSettingsScreen() {
             <Text className="mt-1 text-xs text-muted-foreground">
               {adminReadOnly
                 ? `Disabled by admin. ${SMILEY_ASSISTANT_NAME} is in read-only mode for everyone right now.`
-                : `Lets ${SMILEY_ASSISTANT_NAME} help with airtime top-ups, transfers, and other write actions on your behalf.`}
+                : `Lets ${SMILEY_ASSISTANT_NAME} help with airtime top-ups, bill payments, and other actions on your behalf.`}
             </Text>
           </View>
           <Switch
