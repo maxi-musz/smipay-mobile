@@ -27,14 +27,17 @@ import {
   requestSmileStepUp,
   submitSmileRating,
 } from "@/api/services/smileai";
+import { fetchConversationById } from "@/api";
 import { PaymentAuthorizationModal } from "@/features/payment-authorization/payment-authorization-modal";
 import { SmileaiSocketContext } from "@/context/smileai-socket";
+import { SupportSocketContext } from "@/context/support-socket";
 import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useToastStore } from "@/components/ui/toast";
 import { useAuthStore, useSmileaiStore } from "@/store";
 import type { SmileCitation, SmileMessage, SmileConfirmRequestedPayload } from "@/types/smileai";
+import type { SupportMessage } from "@/types";
 import { MessageBubble } from "./MessageBubble";
 import { Composer } from "./Composer";
 import { ConfirmActionCard } from "./ConfirmActionCard";
@@ -55,6 +58,43 @@ const TOOL_LABELS: Record<string, string> = {
   get_transaction_by_reference: "Finding that transaction…",
   escalate_to_human: "Connecting you to support…",
 };
+
+// Friendly titles for the confirmation card. Falls back to the humanised action
+// name; only overrides where the raw name would read poorly or expose Smiley as
+// a bot (e.g. "escalate to human").
+const CONFIRM_TITLES: Record<string, string> = {
+  escalate_to_human: "Connect you to a specialist",
+};
+
+function firstWord(name?: string | null): string {
+  if (!name?.trim()) return "";
+  return name.trim().split(/\s+/)[0] ?? "";
+}
+
+/**
+ * Map a human support-agent message (from the bridged support conversation)
+ * into the Smiley thread's message shape. `senderName` marks it as an agent
+ * bubble so the UI labels it with the specialist's name. Only agent messages
+ * are merged in — the user's own messages already live in the Smiley thread.
+ */
+function agentMessageToSmile(
+  msg: SupportMessage,
+  fallbackName: string | null,
+): SmileMessage {
+  return {
+    id: msg.id,
+    role: "assistant",
+    content: msg.message,
+    createdAt:
+      msg.created_at ??
+      (msg as { createdAt?: string }).createdAt ??
+      new Date().toISOString(),
+    // Each agent message carries its own sender (the admin who sent it), so when
+    // more than one specialist handles a chat, every message shows who wrote it.
+    // Fall back to the current claimant, then a generic label, for empty names.
+    senderName: msg.sender_name?.trim() || fallbackName?.trim() || "Specialist",
+  };
+}
 
 /**
  * Store bucket where optimistic user messages live before a real
@@ -166,6 +206,18 @@ export function ChatScreen({
   const status = statusByConv[convKey] ?? "active";
   const pendingConfirmation = pendingByConv[convKey] ?? null;
   const supportId = supportByConv[convKey] ?? null;
+
+  // Human-handoff bridge (client-side): once this Smiley chat is handed off, the
+  // specialist's replies + identity live in the linked support conversation. We
+  // join that conversation over the support socket and merge the AGENT messages
+  // into this same thread so the user never leaves the Smiley screen. The user's
+  // own messages already appear here (the backend bridges them), so we pull in
+  // only agent-authored messages to avoid duplicates.
+  const {
+    socket: supportSocket,
+    joinConversation: joinSupportRoom,
+    leaveConversation: leaveSupportRoom,
+  } = useContext(SupportSocketContext);
   const suggestions = suggestionsByConv[convKey] ?? [];
   const toolBadge = toolBadgeByConv[convKey] ?? null;
   const draftText = ui.draftText;
@@ -196,6 +248,13 @@ export function ChatScreen({
   const [citationSheet, setCitationSheet] = useState<SmileCitation[] | null>(null);
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  // Agent messages + identity merged in from the linked support conversation
+  // while handed off. Kept in local state (not the Smiley store) so the two
+  // systems stay decoupled; merged for display in `displayMessages` below.
+  const [agentMessages, setAgentMessages] = useState<SmileMessage[]>([]);
+  const [agentName, setAgentName] = useState<string | null>(null);
+  const agentNameRef = useRef<string | null>(null);
+  agentNameRef.current = agentName;
   /** Reply target for the in-flight assistant turn (from ai.message.queued). */
   const [streamingReply, setStreamingReply] = useState<{
     messageId: string;
@@ -235,6 +294,78 @@ export function ChatScreen({
     ? !!ratedConversationIds[conversationId]
     : false;
   const showWelcome = !conversationId && messages.length === 0 && !awaitingNetwork;
+
+  // Reset merged agent state when switching between conversations.
+  useEffect(() => {
+    setAgentMessages([]);
+    setAgentName(null);
+  }, [conversationId]);
+
+  // While handed off, load the specialist's side once and join the support room
+  // so their replies flow into this same thread.
+  useEffect(() => {
+    if (!isHandedOff || !supportId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchConversationById(supportId);
+        const conv = res.data.conversation;
+        if (cancelled) return;
+        setAgentName(conv.assigned_admin_name ?? null);
+        setAgentMessages(
+          (conv.messages ?? [])
+            .filter((m) => !m.is_from_user)
+            .map((m) => agentMessageToSmile(m, conv.assigned_admin_name ?? null)),
+        );
+      } catch {
+        // Best-effort: live agent replies still arrive over the socket below.
+      }
+    })();
+    joinSupportRoom(supportId);
+    return () => {
+      cancelled = true;
+      leaveSupportRoom(supportId);
+    };
+  }, [isHandedOff, supportId, joinSupportRoom, leaveSupportRoom]);
+
+  // Live: merge new agent replies and the specialist's identity from the support
+  // socket. Only agent messages are merged — the user's own messages already
+  // render in this thread, and their echo (is_from_user) is skipped.
+  useEffect(() => {
+    if (!supportSocket || !supportId || !isHandedOff) return;
+    const onNewMessage = (data: {
+      conversation_id: string;
+      message: SupportMessage;
+    }) => {
+      if (data.conversation_id !== supportId || data.message.is_from_user) return;
+      setAgentMessages((prev) =>
+        prev.some((m) => m.id === data.message.id)
+          ? prev
+          : [...prev, agentMessageToSmile(data.message, agentNameRef.current)],
+      );
+    };
+    const onClaimed = (data: {
+      conversation_id: string;
+      assigned_admin_name: string;
+    }) => {
+      if (data.conversation_id !== supportId) return;
+      setAgentName(data.assigned_admin_name);
+    };
+    supportSocket.on("new_message", onNewMessage);
+    supportSocket.on("conversation_claimed", onClaimed);
+    return () => {
+      supportSocket.off("new_message", onNewMessage);
+      supportSocket.off("conversation_claimed", onClaimed);
+    };
+  }, [supportSocket, supportId, isHandedOff]);
+
+  // Smiley messages + merged agent messages, ordered by time for display.
+  const displayMessages = useMemo(() => {
+    if (agentMessages.length === 0) return messages;
+    return [...messages, ...agentMessages].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+  }, [messages, agentMessages]);
 
   // Sit the composer flush on the keyboard (same approach as support chat).
   useEffect(() => {
@@ -337,7 +468,7 @@ export function ChatScreen({
         } catch {
           if (activeConversationRef.current === convId) {
             setError(
-              `${SMILEY_ASSISTANT_NAME} is offline. Try again or talk to a human.`,
+              `${SMILEY_ASSISTANT_NAME} is offline. Try again, or connect to a specialist agent.`,
             );
           }
         } finally {
@@ -579,9 +710,11 @@ export function ChatScreen({
   const sendUserText = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      // Never lock on a streaming reply — the user can keep firing messages
-      // and the backend coalesces them. Only block closed / handed-off chats.
-      if (!trimmed || isClosed || isHandedOff) return;
+      // Never lock on a streaming reply — the user can keep firing messages and
+      // the backend coalesces them. Block only closed chats; when handed off the
+      // backend bridges the message to the specialist (no Smiley turn runs), so
+      // the user keeps chatting in this same thread.
+      if (!trimmed || isClosed) return;
 
       // 1. Show the bubble immediately. Until a server id exists, park it in
       //    the shared pending bucket (migrated on conversation creation by the
@@ -599,7 +732,9 @@ export function ChatScreen({
       atBottomRef.current = true;
       requestAnimationFrame(() => scrollToBottom(false));
       setDraftText("");
-      setIsStreaming(true);
+      // No Smiley turn runs while handed off (the message is bridged to the
+      // specialist), so don't show the "awaiting" streaming state in that case.
+      if (!isHandedOff) setIsStreaming(true);
 
       // 2. Ensure a conversation exists (memoised so a burst can't create
       //    duplicates). We deliberately do NOT pass `initial_text`.
@@ -718,15 +853,19 @@ export function ChatScreen({
   // no "is typing…"/"is thinking…" personification.
   const statusLabel = isClosed
     ? "Closed"
-    : isSmileBusy
-      ? "Awaiting support response"
-      : pendingConfirmation
-        ? "Waiting for you…"
-        : toolBadge
-          ? "Awaiting support response"
-          : isConnected
-            ? (conversationTitle ?? "Customer support")
-            : "Reconnecting…";
+    : isHandedOff
+      ? agentName
+        ? `${firstWord(agentName)} is attending to you`
+        : "Connecting you to a specialist…"
+      : isSmileBusy
+        ? "Awaiting support response"
+        : pendingConfirmation
+          ? "Waiting for you…"
+          : toolBadge
+            ? "Awaiting support response"
+            : isConnected
+              ? (conversationTitle ?? "Customer support")
+              : "Reconnecting…";
 
   const footerBottomInset =
     keyboardHeight > 0 ? keyboardHeight : Math.max(insets.bottom, 12);
@@ -830,18 +969,7 @@ export function ChatScreen({
 
       {isHandedOff ? (
         <View className="px-4 pt-2">
-          <HandoffBanner
-            supportConversationId={supportId}
-            onViewSupport={
-              supportId
-                ? () =>
-                    router.push({
-                      pathname: "/(app)/support/chat",
-                      params: { id: supportId },
-                    })
-                : undefined
-            }
-          />
+          <HandoffBanner agentName={agentName} />
         </View>
       ) : null}
 
@@ -886,9 +1014,9 @@ export function ChatScreen({
               className="mt-4"
               onPress={() => router.push("/(app)/support/chat")}
               accessibilityRole="button"
-              accessibilityLabel="Talk to a human"
+              accessibilityLabel="Connect to a specialist"
             >
-              <Text className="font-semibold text-primary">Talk to a human</Text>
+              <Text className="font-semibold text-primary">Connect to a specialist</Text>
             </Pressable>
             {conversationId ? (
               <Pressable
@@ -903,7 +1031,7 @@ export function ChatScreen({
           </View>
         ) : null}
 
-        {messages.map((m, idx) => (
+        {displayMessages.map((m, idx) => (
           <MessageBubble
             key={m.id}
             role={m.role}
@@ -911,12 +1039,13 @@ export function ChatScreen({
             citations={m.citations}
             localStatus={m.localStatus}
             createdAt={m.createdAt}
+            senderName={m.senderName ?? undefined}
             replyToSnippet={
               m.role === "assistant" &&
               shouldShowReplyQuote(
                 m.reply_to_snippet,
                 m.reply_to_message_id,
-                messages[idx - 1],
+                displayMessages[idx - 1],
               )
                 ? m.reply_to_snippet ?? undefined
                 : undefined
@@ -962,7 +1091,10 @@ export function ChatScreen({
 
         {pendingConfirmation ? (
           <ConfirmActionCard
-            title={pendingConfirmation.action.replace(/_/g, " ")}
+            title={
+              CONFIRM_TITLES[pendingConfirmation.action] ??
+              pendingConfirmation.action.replace(/_/g, " ")
+            }
             description={pendingConfirmation.copy}
             safety={pendingConfirmation.safety}
             onCancel={() => handleConfirm(false)}
@@ -995,10 +1127,11 @@ export function ChatScreen({
                 value={draftText}
                 onChange={setDraftText}
                 onSend={() => sendUserText(draftText)}
-                disabled={isHandedOff}
                 placeholder={
                   isHandedOff
-                    ? "An agent will reply here soon"
+                    ? agentName
+                      ? `Message ${firstWord(agentName)}…`
+                      : "Message the specialist…"
                     : `Message ${SMILEY_ASSISTANT_NAME}…`
                 }
               />

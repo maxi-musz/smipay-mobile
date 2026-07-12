@@ -12,16 +12,17 @@ type Props = {
   value: string;
   onChange: (text: string) => void;
   onSend: () => void;
-  /** Only true when the chat is handed off to a human or closed — never while Smiley is replying. */
+  /** Reserved to hard-block input; not used for handed-off chats, which stay interactive. */
   disabled?: boolean;
   placeholder?: string;
 };
 
 /**
- * Message input. Intentionally never locks while Smiley is generating a
- * reply — the user can keep typing and firing off messages, WhatsApp-style;
- * the backend coalesces them. `disabled` is reserved for handed-off / closed
- * conversations where the composer genuinely shouldn't accept input.
+ * Message input. Intentionally never locks while Smiley is generating a reply —
+ * the user can keep typing and firing off messages, WhatsApp-style; the backend
+ * coalesces them. After a handoff the composer also stays active: the backend
+ * bridges those messages to the specialist. `disabled` remains available for any
+ * future state that must genuinely block input.
  */
 export function Composer({
   value,

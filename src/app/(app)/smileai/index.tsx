@@ -328,7 +328,7 @@ export default function SmileLandingScreen() {
             </Text>
             <Text className="text-center text-xs text-muted-foreground">
               Ask about your airtime, data, bills, transactions and cashback —
-              or talk to a human.
+              or connect to a specialist.
             </Text>
           </Pressable>
         ) : null}

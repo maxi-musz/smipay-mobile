@@ -26,6 +26,12 @@ type Props = {
   onCitationPress?: (citation: SmileCitation) => void;
   /** When false, hides the tappable topic chips under assistant replies. */
   showCitationChips?: boolean;
+  /**
+   * Name of a human support agent when this bubble is theirs (post-handoff).
+   * Renders a small name label so the user can tell the specialist apart from
+   * Smiley. Undefined for Smiley/user messages.
+   */
+  senderName?: string;
   /** When false, long-press copy is disabled (e.g. non-text cards). */
   copyable?: boolean;
   /**
@@ -58,6 +64,7 @@ export function MessageBubble({
   showCitationChips = true,
   copyable = true,
   replyToSnippet,
+  senderName,
 }: Props) {
   const { isDark } = useAppTheme();
   const bubbleRef = useRef<View>(null);
@@ -102,7 +109,7 @@ export function MessageBubble({
       accessibilityLabel={
         isUser
           ? `You: ${content}${accessibilityStatus}`
-          : `${SMILEY_ASSISTANT_NAME}: ${content}`
+          : `${senderName ?? SMILEY_ASSISTANT_NAME}: ${content}`
       }
     >
       <Pressable
@@ -121,6 +128,18 @@ export function MessageBubble({
             paddingBottom: 6,
           }}
         >
+        {!isUser && senderName ? (
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: "600",
+              color: isDark ? "#7DD3FC" : "#0369A1",
+              marginBottom: 4,
+            }}
+          >
+            {senderName}
+          </Text>
+        ) : null}
         {!isUser && replyToSnippet ? (
           <View
             style={{

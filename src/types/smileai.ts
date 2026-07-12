@@ -41,6 +41,13 @@ export interface SmileMessage {
    */
   reply_to_message_id?: string | null;
   reply_to_snippet?: string | null;
+  /**
+   * Set only on messages authored by a human support agent after a handoff,
+   * merged into the thread from the support conversation. Drives the agent-name
+   * label and distinguishes an agent bubble from Smiley's. Absent on Smiley and
+   * user messages.
+   */
+  senderName?: string | null;
 }
 
 export interface SmileConversationListItem {
