@@ -31,6 +31,7 @@ export default function HomeScreen() {
   const wasLockedRef = useRef(isLocked);
   const didPrefetchRef = useRef(false);
   const appStateRef = useRef(AppState.currentState);
+  const didInitialFocusRef = useRef(false);
 
   const [addMoneyModalVisible, setAddMoneyModalVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -45,7 +46,18 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       setPinPromptSnoozed(false);
-    }, []),
+      // The initial mount already fetches via the effect below, so skip that
+      // first focus. On every RE-focus — e.g. returning from a purchase or a
+      // transaction receipt — silently revalidate so new transactions and
+      // balances appear without a manual pull-to-refresh (Opay/Kuda behaviour).
+      if (!didInitialFocusRef.current) {
+        didInitialFocusRef.current = true;
+        return;
+      }
+      if (!isLocked) {
+        void refreshHomepageSilently();
+      }
+    }, [isLocked, refreshHomepageSilently]),
   );
 
   // First mount: kick off a fetch. If cached data is rehydrated from disk the

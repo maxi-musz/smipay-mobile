@@ -289,11 +289,10 @@ function buildHrefFromNotificationData(
   const screen = dataString(data, "screen");
   const id = dataString(data, "id");
 
-  if (screen === "support" && id) {
-    return { pathname: "/(app)/support/chat", params: { id } };
-  }
+  // Legacy "support" deep-links: the standalone support screens were retired in
+  // favour of the unified Smiley thread, so route any such notification to Smiley.
   if (screen === "support") {
-    return "/(app)/support";
+    return "/(app)/smileai";
   }
   if (screen === "smileai" && id) {
     return { pathname: "/(app)/smileai/chat/[id]", params: { id } };

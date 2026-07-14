@@ -241,6 +241,11 @@ export function ChatScreen({
   const setToolBadge = useSmileaiStore.use.setToolBadge();
   const setDraftText = useSmileaiStore.use.setDraftText();
   const setLastOpenConversationId = useSmileaiStore.use.setLastOpenConversationId();
+  const setStoreAgentName = useSmileaiStore.use.setAgentName();
+  const storedAgentNameByConv = useSmileaiStore.use.agentNameByConversation();
+  const storedAgentName = conversationId
+    ? (storedAgentNameByConv[conversationId] ?? null)
+    : null;
 
   /** True only while the message list area is waiting on its first fetch. */
   const [awaitingNetwork, setAwaitingNetwork] = useState(false);
@@ -248,13 +253,21 @@ export function ChatScreen({
   const [citationSheet, setCitationSheet] = useState<SmileCitation[] | null>(null);
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  // Agent messages + identity merged in from the linked support conversation
-  // while handed off. Kept in local state (not the Smiley store) so the two
-  // systems stay decoupled; merged for display in `displayMessages` below.
+  // Agent messages merged from the linked support conversation. Agent *identity*
+  // is persisted in the Smile store so reopening a chat does not flash
+  // "Connecting…" after Mayowa (or any specialist) has already claimed it.
   const [agentMessages, setAgentMessages] = useState<SmileMessage[]>([]);
-  const [agentName, setAgentName] = useState<string | null>(null);
-  const agentNameRef = useRef<string | null>(null);
+  const [agentName, setAgentNameState] = useState<string | null>(storedAgentName);
+  const agentNameRef = useRef<string | null>(storedAgentName);
   agentNameRef.current = agentName;
+
+  const setAgentName = useCallback(
+    (name: string | null) => {
+      setAgentNameState(name);
+      if (conversationId) setStoreAgentName(conversationId, name);
+    },
+    [conversationId, setStoreAgentName],
+  );
   /** Reply target for the in-flight assistant turn (from ai.message.queued). */
   const [streamingReply, setStreamingReply] = useState<{
     messageId: string;
@@ -289,16 +302,26 @@ export function ChatScreen({
   );
 
   const isHandedOff = status === "handed_off" || status === "handoff_pending";
+  const isHandoffConnecting = status === "handoff_pending";
+  // Prefer live/persisted name; fall back to a name already present on merged agent bubbles.
+  const effectiveAgentName =
+    agentName ??
+    agentMessages.find((m) => !!m.senderName?.trim())?.senderName ??
+    null;
   const isClosed = isTerminalConversationStatus(status);
   const hasRated = conversationId
     ? !!ratedConversationIds[conversationId]
     : false;
   const showWelcome = !conversationId && messages.length === 0 && !awaitingNetwork;
 
-  // Reset merged agent state when switching between conversations.
+  // Reset merged agent messages when switching chats; restore known agent name
+  // from the persisted store so the banner never flashes "Connecting…".
   useEffect(() => {
     setAgentMessages([]);
-    setAgentName(null);
+    const cached = conversationId
+      ? (useSmileaiStore.getState().agentNameByConversation[conversationId] ?? null)
+      : null;
+    setAgentNameState(cached);
   }, [conversationId]);
 
   // While handed off, load the specialist's side once and join the support room
@@ -311,11 +334,22 @@ export function ChatScreen({
         const res = await fetchConversationById(supportId);
         const conv = res.data.conversation;
         if (cancelled) return;
-        setAgentName(conv.assigned_admin_name ?? null);
+        const claimedName =
+          conv.assigned_admin_name?.trim() ||
+          (conv.messages ?? []).find((m) => !m.is_from_user && m.sender_name?.trim())
+            ?.sender_name ||
+          null;
+        // Never wipe a known agent name with null during a background refetch.
+        if (claimedName) setAgentName(claimedName);
         setAgentMessages(
           (conv.messages ?? [])
             .filter((m) => !m.is_from_user)
-            .map((m) => agentMessageToSmile(m, conv.assigned_admin_name ?? null)),
+            .map((m) =>
+              agentMessageToSmile(
+                m,
+                claimedName ?? agentNameRef.current ?? m.sender_name,
+              ),
+            ),
         );
       } catch {
         // Best-effort: live agent replies still arrive over the socket below.
@@ -854,9 +888,11 @@ export function ChatScreen({
   const statusLabel = isClosed
     ? "Closed"
     : isHandedOff
-      ? agentName
-        ? `${firstWord(agentName)} is attending to you`
-        : "Connecting you to a specialist…"
+      ? effectiveAgentName
+        ? `${firstWord(effectiveAgentName)} is attending to you`
+        : isHandoffConnecting
+          ? "Connecting you to a specialist…"
+          : "You're with support"
       : isSmileBusy
         ? "Awaiting support response"
         : pendingConfirmation
@@ -969,7 +1005,10 @@ export function ChatScreen({
 
       {isHandedOff ? (
         <View className="px-4 pt-2">
-          <HandoffBanner agentName={agentName} />
+          <HandoffBanner
+            agentName={effectiveAgentName}
+            isConnecting={isHandoffConnecting && !effectiveAgentName}
+          />
         </View>
       ) : null}
 
@@ -1010,17 +1049,9 @@ export function ChatScreen({
         {error && messages.length === 0 && !awaitingNetwork ? (
           <View className="items-center px-4 py-12">
             <Text className="text-center text-base">{error}</Text>
-            <Pressable
-              className="mt-4"
-              onPress={() => router.push("/(app)/support/chat")}
-              accessibilityRole="button"
-              accessibilityLabel="Connect to a specialist"
-            >
-              <Text className="font-semibold text-primary">Connect to a specialist</Text>
-            </Pressable>
             {conversationId ? (
               <Pressable
-                className="mt-3"
+                className="mt-4"
                 onPress={() => void loadConversation(conversationId, { force: true })}
                 accessibilityRole="button"
                 accessibilityLabel="Retry loading conversation"
@@ -1129,8 +1160,8 @@ export function ChatScreen({
                 onSend={() => sendUserText(draftText)}
                 placeholder={
                   isHandedOff
-                    ? agentName
-                      ? `Message ${firstWord(agentName)}…`
+                    ? effectiveAgentName
+                      ? `Message ${firstWord(effectiveAgentName)}…`
                       : "Message the specialist…"
                     : `Message ${SMILEY_ASSISTANT_NAME}…`
                 }

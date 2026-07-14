@@ -6,10 +6,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, router } from "expo-router";
 
 import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
+import { isOtaDebugUser } from "@/constants/ota-debug-marker";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import { useSmileaiStore } from "@/store";
+import { useAuthStore, useSmileaiStore } from "@/store";
 import type {
   AIConversationStatus,
   SmileConversationListItem,
@@ -67,12 +68,15 @@ function formatTimeAgo(dateStr: string | null): string {
 
 export default function SmileLandingScreen() {
   const { isDark } = useAppTheme();
+  const user = useAuthStore.use.user();
+  const showSettingsGear = isOtaDebugUser(user?.email);
   const items = useSmileaiStore.use.conversations();
   const isLoadingConversations = useSmileaiStore.use.isLoadingConversations();
   const isRefreshingConversations = useSmileaiStore.use.isRefreshingConversations();
   const conversationsLoadError = useSmileaiStore.use.conversationsLoadError();
   const loadConversations = useSmileaiStore.use.loadConversations();
   const refreshConversationsSilently = useSmileaiStore.use.refreshConversationsSilently();
+  const refreshConversationsFromPull = useSmileaiStore.use.refreshConversationsFromPull();
   const setStatus = useSmileaiStore.use.setStatus();
   const [showClosed, setShowClosed] = useState(false);
 
@@ -90,7 +94,7 @@ export default function SmileLandingScreen() {
         isFirstFocus.current = false;
         return;
       }
-      void refreshConversationsSilently();
+      void refreshConversationsSilently({ force: true });
     }, [refreshConversationsSilently]),
   );
 
@@ -187,22 +191,24 @@ export default function SmileLandingScreen() {
               New chat
             </Text>
           </Pressable>
-          <Pressable
-            onPress={() => router.push("/(app)/smileai/settings")}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`${SMILEY_ASSISTANT_NAME} settings`}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              backgroundColor: iconBtnBg,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Ionicons name="settings-outline" size={19} color={iconBtnFg} />
-          </Pressable>
+          {showSettingsGear ? (
+            <Pressable
+              onPress={() => router.push("/(app)/smileai/settings")}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`${SMILEY_ASSISTANT_NAME} settings`}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: iconBtnBg,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="settings-outline" size={19} color={iconBtnFg} />
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
@@ -212,7 +218,7 @@ export default function SmileLandingScreen() {
         refreshControl={
           <RefreshControl
             refreshing={isRefreshingConversations}
-            onRefresh={() => void refreshConversationsSilently()}
+            onRefresh={() => void refreshConversationsFromPull()}
           />
         }
       >

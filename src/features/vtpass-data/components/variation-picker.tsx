@@ -7,6 +7,7 @@ import {
   dataPlanPriceNgn,
   formatNaira,
   isDataPlanAffordable,
+  sortDataPlansByAffordability,
 } from "@/features/vtpass-data/lib/constants";
 import type { DataVariation, DataVariationCategory } from "@/types/vtpass-data";
 
@@ -130,21 +131,23 @@ export function VariationPicker({
                 {category}
               </Text>
               <View className="gap-2">
-                {block.variations.map((v) => {
-                  const affordable = isDataPlanAffordable(v, maxPayable);
-                  return (
-                    <VariationItem
-                      key={v.variation_code}
-                      v={v}
-                      isSelected={selectedCode === v.variation_code}
-                      affordable={affordable}
-                      onSelect={() => {
-                        if (!affordable) return;
-                        onSelect(v);
-                      }}
-                    />
-                  );
-                })}
+                {sortDataPlansByAffordability(block.variations, maxPayable).map(
+                  (v) => {
+                    const affordable = isDataPlanAffordable(v, maxPayable);
+                    return (
+                      <VariationItem
+                        key={v.variation_code}
+                        v={v}
+                        isSelected={selectedCode === v.variation_code}
+                        affordable={affordable}
+                        onSelect={() => {
+                          if (!affordable) return;
+                          onSelect(v);
+                        }}
+                      />
+                    );
+                  },
+                )}
               </View>
             </View>
           );

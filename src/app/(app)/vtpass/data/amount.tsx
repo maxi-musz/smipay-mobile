@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { View } from "react-native";
 import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
-import { purchaseData, queryDataTransaction } from "@/api";
+import { purchaseData } from "@/api";
 import {
   DataHeader,
   WalletBalanceCard,
@@ -15,14 +15,10 @@ import {
   RecentDataList,
 } from "@/features/vtpass-data/components";
 import {
-  formatNaira,
   parseBalanceToNumber,
   getDataCashbackRate,
   computeCashbackToEarn,
   DATA_PHONE_REGEX,
-  POLL_FIRST_DELAY_MS,
-  POLL_INTERVAL_MS,
-  POLL_MAX_ELAPSED_MS,
 } from "@/features/vtpass-data/lib/constants";
 import { normalizeNgMobileDigits } from "@/features/vtpass-airtime/constants";
 import {
@@ -42,7 +38,7 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useHomepageStore } from "@/store";
 import { logPurchaseSuccess } from "@/lib/analytics";
-import { handleApiError } from "@/lib/errors";
+import { getFailedTransactionId, handleApiError } from "@/lib/errors";
 
 export default function DataAmountScreen() {
   const homepageData = useHomepageStore.use.data();
@@ -79,23 +75,10 @@ export default function DataAmountScreen() {
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [showContactMatchDisclaimer, setShowContactMatchDisclaimer] = useState(false);
   const [recentList, setRecentList] = useState<DataRecentEntry[]>([]);
-  const [successModal, setSuccessModal] = useState<{
-    visible: boolean;
-    message: string;
-  }>({ visible: false, message: "" });
   const [errorModal, setErrorModal] = useState<{
     visible: boolean;
     message: string;
   }>({ visible: false, message: "" });
-  const [processingModal, setProcessingModal] = useState<{
-    visible: boolean;
-    requestId: string | null;
-    message: string;
-  }>({ visible: false, requestId: null, message: "" });
-
-  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pollStartRef = useRef<number>(0);
-  const successPayloadRef = useRef<{ phone: string; serviceID: string } | null>(null);
 
   const amount = selectedVariation?.variation_amount
     ? parseFloat(String(selectedVariation.variation_amount))
@@ -116,100 +99,6 @@ export default function DataAmountScreen() {
       cancelled = true;
     };
   }, []);
-
-  const stopPolling = useCallback(() => {
-    if (pollTimeoutRef.current) {
-      clearTimeout(pollTimeoutRef.current);
-      pollTimeoutRef.current = null;
-    }
-  }, []);
-
-  const pollStatus = useCallback(
-    (requestId: string, isFirst: boolean) => {
-      queryDataTransaction({ request_id: requestId })
-        .then((res) => {
-          if (!res.success || !res.data) return;
-          const status = res.data.content?.transactions?.status ?? "";
-          const code = res.data.code ?? "";
-          if (status === "delivered" || code === "000") {
-            stopPolling();
-            const payload = successPayloadRef.current;
-            if (payload) {
-              addRecentData(payload.phone, payload.serviceID).then(() => {
-                getRecentData().then(setRecentList);
-              });
-              successPayloadRef.current = null;
-            }
-            setProcessingModal({ visible: false, requestId: null, message: "" });
-            void logPurchaseSuccess("data", amount, selectedProvider?.name);
-            setSuccessModal({
-              visible: true,
-              message: "Your data purchase was successful.",
-            });
-            return;
-          }
-          if (
-            code === "016" ||
-            code === "040" ||
-            status === "reversed" ||
-            status === "failed"
-          ) {
-            stopPolling();
-            setProcessingModal({ visible: false, requestId: null, message: "" });
-            setErrorModal({
-              visible: true,
-              message:
-                code === "040"
-                  ? "Transaction reversed."
-                  : "Transaction failed. You have been refunded.",
-            });
-            return;
-          }
-          const elapsed = Date.now() - pollStartRef.current;
-          if (elapsed >= POLL_MAX_ELAPSED_MS) {
-            stopPolling();
-            setProcessingModal({
-              visible: true,
-              requestId,
-              message:
-                "Your transaction is still processing. Please check back shortly.",
-            });
-            return;
-          }
-          pollTimeoutRef.current = setTimeout(
-            () => pollStatus(requestId, false),
-            isFirst ? POLL_FIRST_DELAY_MS : POLL_INTERVAL_MS,
-          );
-        })
-        .catch(() => {
-          const elapsed = Date.now() - pollStartRef.current;
-          if (elapsed >= POLL_MAX_ELAPSED_MS) {
-            stopPolling();
-            setProcessingModal({
-              visible: true,
-              requestId,
-              message:
-                "Your transaction is still processing. Please check back shortly.",
-            });
-            return;
-          }
-          pollTimeoutRef.current = setTimeout(
-            () => pollStatus(requestId, false),
-            POLL_INTERVAL_MS,
-          );
-        });
-    },
-    [stopPolling],
-  );
-
-  useEffect(() => () => stopPolling(), [stopPolling]);
-
-  const handleRefreshStatus = useCallback(() => {
-    const { requestId } = processingModal;
-    if (!requestId) return;
-    pollStartRef.current = Date.now();
-    pollStatus(requestId, true);
-  }, [processingModal.requestId, pollStatus]);
 
   const phoneNorm = normalizeNgMobileDigits(phone);
   const phoneValid = DATA_PHONE_REGEX.test(phoneNorm);
@@ -290,9 +179,7 @@ export default function DataAmountScreen() {
 
         if (res.success && res.data) {
           closeConfirmModal();
-          const requestId =
-            res.data.requestId ??
-            (res.data as { request_id?: string }).request_id;
+
           const status =
             res.data.content?.transactions?.status ?? res.data.status ?? "";
           const code = res.data.code ?? "";
@@ -303,34 +190,23 @@ export default function DataAmountScreen() {
             code === "099" ||
             res.data.response_description?.toUpperCase().includes("PROCESSING");
 
-          if (isProcessing && requestId) {
-            successPayloadRef.current = {
-              phone: phoneNorm,
-              serviceID: selectedProvider.serviceID,
-            };
-            pollStartRef.current = Date.now();
-            setProcessingModal({
-              visible: true,
-              requestId,
-              message:
-                "Your purchase is being processed. We'll check the status shortly.",
-            });
-            pollStatus(requestId, true);
-          } else if (status === "delivered" || code === "000") {
-            addRecentData(phoneNorm, selectedProvider.serviceID).then(() => {
-              getRecentData().then(setRecentList);
-            });
+          addRecentData(phoneNorm, selectedProvider.serviceID).then(() => {
+            getRecentData().then(setRecentList);
+          });
+
+          if (!isProcessing && (status === "delivered" || code === "000")) {
             void logPurchaseSuccess("data", amount, selectedProvider?.name);
-            setSuccessModal({
-              visible: true,
-              message: `Data plan ${formatNaira(amount)} has been purchased successfully.`,
-            });
+          }
+
+          setPhone("");
+          resetStore();
+          fetchHomepage();
+
+          const txId = res.data.id;
+          if (txId) {
+            router.replace(`/(app)/history/${txId}`);
           } else {
-            setSuccessModal({
-              visible: true,
-              message:
-                "Your request was received. You'll get a confirmation shortly.",
-            });
+            router.replace("/(app)/(tabs)");
           }
         } else {
           setErrorModal({
@@ -341,29 +217,30 @@ export default function DataAmountScreen() {
           });
         }
       } catch (e) {
-        handleApiError(e);
-        setErrorModal({
-          visible: true,
-          message:
-            (e as {
-              response?: { data?: { message?: string } };
-              message?: string;
-            })?.response?.data?.message ??
-            (e as Error).message ??
-            "Purchase failed.",
-        });
+        const failedTxId = getFailedTransactionId(e);
+        if (failedTxId) {
+          // Downstream failure: the backend recorded a failed transaction and
+          // refunded. Open its receipt instead of a dead-end error modal.
+          closeConfirmModal();
+          fetchHomepage();
+          router.replace(`/(app)/history/${failedTxId}`);
+        } else {
+          handleApiError(e);
+          setErrorModal({
+            visible: true,
+            message:
+              (e as {
+                response?: { data?: { message?: string } };
+                message?: string;
+              })?.response?.data?.message ??
+              (e as Error).message ??
+              "Purchase failed.",
+          });
+        }
       } finally {
         setPurchasing(false);
       }
     });
-  }
-
-  function handleSuccessClose() {
-    setSuccessModal({ visible: false, message: "" });
-    setPhone("");
-    resetStore();
-    fetchHomepage();
-    router.replace("/(app)/(tabs)");
   }
 
   function handleSelectRecent(entry: DataRecentEntry) {
@@ -495,15 +372,6 @@ export default function DataAmountScreen() {
       />
 
       <AlertModal
-        visible={successModal.visible}
-        variant="success"
-        title="Done"
-        message={successModal.message}
-        primaryAction={{ label: "Done", onPress: handleSuccessClose }}
-        onClose={handleSuccessClose}
-      />
-
-      <AlertModal
         visible={errorModal.visible}
         variant="error"
         title="Error"
@@ -526,43 +394,6 @@ export default function DataAmountScreen() {
         closeable={false}
         onClose={() => {}}
       />
-
-      {processingModal.visible && processingModal.requestId && (
-        <AlertModal
-          visible
-          variant="info"
-          title="Processing"
-          message={
-            processingModal.message +
-            " You can tap Refresh to check status again."
-          }
-          primaryAction={{
-            label: "Refresh status",
-            onPress: handleRefreshStatus,
-          }}
-          secondaryAction={{
-            label: "Close",
-            onPress: () => {
-              setProcessingModal({
-                visible: false,
-                requestId: null,
-                message: "",
-              });
-              fetchHomepage();
-              router.replace("/(app)/vtpass/data");
-            },
-          }}
-          onClose={() => {
-            setProcessingModal({
-              visible: false,
-              requestId: null,
-              message: "",
-            });
-            fetchHomepage();
-            router.replace("/(app)/vtpass/data");
-          }}
-        />
-      )}
     </SafeAreaView>
   );
 }

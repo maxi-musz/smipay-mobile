@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { forgotPassword, resetPassword } from "@/api";
 import { AuthCenteredForm } from "@/components/auth/auth-centered-form";
+import { AuthVersionFooter } from "@/components/auth/auth-version-footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/loaders";
@@ -311,6 +312,7 @@ export default function ForgotPasswordScreen() {
           </AuthCenteredForm>
         </ScrollView>
       </KeyboardAvoidingView>
+      <AuthVersionFooter />
     </SafeAreaView>
   );
 }

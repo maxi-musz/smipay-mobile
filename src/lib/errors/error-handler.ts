@@ -69,6 +69,22 @@ const SAFE_MESSAGES: Record<number, { title: string; message: string }> = {
   },
 };
 
+/**
+ * When a purchase fails downstream (e.g. the provider declines it), the backend
+ * still records a `failed` transaction, refunds the wallet, and attaches that
+ * transaction's id to the error response as `transactionId`. Extract it so the
+ * app can open the transaction receipt (Opay-style) instead of a dead-end
+ * error. Returns undefined for validation/network errors that never produced a
+ * transaction — those should keep their inline error handling.
+ */
+export function getFailedTransactionId(error: unknown): string | undefined {
+  if (error instanceof ApiClientError) {
+    const id = error.data?.transactionId;
+    if (typeof id === "string" && id.length > 0) return id;
+  }
+  return undefined;
+}
+
 export function classifyError(error: unknown): ClassifiedError {
   if (isNetworkError(error)) {
     return {

@@ -68,3 +68,23 @@ export function isDataPlanAffordable(
   if (price <= 0) return true;
   return price <= maxPayable + 1e-9;
 }
+
+/**
+ * Affordable plans first, then ones that exceed wallet + cashback.
+ * Relative order within each group is preserved.
+ */
+export function sortDataPlansByAffordability(
+  plans: DataVariation[],
+  maxPayable: number,
+): DataVariation[] {
+  const affordable: DataVariation[] = [];
+  const unaffordable: DataVariation[] = [];
+  for (const plan of plans) {
+    if (isDataPlanAffordable(plan, maxPayable)) {
+      affordable.push(plan);
+    } else {
+      unaffordable.push(plan);
+    }
+  }
+  return [...affordable, ...unaffordable];
+}

@@ -10,9 +10,11 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { colors } from "@/constants/colors";
+import { getAppVersionLabel } from "@/lib/app-version";
 
 const DISPLAY_DURATION = 2200;
 const FADE_DURATION = 400;
+const APP_VERSION_LABEL = getAppVersionLabel();
 
 interface SplashOverlayProps {
   onFinish: () => void;
@@ -79,6 +81,9 @@ export function SplashOverlay({ onFinish }: SplashOverlayProps) {
 
       <Animated.View style={[styles.footer, textStyle]}>
         <Text style={styles.footerText}>SmiPay Technologies Ltd</Text>
+        {APP_VERSION_LABEL ? (
+          <Text style={styles.versionText}>{APP_VERSION_LABEL}</Text>
+        ) : null}
       </Animated.View>
     </Animated.View>
   );
@@ -134,9 +139,15 @@ const styles = StyleSheet.create({
   footer: {
     paddingBottom: 48,
     alignItems: "center",
+    gap: 4,
   },
   footerText: {
     fontSize: 12,
+    color: colors.gray[400],
+    fontWeight: "400",
+  },
+  versionText: {
+    fontSize: 11,
     color: colors.gray[400],
     fontWeight: "400",
   },

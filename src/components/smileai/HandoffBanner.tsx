@@ -7,6 +7,12 @@ import { useAppTheme } from "@/hooks/use-app-theme";
 type Props = {
   /** First-name-friendly agent name once a specialist has claimed the chat. */
   agentName?: string | null;
+  /**
+   * True while handoff is still pending (queueing). False once the chat is
+   * handed off — even before we know the agent name — so we never flash
+   * "Connecting…" after an agent has already claimed the conversation.
+   */
+  isConnecting?: boolean;
 };
 
 function firstWord(name?: string | null): string {
@@ -20,16 +26,25 @@ function firstWord(name?: string | null): string {
  * show a "connecting" state; once claimed we reveal who the user is chatting
  * with. Their replies arrive inline in the thread below.
  */
-export function HandoffBanner({ agentName }: Props) {
+export function HandoffBanner({ agentName, isConnecting = false }: Props) {
   const { isDark } = useAppTheme();
   const bg = isDark ? "#1E3A5F" : "#DBEAFE";
   const name = firstWord(agentName);
-  const title = name
-    ? `You're now chatting with ${name}`
-    : "Connecting you to a specialist agent";
-  const subtitle = name
-    ? "Replies from the specialist appear right here."
-    : "As soon as they reply, you'll see it here — usually within a few minutes.";
+
+  let title: string;
+  let subtitle: string;
+  if (name) {
+    title = `You're now chatting with ${name}`;
+    subtitle = "Replies from the specialist appear right here.";
+  } else if (isConnecting) {
+    title = "Connecting you to a specialist agent";
+    subtitle =
+      "As soon as they reply, you'll see it here — usually within a few minutes.";
+  } else {
+    // Already handed off; agent name still loading / not yet claimed in UI store.
+    title = "You're with support";
+    subtitle = "Replies from the specialist appear right here.";
+  }
 
   return (
     <View

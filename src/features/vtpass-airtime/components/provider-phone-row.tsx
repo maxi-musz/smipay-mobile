@@ -7,8 +7,8 @@ import { BottomSheetModal } from "@/components/ui/modals";
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
 import { getNetworkProviderLogo } from "@/lib/network-provider-logo";
-import { formatPhoneFromContact, normalizeNgMobileDigits } from "../constants";
-import { getServiceIdFromPhone, phoneMatchesProvider } from "../phone-network";
+import { formatPhoneFromContact, normalizeNgMobileDigits, PHONE_REGEX } from "../constants";
+import { isKnownPhoneProviderMismatch, getServiceIdFromPhone } from "../phone-network";
 import { cn } from "@/lib/utils";
 import type { AirtimeServiceItem } from "@/types/vtpass-airtime";
 
@@ -93,10 +93,12 @@ export function ProviderPhoneRow({
   const [pickerVisible, setPickerVisible] = useState(false);
 
   const phoneDigits = phone.replace(/\D/g, "");
+  const phoneFormatValid = PHONE_REGEX.test(normalizeNgMobileDigits(phone));
+  /** Advisory only — never used to disable Pay. */
   const possibleMismatch =
-    phoneDigits.length >= 10 &&
+    phoneFormatValid &&
     selectedProvider !== null &&
-    !phoneMatchesProvider(phone, selectedProvider.serviceID);
+    isKnownPhoneProviderMismatch(phone, selectedProvider.serviceID);
   const showDisclaimer = possibleMismatch || showContactMatchDisclaimer;
 
   function handlePhoneChange(text: string) {

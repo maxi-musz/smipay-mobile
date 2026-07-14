@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -6,12 +6,11 @@ import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 
-import { purchaseEducation, queryEducationTransaction } from "@/api";
+import { purchaseEducation } from "@/api";
 import {
   EducationHeader,
   WalletBalanceCard,
   ConfirmEducationModal,
-  CredentialModal,
 } from "@/features/vtpass-education/components";
 import {
   formatNaira,
@@ -20,9 +19,6 @@ import {
   getEducationCashbackRate,
   computeCashbackToEarn,
   PHONE_REGEX,
-  POLL_FIRST_DELAY_MS,
-  POLL_INTERVAL_MS,
-  POLL_MAX_ELAPSED_MS,
 } from "@/features/vtpass-education/lib/constants";
 import { useEducationStore } from "@/features/vtpass-education/lib/store";
 import {
@@ -36,9 +32,8 @@ import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useHomepageStore } from "@/store";
 import { logPurchaseSuccess } from "@/lib/analytics";
-import { handleApiError } from "@/lib/errors";
+import { getFailedTransactionId, handleApiError } from "@/lib/errors";
 import { colors } from "@/constants/colors";
-import type { EducationCredentials } from "@/types/vtpass-education";
 
 const PLACEHOLDER_LIGHT = "rgba(107, 114, 128, 0.38)";
 const PLACEHOLDER_DARK = "rgba(255, 255, 255, 0.15)";
@@ -82,22 +77,10 @@ export default function EducationPurchaseScreen() {
   const [purchasing, setPurchasing] = useState(false);
   const [phoneError, setPhoneError] = useState<string | undefined>();
 
-  const [successModal, setSuccessModal] = useState<{
-    visible: boolean;
-    credentials: EducationCredentials | null;
-  }>({ visible: false, credentials: null });
   const [errorModal, setErrorModal] = useState<{
     visible: boolean;
     message: string;
   }>({ visible: false, message: "" });
-  const [processingModal, setProcessingModal] = useState<{
-    visible: boolean;
-    requestId: string | null;
-    message: string;
-  }>({ visible: false, requestId: null, message: "" });
-
-  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pollStartRef = useRef<number>(0);
 
   const traits = selectedProduct ? getProductTraits(selectedProduct) : null;
 
@@ -159,95 +142,6 @@ export default function EducationPurchaseScreen() {
     resetConfirmWallet();
   }
 
-  // ── Polling ──────────────────────────────────────────────────────────────
-
-  const stopPolling = useCallback(() => {
-    if (pollTimeoutRef.current) {
-      clearTimeout(pollTimeoutRef.current);
-      pollTimeoutRef.current = null;
-    }
-  }, []);
-
-  const pollStatus = useCallback(
-    (requestId: string, isFirst: boolean) => {
-      queryEducationTransaction({ request_id: requestId })
-        .then((res) => {
-          if (!res.success || !res.data) return;
-          const status = res.data.content?.transactions?.status ?? "";
-          const code = res.data.code ?? "";
-          if (status === "delivered" || code === "000") {
-            stopPolling();
-            setProcessingModal({ visible: false, requestId: null, message: "" });
-            void logPurchaseSuccess("education", amount);
-            setSuccessModal({
-              visible: true,
-              credentials: res.data.credentials ?? null,
-            });
-            return;
-          }
-          if (
-            code === "016" ||
-            code === "040" ||
-            status === "reversed" ||
-            status === "failed"
-          ) {
-            stopPolling();
-            setProcessingModal({ visible: false, requestId: null, message: "" });
-            setErrorModal({
-              visible: true,
-              message:
-                code === "040"
-                  ? "Transaction reversed. Your wallet has been refunded."
-                  : "Transaction failed. Your wallet has been refunded.",
-            });
-            return;
-          }
-          const elapsed = Date.now() - pollStartRef.current;
-          if (elapsed >= POLL_MAX_ELAPSED_MS) {
-            stopPolling();
-            setProcessingModal({
-              visible: true,
-              requestId,
-              message:
-                "Your transaction is still processing. Please check back shortly.",
-            });
-            return;
-          }
-          pollTimeoutRef.current = setTimeout(
-            () => pollStatus(requestId, false),
-            isFirst ? POLL_FIRST_DELAY_MS : POLL_INTERVAL_MS,
-          );
-        })
-        .catch(() => {
-          const elapsed = Date.now() - pollStartRef.current;
-          if (elapsed >= POLL_MAX_ELAPSED_MS) {
-            stopPolling();
-            setProcessingModal({
-              visible: true,
-              requestId,
-              message:
-                "Your transaction is still processing. Please check back shortly.",
-            });
-            return;
-          }
-          pollTimeoutRef.current = setTimeout(
-            () => pollStatus(requestId, false),
-            POLL_INTERVAL_MS,
-          );
-        });
-    },
-    [stopPolling],
-  );
-
-  useEffect(() => () => stopPolling(), [stopPolling]);
-
-  const handleRefreshStatus = useCallback(() => {
-    const { requestId } = processingModal;
-    if (!requestId) return;
-    pollStartRef.current = Date.now();
-    pollStatus(requestId, true);
-  }, [processingModal, pollStatus]);
-
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   function handleOpenConfirmModal() {
@@ -289,10 +183,6 @@ export default function EducationPurchaseScreen() {
         if (res.success && res.data) {
           closeConfirmModal();
 
-          const credentials = res.data.credentials ?? null;
-          const requestId =
-            res.data.requestId ??
-            (res.data as { request_id?: string }).request_id;
           const status =
             res.data.content?.transactions?.status ?? res.data.status ?? "";
           const code = res.data.code ?? "";
@@ -303,28 +193,18 @@ export default function EducationPurchaseScreen() {
             code === "099" ||
             res.data.response_description?.toUpperCase().includes("PROCESSING");
 
-          if (
-            !isProcessing &&
-            (status === "delivered" || code === "000") &&
-            credentials &&
-            (credentials.pin || credentials.cards?.length)
-          ) {
+          if (!isProcessing && (status === "delivered" || code === "000")) {
             void logPurchaseSuccess("education", amount);
-            setSuccessModal({ visible: true, credentials });
-          } else if (isProcessing && requestId) {
-            pollStartRef.current = Date.now();
-            setProcessingModal({
-              visible: true,
-              requestId,
-              message:
-                "Your purchase is being processed. We'll check the status shortly.",
-            });
-            pollStatus(requestId, true);
-          } else if (status === "delivered" || code === "000") {
-            void logPurchaseSuccess("education", amount);
-            setSuccessModal({ visible: true, credentials });
+          }
+
+          resetStore();
+          fetchHomepage();
+
+          const txId = res.data.id;
+          if (txId) {
+            router.replace(`/(app)/history/${txId}`);
           } else {
-            setSuccessModal({ visible: true, credentials });
+            router.replace("/(app)/(tabs)");
           }
         } else {
           setErrorModal({
@@ -335,28 +215,30 @@ export default function EducationPurchaseScreen() {
           });
         }
       } catch (e) {
-        handleApiError(e);
-        setErrorModal({
-          visible: true,
-          message:
-            (e as {
-              response?: { data?: { message?: string } };
-              message?: string;
-            })?.response?.data?.message ??
-            (e as Error).message ??
-            "Purchase failed.",
-        });
+        const failedTxId = getFailedTransactionId(e);
+        if (failedTxId) {
+          // Downstream failure: the backend recorded a failed transaction and
+          // refunded. Open its receipt instead of a dead-end error modal.
+          closeConfirmModal();
+          fetchHomepage();
+          router.replace(`/(app)/history/${failedTxId}`);
+        } else {
+          handleApiError(e);
+          setErrorModal({
+            visible: true,
+            message:
+              (e as {
+                response?: { data?: { message?: string } };
+                message?: string;
+              })?.response?.data?.message ??
+              (e as Error).message ??
+              "Purchase failed.",
+          });
+        }
       } finally {
         setPurchasing(false);
       }
     });
-  }
-
-  function handleSuccessClose() {
-    setSuccessModal({ visible: false, credentials: null });
-    resetStore();
-    fetchHomepage();
-    router.replace("/(app)/(tabs)");
   }
 
   if (!selectedProduct || !selectedVariation || !traits) return null;
@@ -580,16 +462,6 @@ export default function EducationPurchaseScreen() {
         }}
       />
 
-      {/* Credential display */}
-      <CredentialModal
-        visible={successModal.visible}
-        title={traits.successTitle}
-        message={traits.successMessage}
-        credentials={successModal.credentials}
-        credentialType={traits.credentialType}
-        onClose={handleSuccessClose}
-      />
-
       {/* Error */}
       <AlertModal
         visible={errorModal.visible}
@@ -614,46 +486,6 @@ export default function EducationPurchaseScreen() {
         closeable={false}
         onClose={() => {}}
       />
-
-      {/* Processing / polling */}
-      {processingModal.visible && processingModal.requestId && (
-        <AlertModal
-          visible
-          variant="info"
-          title="Processing"
-          message={
-            processingModal.message +
-            " You can tap Refresh to check status again."
-          }
-          primaryAction={{
-            label: "Refresh status",
-            onPress: handleRefreshStatus,
-          }}
-          secondaryAction={{
-            label: "Close",
-            onPress: () => {
-              stopPolling();
-              setProcessingModal({
-                visible: false,
-                requestId: null,
-                message: "",
-              });
-              fetchHomepage();
-              router.replace("/(app)/vtpass/education");
-            },
-          }}
-          onClose={() => {
-            stopPolling();
-            setProcessingModal({
-              visible: false,
-              requestId: null,
-              message: "",
-            });
-            fetchHomepage();
-            router.replace("/(app)/vtpass/education");
-          }}
-        />
-      )}
     </SafeAreaView>
   );
 }

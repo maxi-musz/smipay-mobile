@@ -18,7 +18,7 @@ import {
   normalizeNgMobileDigits,
   parseBalanceToNumber,
   parseMinMax,
-  PHONE_REGEX,
+  isAirtimePhoneSubmittable,
   ProviderPhoneRow,
   RecentAirtimeList,
   WalletBalanceCard,
@@ -32,7 +32,7 @@ import { FullPageLoader } from "@/components/ui/loaders";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { useAirtimeStore, useHomepageStore } from "@/store";
 import { logPurchaseSuccess } from "@/lib/analytics";
-import { classifyError } from "@/lib/errors";
+import { classifyError, getFailedTransactionId } from "@/lib/errors";
 import type { AirtimeServiceItem } from "@/types/vtpass-airtime";
 
 export default function VtpassAirtimeScreen() {
@@ -81,10 +81,6 @@ export default function VtpassAirtimeScreen() {
   const [hasPreFilled, setHasPreFilled] = useState(false);
   const [showContactMatchDisclaimer, setShowContactMatchDisclaimer] = useState(false);
 
-  const [successModal, setSuccessModal] = useState<{
-    visible: boolean;
-    message: string;
-  }>({ visible: false, message: "" });
   const [errorModal, setErrorModal] = useState<{
     visible: boolean;
     message: string;
@@ -134,13 +130,14 @@ export default function VtpassAirtimeScreen() {
   const amount = parseInt(amountStr.replace(/\D/g, ""), 10) || 0;
   const amountValid = amount >= amountMin && amount <= amountMax;
   const phoneNormForValidation = normalizeNgMobileDigits(phone);
-  const phoneValid = PHONE_REGEX.test(phoneNormForValidation);
+  const phoneValid = isAirtimePhoneSubmittable(phoneNormForValidation);
   const maxPayable =
     parseBalanceToNumber(walletBalance) + parseBalanceToNumber(cashbackBalance);
   /** Dashboard balance hint (quick amounts); the confirm modal reads the same live dashboard balance */
   const insufficientBalance = amount > 0 && amount > maxPayable;
+  // Network / NCC-prefix checks are advisory only — never gate Pay.
   const canSubmit =
-    selectedProvider &&
+    !!selectedProvider &&
     phoneValid &&
     amountValid &&
     !insufficientBalance &&
@@ -189,10 +186,10 @@ export default function VtpassAirtimeScreen() {
     if (!selectedProvider || !canSubmit) return;
 
     const phoneNorm = normalizeNgMobileDigits(phone);
-    if (!PHONE_REGEX.test(phoneNorm)) {
+    if (!isAirtimePhoneSubmittable(phoneNorm)) {
       setFieldErrors((e) => ({
         ...e,
-        phone: "Enter a valid 11-digit phone number",
+        phone: "Enter a 10 or 11-digit phone number",
       }));
       return;
     }
@@ -242,18 +239,18 @@ export default function VtpassAirtimeScreen() {
             status === "initiated" ||
             res.data.response_description?.toUpperCase().includes("PROCESSING");
 
-          if (isProcessing) {
-            setSuccessModal({
-              visible: true,
-              message:
-                "Your airtime purchase is being processed. You'll receive a confirmation shortly.",
-            });
-          } else {
+          if (!isProcessing) {
             void logPurchaseSuccess("airtime", amount, selectedProvider.name);
-            setSuccessModal({
-              visible: true,
-              message: `${selectedProvider.name} airtime of ₦${amount.toLocaleString()} has been sent to ${phoneNorm}.`,
-            });
+          }
+
+          setAmountStr("");
+          fetchHomepage();
+
+          const txId = res.data.id;
+          if (txId) {
+            router.replace(`/(app)/history/${txId}`);
+          } else {
+            router.replace("/(app)/(tabs)");
           }
         } else {
           setErrorModal({
@@ -264,24 +261,26 @@ export default function VtpassAirtimeScreen() {
           });
         }
       } catch (e) {
-        const classified = classifyError(e);
-        setErrorModal({
-          visible: true,
-          message:
-            classified.message ||
-            "We couldn't complete this purchase. Please try again.",
-        });
+        const failedTxId = getFailedTransactionId(e);
+        if (failedTxId) {
+          // Downstream failure: the backend recorded a failed transaction and
+          // refunded. Open its receipt instead of a dead-end error modal.
+          closeConfirmModal();
+          fetchHomepage();
+          router.replace(`/(app)/history/${failedTxId}`);
+        } else {
+          const classified = classifyError(e);
+          setErrorModal({
+            visible: true,
+            message:
+              classified.message ||
+              "We couldn't complete this purchase. Please try again.",
+          });
+        }
       } finally {
         setPurchasing(false);
       }
     });
-  }
-
-  function handleSuccessClose() {
-    setSuccessModal({ visible: false, message: "" });
-    setAmountStr("");
-    fetchHomepage();
-    router.replace("/(app)/(tabs)");
   }
 
   function handleSelectRecent(entry: { phone: string; serviceID: string }) {
@@ -402,15 +401,6 @@ export default function VtpassAirtimeScreen() {
           closeConfirmModal();
           router.push("/(app)/profile/security");
         }}
-      />
-
-      <AlertModal
-        visible={successModal.visible}
-        variant="success"
-        title="Airtime Sent"
-        message={successModal.message}
-        primaryAction={{ label: "Done", onPress: handleSuccessClose }}
-        onClose={handleSuccessClose}
       />
 
       <AlertModal

@@ -1,7 +1,18 @@
 import type { CashbackRate, RewardBanner } from "@/types/homepage";
 import type { AirtimeServiceItem } from "@/types/vtpass-airtime";
 
+/** Typical Nigerian mobile (07 / 08 / 09…). Used for network-prefix hints only. */
 export const PHONE_REGEX = /^0[789]\d{9}$/;
+
+/**
+ * Checkout gate for domestic airtime. VTpass / partner sandboxes may use
+ * non-NCC test MSISDNs (e.g. 20100000000), so we only require 10–11 digits.
+ * Network match is advisory and must never block Pay.
+ */
+export function isAirtimePhoneSubmittable(phone: string): boolean {
+  const digits = phone.replace(/\D/g, "");
+  return digits.length >= 10 && digits.length <= 11;
+}
 
 /**
  * Strips non-digits, caps length, and prepends `0` when the user typed 10 digits

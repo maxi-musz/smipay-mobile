@@ -20,9 +20,15 @@ interface SmileaiUiState {
 
 interface SmileaiStoreState {
   conversations: SmileConversationListItem[];
+  /** Epoch ms of the last successful conversation-list fetch. Used for soft TTL. */
+  lastConversationsFetchedAt: number | null;
   /** True when no conversation list is available yet and we are fetching for the first time. */
   isLoadingConversations: boolean;
-  /** True when a list already exists but we are refreshing in the background. */
+  /**
+   * True only for a user-initiated pull-to-refresh (drives RefreshControl).
+   * Background / focus refetches must never flip this — that was flashing a
+   * spinner every time the list screen regained focus.
+   */
   isRefreshingConversations: boolean;
   conversationsLoadError: string | null;
   messagesByConversation: Record<string, SmileMessage[]>;
@@ -32,6 +38,8 @@ interface SmileaiStoreState {
   pendingConfirmation: Record<string, PendingConfirmation | null>;
   supportConversationId: Record<string, string | null>;
   statusByConversation: Record<string, string>;
+  /** Claimed support agent display name, keyed by Smile conversation id. */
+  agentNameByConversation: Record<string, string>;
   /** Conversation ids the user has already left a star rating for. */
   ratedConversationIds: Record<string, boolean>;
   toolBadge: Record<string, string | null>;
@@ -39,8 +47,14 @@ interface SmileaiStoreState {
 }
 
 interface SmileaiStoreActions {
-  loadConversations: () => Promise<void>;
-  refreshConversationsSilently: () => Promise<void>;
+  loadConversations: (opts?: { force?: boolean }) => Promise<void>;
+  /**
+   * Background list refresh — never shows a spinner. Skips the network call
+   * when the cache is still fresh unless `force` is set.
+   */
+  refreshConversationsSilently: (opts?: { force?: boolean }) => Promise<void>;
+  /** User pull-to-refresh — shows RefreshControl, always hits the network. */
+  refreshConversationsFromPull: () => Promise<void>;
   setConversations: (items: SmileConversationListItem[]) => void;
   setMessages: (conversationId: string, messages: SmileMessage[]) => void;
   appendUserMessage: (conversationId: string, message: SmileMessage) => void;
@@ -65,11 +79,14 @@ interface SmileaiStoreActions {
   ) => void;
   setSupportConversationId: (conversationId: string, supportId: string | null) => void;
   setStatus: (conversationId: string, status: string) => void;
+  setAgentName: (conversationId: string, agentName: string | null) => void;
   markConversationRated: (conversationId: string) => void;
   setToolBadge: (conversationId: string, label: string | null) => void;
   setDraftText: (text: string) => void;
   setLastOpenConversationId: (id: string | null) => void;
   resetConversationRuntime: (conversationId: string) => void;
+  /** Wipe runtime + UI prefs back to defaults (used by DEV clear-app-data). */
+  reset: () => void;
 }
 
 type SmileaiStore = SmileaiStoreState & SmileaiStoreActions;
@@ -77,6 +94,9 @@ type SmileaiStore = SmileaiStoreState & SmileaiStoreActions;
 /** Persist top N chats by recent activity with at most M messages each. */
 const PERSIST_CHAT_COUNT = 5;
 const PERSIST_MESSAGES_PER_CHAT = 50;
+
+/** Soft TTL before a silent list refetch is allowed after a successful fetch. */
+const CONVERSATIONS_STALE_MS = 45_000;
 
 function sortConversationsByRecency(items: SmileConversationListItem[]): SmileConversationListItem[] {
   return [...items].sort((a, b) => {
@@ -93,6 +113,7 @@ function buildSmilePersistSnapshot(state: SmileaiStoreState) {
   const messagesByConversation: Record<string, SmileMessage[]> = {};
   const statusByConversation: Record<string, string> = {};
   const supportConversationId: Record<string, string | null> = {};
+  const agentNameByConversation: Record<string, string> = {};
 
   for (const id of topIds) {
     const msgs = state.messagesByConversation[id];
@@ -105,6 +126,9 @@ function buildSmilePersistSnapshot(state: SmileaiStoreState) {
     if (state.supportConversationId[id] !== undefined && state.supportConversationId[id] !== null) {
       supportConversationId[id] = state.supportConversationId[id];
     }
+    if (state.agentNameByConversation[id]) {
+      agentNameByConversation[id] = state.agentNameByConversation[id];
+    }
   }
 
   return {
@@ -113,6 +137,7 @@ function buildSmilePersistSnapshot(state: SmileaiStoreState) {
     messagesByConversation,
     statusByConversation,
     supportConversationId,
+    agentNameByConversation,
     ratedConversationIds: state.ratedConversationIds,
   };
 }
@@ -121,6 +146,7 @@ type PersistedSmileSlice = Partial<ReturnType<typeof buildSmilePersistSnapshot>>
 
 const initialState: SmileaiStoreState = {
   conversations: [],
+  lastConversationsFetchedAt: null,
   isLoadingConversations: false,
   isRefreshingConversations: false,
   conversationsLoadError: null,
@@ -131,11 +157,12 @@ const initialState: SmileaiStoreState = {
   pendingConfirmation: {},
   supportConversationId: {},
   statusByConversation: {},
+  agentNameByConversation: {},
   ratedConversationIds: {},
   toolBadge: {},
   ui: {
     draftText: "",
-    suggestedRepliesEnabled: true,
+    suggestedRepliesEnabled: false,
     soundEnabled: true,
     lastOpenConversationId: null,
   },
@@ -146,15 +173,22 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
     (set, get) => ({
       ...initialState,
 
-      loadConversations: async () => {
-        if (get().isLoadingConversations || get().isRefreshingConversations) return;
+      loadConversations: async (opts) => {
+        const force = opts?.force === true;
+        if (get().isLoadingConversations) return;
 
         const hasList = get().conversations.length > 0;
-        if (hasList) {
-          set({ isRefreshingConversations: true });
-        } else {
+        const lastAt = get().lastConversationsFetchedAt;
+        const isFresh =
+          !!lastAt && Date.now() - lastAt < CONVERSATIONS_STALE_MS;
+
+        // Cached list is still fresh — skip network unless forced (new chat, etc.).
+        if (!force && hasList && isFresh) return;
+
+        if (!hasList) {
           set({ isLoadingConversations: true });
         }
+        // When a list already exists, stay silent (do NOT set isRefreshingConversations).
 
         try {
           const res = await listSmileConversations();
@@ -162,20 +196,43 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
           const sorted = sortConversationsByRecency(list);
           set({
             conversations: sorted,
+            lastConversationsFetchedAt: Date.now(),
             isLoadingConversations: false,
-            isRefreshingConversations: false,
             conversationsLoadError: null,
           });
         } catch {
           set({
             isLoadingConversations: false,
-            isRefreshingConversations: false,
             conversationsLoadError: "Unable to load conversations.",
           });
         }
       },
 
-      refreshConversationsSilently: async () => {
+      refreshConversationsSilently: async (opts) => {
+        const force = opts?.force === true;
+        const lastAt = get().lastConversationsFetchedAt;
+        const isFresh =
+          !!lastAt && Date.now() - lastAt < CONVERSATIONS_STALE_MS;
+        if (!force && isFresh) return;
+        if (get().isLoadingConversations) return;
+
+        try {
+          const res = await listSmileConversations();
+          const list = res.data?.items ?? [];
+          const sorted = sortConversationsByRecency(list);
+          set({
+            conversations: sorted,
+            lastConversationsFetchedAt: Date.now(),
+            conversationsLoadError: null,
+          });
+        } catch {
+          set({
+            conversationsLoadError: "Unable to load conversations.",
+          });
+        }
+      },
+
+      refreshConversationsFromPull: async () => {
         if (get().isRefreshingConversations) return;
         set({ isRefreshingConversations: true });
         try {
@@ -184,6 +241,7 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
           const sorted = sortConversationsByRecency(list);
           set({
             conversations: sorted,
+            lastConversationsFetchedAt: Date.now(),
             isRefreshingConversations: false,
             conversationsLoadError: null,
           });
@@ -369,6 +427,17 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
           },
         })),
 
+      setAgentName: (conversationId, agentName) =>
+        set((s) => {
+          const next = { ...s.agentNameByConversation };
+          if (!agentName?.trim()) {
+            delete next[conversationId];
+          } else {
+            next[conversationId] = agentName.trim();
+          }
+          return { agentNameByConversation: next };
+        }),
+
       markConversationRated: (conversationId) =>
         set((s) => ({
           ratedConversationIds: {
@@ -398,6 +467,8 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
           suggestions: { ...s.suggestions, [conversationId]: [] },
           toolBadge: { ...s.toolBadge, [conversationId]: null },
         })),
+
+      reset: () => set({ ...initialState }),
     }),
     createPersistConfig<SmileaiStore>("smileai", {
       partialize: (state) => buildSmilePersistSnapshot(state),
@@ -424,6 +495,10 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
           supportConversationId: {
             ...(persisted?.supportConversationId ?? {}),
             ...currentState.supportConversationId,
+          },
+          agentNameByConversation: {
+            ...(persisted?.agentNameByConversation ?? {}),
+            ...currentState.agentNameByConversation,
           },
           ratedConversationIds: {
             ...(persisted?.ratedConversationIds ?? {}),

@@ -1,21 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Alert,
-  Image,
-  Keyboard,
-  Pressable,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, DevSettings, Image, Keyboard, Pressable, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants from "expo-constants";
-import * as Application from "expo-application";
 import { Link, router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { signIn } from "@/api";
 import { AuthCenteredForm } from "@/components/auth/auth-centered-form";
+import { AuthVersionFooter } from "@/components/auth/auth-version-footer";
 import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +26,7 @@ import { ApiClientError } from "@/lib/api";
 import { handleApiError } from "@/lib/errors";
 import { logSignIn, setAnalyticsUser } from "@/lib/analytics";
 import { canUseRequireAuthentication, secureStorage, SECURE_KEYS } from "@/lib/secure-storage";
-import { useAuthStore, useAppStore } from "@/store";
+import { useAuthStore, useAppStore, useSmileaiStore } from "@/store";
 
 type Step = "identifier" | "password";
 
@@ -52,16 +44,6 @@ export default function SignInScreen() {
 
   const passwordRef = useRef<TextInput>(null);
   const keyboardVisible = useKeyboardVisible();
-
-  // App version for the login footer, e.g. "2.4.0" -> "v2.4".
-  const appVersionLabel = (() => {
-    const raw =
-      Constants.expoConfig?.version ??
-      Application.nativeApplicationVersion ??
-      "";
-    const short = raw.split(".").slice(0, 2).join(".");
-    return short ? `v${short}` : "";
-  })();
 
   const canProceed =
     isValidAuthIdentifier(identifier) && !loading;
@@ -338,6 +320,9 @@ export default function SignInScreen() {
                       text: "Clear",
                       style: "destructive",
                       onPress: async () => {
+                        // Clear disk first, then in-memory Zustand stores. Without
+                        // the store resets, smileai UI prefs (e.g. suggested
+                        // replies) stay in RAM and get re-persisted after clear.
                         await AsyncStorage.clear();
                         await secureStorage.clear([
                           SECURE_KEYS.ACCESS_TOKEN,
@@ -346,8 +331,14 @@ export default function SignInScreen() {
                           SECURE_KEYS.USER_PASSWORD,
                           SECURE_KEYS.SIGN_IN_IDENTIFIER,
                         ]);
+                        useSmileaiStore.getState().reset();
+                        useAppStore.getState().reset();
                         useAuthStore.getState().logout();
-                        router.replace("/");
+                        if (__DEV__ && typeof DevSettings.reload === "function") {
+                          DevSettings.reload();
+                        } else {
+                          router.replace("/");
+                        }
                       },
                     },
                   ],
@@ -362,14 +353,7 @@ export default function SignInScreen() {
         </AuthCenteredForm>
       </KeyboardAwareScrollView>
 
-      {!keyboardVisible && appVersionLabel ? (
-        <View
-          pointerEvents="none"
-          className="absolute bottom-6 left-0 right-0 items-center"
-        >
-          <Text className="text-xs text-muted-foreground">{appVersionLabel}</Text>
-        </View>
-      ) : null}
+      <AuthVersionFooter />
     </SafeAreaView>
   );
 }

@@ -10,6 +10,7 @@ export {
 } from "./components";
 export {
   PHONE_REGEX,
+  isAirtimePhoneSubmittable,
   parseMinMax,
   parseBalanceToNumber,
   formatPhoneFromContact,

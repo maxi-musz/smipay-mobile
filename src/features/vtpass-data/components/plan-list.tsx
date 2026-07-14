@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Pressable, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,6 +10,7 @@ import {
   dataPlanPriceNgn,
   formatNaira,
   isDataPlanAffordable,
+  sortDataPlansByAffordability,
 } from "../lib/constants";
 import type { DataVariation } from "@/types/vtpass-data";
 
@@ -170,6 +172,11 @@ export function PlanList({
   error,
   emptyMessage = "No plans in this category",
 }: PlanListProps) {
+  const orderedPlans = useMemo(
+    () => sortDataPlansByAffordability(plans, maxPayable),
+    [plans, maxPayable],
+  );
+
   if (error) {
     return (
       <View className="rounded-xl bg-destructive/10 px-4 py-3">
@@ -178,7 +185,7 @@ export function PlanList({
     );
   }
 
-  if (plans.length === 0) {
+  if (orderedPlans.length === 0) {
     return (
       <View className="rounded-xl bg-muted/30 px-4 py-8">
         <Text className="text-center text-sm text-muted-foreground">
@@ -190,7 +197,7 @@ export function PlanList({
 
   return (
     <Animated.View entering={FadeIn.duration(200)}>
-      {plans.map((plan, index) => {
+      {orderedPlans.map((plan, index) => {
         const affordable = isDataPlanAffordable(plan, maxPayable);
         return (
           <PlanCard

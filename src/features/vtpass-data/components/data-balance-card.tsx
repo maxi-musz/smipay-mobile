@@ -4,7 +4,6 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
-import { colors } from "@/constants/colors";
 
 interface DataBalanceCardProps {
   walletBalance: string;
@@ -15,6 +14,8 @@ interface DataBalanceCardProps {
 }
 
 const HIDDEN_LABEL = "••••••";
+const MUTED = "rgba(255,255,255,0.6)";
+const SOFT = "rgba(255,255,255,0.75)";
 
 export function DataBalanceCard({
   walletBalance,
@@ -23,63 +24,80 @@ export function DataBalanceCard({
 }: DataBalanceCardProps) {
   const { isDark } = useAppTheme();
   const [visible, setVisible] = useState(true);
+  const showCashback = cashbackBalance != null && cashbackBalance !== "";
+  const showAvailable =
+    availableForPurchases != null && availableForPurchases !== "";
 
   return (
     <View
-      className="overflow-hidden rounded-2xl px-5 py-4"
+      className="overflow-hidden rounded-xl px-3.5 py-2.5"
       style={{ backgroundColor: isDark ? "#1A2332" : "#1E293B" }}
     >
-      <View className="flex-row items-center justify-between">
-        <View className="flex-1 min-w-0">
-          <Text
-            className="text-xs font-semibold uppercase tracking-wider"
-            style={{ color: "rgba(255,255,255,0.6)" }}
-          >
-            Wallet
-          </Text>
-          <Text
-            className="mt-1 text-2xl font-bold"
-            style={{ color: "#fff" }}
-          >
-            {visible ? walletBalance : HIDDEN_LABEL}
-          </Text>
-          {cashbackBalance != null && cashbackBalance !== "" && (
-            <View className="mt-3">
-              <Text
-                className="text-xs font-semibold uppercase tracking-wider"
-                style={{ color: "rgba(255,255,255,0.6)" }}
-              >
-                Cashback
-              </Text>
-              <Text className="mt-0.5 text-base font-semibold" style={{ color: "#fff" }}>
-                {visible ? cashbackBalance : HIDDEN_LABEL}
-              </Text>
-            </View>
-          )}
-          {availableForPurchases != null && availableForPurchases !== "" && (
+      <View className="flex-row items-center gap-2">
+        <View className="min-w-0 flex-1 flex-row items-center gap-3">
+          <View className="min-w-0 flex-1">
             <Text
-              className="mt-3 text-xs leading-snug"
-              style={{ color: "rgba(255,255,255,0.75)" }}
+              className="text-[10px] font-semibold uppercase tracking-wider"
+              style={{ color: MUTED }}
             >
-              Available for data purchases (wallet + cashback):{" "}
-              <Text style={{ fontWeight: "700", color: "#fff" }}>
-                {visible ? availableForPurchases : HIDDEN_LABEL}
-              </Text>
+              Wallet
             </Text>
+            <Text className="mt-0.5 text-base font-bold" style={{ color: "#fff" }}>
+              {visible ? walletBalance : HIDDEN_LABEL}
+            </Text>
+          </View>
+
+          {showCashback && (
+            <>
+              <View
+                className="h-8 w-px self-center"
+                style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
+              />
+              <View className="min-w-0 flex-1">
+                <Text
+                  className="text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ color: MUTED }}
+                >
+                  Cashback
+                </Text>
+                <Text
+                  className="mt-0.5 text-base font-bold"
+                  style={{ color: "#fff" }}
+                >
+                  {visible ? cashbackBalance : HIDDEN_LABEL}
+                </Text>
+              </View>
+            </>
           )}
         </View>
+
         <Pressable
           onPress={() => setVisible((v) => !v)}
-          className="h-10 w-10 items-center justify-center rounded-full"
+          className="h-8 w-8 items-center justify-center rounded-full"
           hitSlop={8}
+          accessibilityLabel={visible ? "Hide balances" : "Show balances"}
         >
           <Ionicons
             name={visible ? "eye-off-outline" : "eye-outline"}
-            size={22}
+            size={18}
             color="rgba(255,255,255,0.7)"
           />
         </Pressable>
       </View>
+
+      {showAvailable && (
+        <View
+          className="mt-2 flex-row items-center justify-between border-t pt-2"
+          style={{ borderTopColor: "rgba(255,255,255,0.12)" }}
+        >
+          <Text className="flex-1 text-[11px] leading-4" style={{ color: SOFT }}>
+            Available for purchases
+          </Text>
+          <Text className="text-[13px] font-bold" style={{ color: "#fff" }}>
+            {visible ? availableForPurchases : HIDDEN_LABEL}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }

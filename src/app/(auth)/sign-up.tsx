@@ -24,6 +24,7 @@ import {
   ProfilePhotoSourceSheet,
 } from "@/components/profile";
 import { AuthCenteredForm } from "@/components/auth/auth-centered-form";
+import { AuthVersionFooter } from "@/components/auth/auth-version-footer";
 import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -762,6 +763,7 @@ export default function SignUpScreen() {
         }}
         isSubmitting={false}
       />
+      <AuthVersionFooter />
     </SafeAreaView>
   );
 }

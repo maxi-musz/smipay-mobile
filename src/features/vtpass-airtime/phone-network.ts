@@ -82,6 +82,9 @@ function canonicalServiceId(serviceID: string): string | null {
 /**
  * Returns true if the phone number's prefix matches the selected provider's network.
  * Used to show a disclaimer when they may not match (e.g. after contact pick or manual entry).
+ *
+ * Unknown prefixes (or unrecognised provider IDs) are treated as a match so we only
+ * warn when we positively detect different networks — never block checkout on this.
  */
 export function phoneMatchesProvider(
   phone: string,
@@ -89,6 +92,20 @@ export function phoneMatchesProvider(
 ): boolean {
   const fromPhone = getServiceIdFromPhone(phone);
   const fromProvider = canonicalServiceId(providerServiceID);
-  if (!fromPhone || !fromProvider) return false;
+  // Can't determine — don't treat as a mismatch
+  if (!fromPhone || !fromProvider) return true;
   return fromPhone === fromProvider;
+}
+
+/**
+ * True only when both sides are known and disagree (advisory UI only).
+ */
+export function isKnownPhoneProviderMismatch(
+  phone: string,
+  providerServiceID: string,
+): boolean {
+  const fromPhone = getServiceIdFromPhone(phone);
+  const fromProvider = canonicalServiceId(providerServiceID);
+  if (!fromPhone || !fromProvider) return false;
+  return fromPhone !== fromProvider;
 }

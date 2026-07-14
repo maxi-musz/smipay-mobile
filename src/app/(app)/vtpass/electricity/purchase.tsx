@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -6,12 +6,11 @@ import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 
-import { purchaseElectricity, queryElectricityTransaction } from "@/api";
+import { purchaseElectricity } from "@/api";
 import {
   ElectricityHeader,
   WalletBalanceCard,
   ConfirmElectricityModal,
-  TokenModal,
 } from "@/features/vtpass-electricity/components";
 import {
   formatNaira,
@@ -22,9 +21,6 @@ import {
   computeCashbackToEarn,
   PHONE_REGEX,
   ELECTRICITY_MAX_AMOUNT,
-  POLL_FIRST_DELAY_MS,
-  POLL_INTERVAL_MS,
-  POLL_MAX_ELAPSED_MS,
 } from "@/features/vtpass-electricity/lib/constants";
 import { useElectricityStore } from "@/features/vtpass-electricity/lib/store";
 import {
@@ -38,7 +34,7 @@ import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useHomepageStore } from "@/store";
 import { logPurchaseSuccess } from "@/lib/analytics";
-import { handleApiError } from "@/lib/errors";
+import { getFailedTransactionId, handleApiError } from "@/lib/errors";
 import { colors } from "@/constants/colors";
 
 const PLACEHOLDER_LIGHT = "rgba(107, 114, 128, 0.38)";
@@ -85,32 +81,10 @@ export default function ElectricityPurchaseScreen() {
     phone?: string;
   }>({});
 
-  const [tokenModal, setTokenModal] = useState<{
-    visible: boolean;
-    token: string;
-    units?: string;
-    customerName?: string;
-    amount?: number;
-  }>({ visible: false, token: "" });
-
-  const [successModal, setSuccessModal] = useState<{
-    visible: boolean;
-    message: string;
-  }>({ visible: false, message: "" });
-
   const [errorModal, setErrorModal] = useState<{
     visible: boolean;
     message: string;
   }>({ visible: false, message: "" });
-
-  const [processingModal, setProcessingModal] = useState<{
-    visible: boolean;
-    requestId: string | null;
-    message: string;
-  }>({ visible: false, requestId: null, message: "" });
-
-  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pollStartRef = useRef<number>(0);
 
   useEffect(() => {
     if (!selectedProvider || !verifyData) {
@@ -170,131 +144,6 @@ export default function ElectricityPurchaseScreen() {
     resetConfirmWallet();
   }
 
-  // ── Polling ──────────────────────────────────────────────────────────────
-
-  const stopPolling = useCallback(() => {
-    if (pollTimeoutRef.current) {
-      clearTimeout(pollTimeoutRef.current);
-      pollTimeoutRef.current = null;
-    }
-  }, []);
-
-  const pollStatus = useCallback(
-    (requestId: string, isFirst: boolean) => {
-      queryElectricityTransaction({ request_id: requestId })
-        .then((res) => {
-          if (!res.success || !res.data) return;
-          const status = res.data.content?.transactions?.status ?? "";
-          const code = res.data.code ?? "";
-
-          if (status === "delivered" || code === "000") {
-            stopPolling();
-            setProcessingModal({
-              visible: false,
-              requestId: null,
-              message: "",
-            });
-
-            const token = res.data.electricity_token;
-            if (token && meterType === "prepaid") {
-              void logPurchaseSuccess(
-                "electricity",
-                amount,
-                selectedProvider
-                  ? getDiscoShortName(selectedProvider.serviceID)
-                  : undefined,
-              );
-              setTokenModal({
-                visible: true,
-                token,
-                units: res.data.units,
-                amount: res.data.amount,
-              });
-            } else {
-              void logPurchaseSuccess(
-                "electricity",
-                amount,
-                selectedProvider
-                  ? getDiscoShortName(selectedProvider.serviceID)
-                  : undefined,
-              );
-              setSuccessModal({
-                visible: true,
-                message: "Your electricity bill has been paid!",
-              });
-            }
-            return;
-          }
-
-          if (
-            code === "016" ||
-            code === "040" ||
-            status === "reversed" ||
-            status === "failed"
-          ) {
-            stopPolling();
-            setProcessingModal({
-              visible: false,
-              requestId: null,
-              message: "",
-            });
-            setErrorModal({
-              visible: true,
-              message:
-                code === "040"
-                  ? "Transaction reversed. Your wallet has been refunded."
-                  : "Transaction failed. Your wallet has been refunded.",
-            });
-            return;
-          }
-
-          const elapsed = Date.now() - pollStartRef.current;
-          if (elapsed >= POLL_MAX_ELAPSED_MS) {
-            stopPolling();
-            setProcessingModal({
-              visible: true,
-              requestId,
-              message:
-                "Your transaction is still processing. Please check back shortly.",
-            });
-            return;
-          }
-
-          pollTimeoutRef.current = setTimeout(
-            () => pollStatus(requestId, false),
-            isFirst ? POLL_FIRST_DELAY_MS : POLL_INTERVAL_MS,
-          );
-        })
-        .catch(() => {
-          const elapsed = Date.now() - pollStartRef.current;
-          if (elapsed >= POLL_MAX_ELAPSED_MS) {
-            stopPolling();
-            setProcessingModal({
-              visible: true,
-              requestId,
-              message:
-                "Your transaction is still processing. Please check back shortly.",
-            });
-            return;
-          }
-          pollTimeoutRef.current = setTimeout(
-            () => pollStatus(requestId, false),
-            POLL_INTERVAL_MS,
-          );
-        });
-    },
-    [stopPolling, meterType],
-  );
-
-  useEffect(() => () => stopPolling(), [stopPolling]);
-
-  const handleRefreshStatus = useCallback(() => {
-    const { requestId } = processingModal;
-    if (!requestId) return;
-    pollStartRef.current = Date.now();
-    pollStatus(requestId, true);
-  }, [processingModal, pollStatus]);
-
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   function handleOpenConfirmModal() {
@@ -346,9 +195,6 @@ export default function ElectricityPurchaseScreen() {
         if (res.success && res.data) {
           closeConfirmModal();
 
-          const requestId =
-            res.data.requestId ??
-            (res.data as { request_id?: string }).request_id;
           const status =
             res.data.content?.transactions?.status ?? res.data.status ?? "";
           const code = res.data.code ?? "";
@@ -361,47 +207,22 @@ export default function ElectricityPurchaseScreen() {
               ?.toUpperCase()
               .includes("PROCESSING");
 
-          if (isProcessing && requestId) {
-            pollStartRef.current = Date.now();
-            setProcessingModal({
-              visible: true,
-              requestId,
-              message:
-                "Your payment is being processed. We'll check the status shortly.",
-            });
-            pollStatus(requestId, true);
-          } else if (status === "delivered" || code === "000") {
-            const token = res.data.electricity_token;
-            if (token && meterType === "prepaid") {
-              void logPurchaseSuccess(
-                "electricity",
-                amount,
-                getDiscoShortName(selectedProvider.serviceID),
-              );
-              setTokenModal({
-                visible: true,
-                token,
-                units: res.data.units,
-                customerName: res.data.customerName ?? customerName,
-                amount: res.data.amount,
-              });
-            } else {
-              void logPurchaseSuccess(
-                "electricity",
-                amount,
-                getDiscoShortName(selectedProvider.serviceID),
-              );
-              setSuccessModal({
-                visible: true,
-                message: "Your electricity bill has been paid!",
-              });
-            }
+          if (!isProcessing && (status === "delivered" || code === "000")) {
+            void logPurchaseSuccess(
+              "electricity",
+              amount,
+              getDiscoShortName(selectedProvider.serviceID),
+            );
+          }
+
+          resetStore();
+          fetchHomepage();
+
+          const txId = res.data.id;
+          if (txId) {
+            router.replace(`/(app)/history/${txId}`);
           } else {
-            setSuccessModal({
-              visible: true,
-              message:
-                "Your request was received. You'll get a confirmation shortly.",
-            });
+            router.replace("/(app)/(tabs)");
           }
         } else {
           setErrorModal({
@@ -412,35 +233,30 @@ export default function ElectricityPurchaseScreen() {
           });
         }
       } catch (e) {
-        handleApiError(e);
-        setErrorModal({
-          visible: true,
-          message:
-            (e as {
-              response?: { data?: { message?: string } };
-              message?: string;
-            })?.response?.data?.message ??
-            (e as Error).message ??
-            "Purchase failed.",
-        });
+        const failedTxId = getFailedTransactionId(e);
+        if (failedTxId) {
+          // Downstream failure: the backend recorded a failed transaction and
+          // refunded. Open its receipt instead of a dead-end error modal.
+          closeConfirmModal();
+          fetchHomepage();
+          router.replace(`/(app)/history/${failedTxId}`);
+        } else {
+          handleApiError(e);
+          setErrorModal({
+            visible: true,
+            message:
+              (e as {
+                response?: { data?: { message?: string } };
+                message?: string;
+              })?.response?.data?.message ??
+              (e as Error).message ??
+              "Purchase failed.",
+          });
+        }
       } finally {
         setPurchasing(false);
       }
     });
-  }
-
-  function handleTokenClose() {
-    setTokenModal({ visible: false, token: "" });
-    resetStore();
-    fetchHomepage();
-    router.replace("/(app)/(tabs)");
-  }
-
-  function handleSuccessClose() {
-    setSuccessModal({ visible: false, message: "" });
-    resetStore();
-    fetchHomepage();
-    router.replace("/(app)/(tabs)");
   }
 
   if (!selectedProvider || !verifyData) return null;
@@ -682,26 +498,6 @@ export default function ElectricityPurchaseScreen() {
         }}
       />
 
-      {/* Prepaid token display */}
-      <TokenModal
-        visible={tokenModal.visible}
-        token={tokenModal.token}
-        units={tokenModal.units}
-        customerName={tokenModal.customerName}
-        amount={tokenModal.amount}
-        onClose={handleTokenClose}
-      />
-
-      {/* Postpaid success */}
-      <AlertModal
-        visible={successModal.visible}
-        variant="success"
-        title="Payment Successful"
-        message={successModal.message}
-        primaryAction={{ label: "Done", onPress: handleSuccessClose }}
-        onClose={handleSuccessClose}
-      />
-
       {/* Error */}
       <AlertModal
         visible={errorModal.visible}
@@ -726,46 +522,6 @@ export default function ElectricityPurchaseScreen() {
         closeable={false}
         onClose={() => {}}
       />
-
-      {/* Processing / polling */}
-      {processingModal.visible && processingModal.requestId && (
-        <AlertModal
-          visible
-          variant="info"
-          title="Processing"
-          message={
-            processingModal.message +
-            " You can tap Refresh to check status again."
-          }
-          primaryAction={{
-            label: "Refresh status",
-            onPress: handleRefreshStatus,
-          }}
-          secondaryAction={{
-            label: "Close",
-            onPress: () => {
-              stopPolling();
-              setProcessingModal({
-                visible: false,
-                requestId: null,
-                message: "",
-              });
-              fetchHomepage();
-              router.replace("/(app)/vtpass/electricity");
-            },
-          }}
-          onClose={() => {
-            stopPolling();
-            setProcessingModal({
-              visible: false,
-              requestId: null,
-              message: "",
-            });
-            fetchHomepage();
-            router.replace("/(app)/vtpass/electricity");
-          }}
-        />
-      )}
     </SafeAreaView>
   );
 }

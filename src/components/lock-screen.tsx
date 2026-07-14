@@ -12,8 +12,6 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import Constants from "expo-constants";
-import * as Application from "expo-application";
 import { router } from "expo-router";
 
 import { logout as logoutApi, removePushToken, signIn } from "@/api";
@@ -22,6 +20,7 @@ import {
   getLastRegisteredToken,
 } from "@/lib/push-notifications";
 import { AuthCenteredForm } from "@/components/auth/auth-centered-form";
+import { AuthVersionFooter } from "@/components/auth/auth-version-footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FullPageLoader, Spinner } from "@/components/ui/loaders";
@@ -44,16 +43,6 @@ function maskEmail(email: string): string {
 }
 
 const BIOMETRIC_ICON_SIZE = 48;
-
-// App version for the login footer, e.g. "2.4.0" -> "v2.4".
-const APP_VERSION_LABEL = (() => {
-  const raw =
-    Constants.expoConfig?.version ??
-    Application.nativeApplicationVersion ??
-    "";
-  const short = raw.split(".").slice(0, 2).join(".");
-  return short ? `v${short}` : "";
-})();
 
 export function LockScreen() {
   const { isDark } = useAppTheme();
@@ -423,14 +412,7 @@ export function LockScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {APP_VERSION_LABEL ? (
-        <View
-          pointerEvents="none"
-          className="absolute bottom-6 left-0 right-0 items-center"
-        >
-          <Text className="text-xs text-muted-foreground">{APP_VERSION_LABEL}</Text>
-        </View>
-      ) : null}
+      <AuthVersionFooter />
     </View>
   );
 }

@@ -8,8 +8,9 @@ import { useAppTheme } from "@/hooks/use-app-theme";
 import {
   formatPhoneFromContact,
   normalizeNgMobileDigits,
+  PHONE_REGEX,
 } from "@/features/vtpass-airtime/constants";
-import { phoneMatchesProvider } from "@/features/vtpass-airtime/phone-network";
+import { isKnownPhoneProviderMismatch } from "@/features/vtpass-airtime/phone-network";
 import { cn } from "@/lib/utils";
 import type { DataServiceItem } from "@/types/vtpass-data";
 
@@ -40,9 +41,11 @@ export function DataPhoneRow({
 }: DataPhoneRowProps) {
   const { isDark } = useAppTheme();
   const phoneDigits = phone.replace(/\D/g, "");
+  const phoneFormatValid = PHONE_REGEX.test(normalizeNgMobileDigits(phone));
+  /** Advisory only — never used to disable checkout. */
   const possibleMismatch =
-    phoneDigits.length >= 10 &&
-    !phoneMatchesProvider(phone, provider.serviceID);
+    phoneFormatValid &&
+    isKnownPhoneProviderMismatch(phone, provider.serviceID);
   const showDisclaimer = possibleMismatch || showContactMatchDisclaimer;
 
   function handlePhoneChange(text: string) {

@@ -1,1 +1,5 @@
-export { classifyError, handleApiError } from "./error-handler";
+export {
+  classifyError,
+  handleApiError,
+  getFailedTransactionId,
+} from "./error-handler";

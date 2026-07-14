@@ -1,13 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { View } from "react-native";
 import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
-import {
-  purchaseIntlAirtime,
-  queryIntlAirtime,
-} from "@/api";
+import { purchaseIntlAirtime } from "@/api";
 import {
   IntlAirtimeHeader,
   WalletBalanceCard,
@@ -15,13 +12,9 @@ import {
   ConfirmIntlAirtimeModal,
 } from "@/features/vtpass-intl-airtime/components";
 import {
-  formatNaira,
   parseBalanceToNumber,
   getIntlAirtimeCashbackRate,
   computeCashbackToEarn,
-  POLL_FIRST_DELAY_MS,
-  POLL_INTERVAL_MS,
-  POLL_MAX_ELAPSED_MS,
 } from "@/features/vtpass-intl-airtime/lib/constants";
 import { useIntlAirtimeStore } from "@/features/vtpass-intl-airtime/lib/store";
 import {
@@ -33,7 +26,7 @@ import { FullPageLoader } from "@/components/ui/loaders";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { useHomepageStore } from "@/store";
 import { logPurchaseSuccess } from "@/lib/analytics";
-import { handleApiError } from "@/lib/errors";
+import { getFailedTransactionId, handleApiError } from "@/lib/errors";
 
 export default function IntlAirtimeAmountScreen() {
   const homepageData = useHomepageStore.use.data();
@@ -76,115 +69,16 @@ export default function IntlAirtimeAmountScreen() {
     billersCode?: string;
     phone?: string;
   }>({});
-  const [successModal, setSuccessModal] = useState<{
-    visible: boolean;
-    message: string;
-  }>({ visible: false, message: "" });
   const [errorModal, setErrorModal] = useState<{
     visible: boolean;
     message: string;
   }>({ visible: false, message: "" });
-  const [processingModal, setProcessingModal] = useState<{
-    visible: boolean;
-    requestId: string | null;
-    message: string;
-  }>({ visible: false, requestId: null, message: "" });
-
-  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pollStartRef = useRef<number>(0);
 
   useEffect(() => {
     if (!selectedCountry || !selectedProductType || !selectedOperator || !selectedVariation) {
       router.replace("/(app)/vtpass/intl-airtime");
     }
   }, [selectedCountry, selectedProductType, selectedOperator, selectedVariation]);
-
-  const stopPolling = useCallback(() => {
-    if (pollTimeoutRef.current) {
-      clearTimeout(pollTimeoutRef.current);
-      pollTimeoutRef.current = null;
-    }
-  }, []);
-
-  const pollStatus = useCallback(
-    (requestId: string, isFirst: boolean) => {
-      queryIntlAirtime({ request_id: requestId })
-        .then((res) => {
-          if (!res.success || !res.data) return;
-          const status = res.data.content?.transactions?.status ?? "";
-          const code = res.data.code ?? "";
-          if (status === "delivered" || code === "000") {
-            stopPolling();
-            setProcessingModal({ visible: false, requestId: null, message: "" });
-            void logPurchaseSuccess("intl_airtime", amount);
-            setSuccessModal({
-              visible: true,
-              message: "Your international airtime purchase was successful.",
-            });
-            return;
-          }
-          if (
-            code === "016" ||
-            code === "040" ||
-            status === "reversed" ||
-            status === "failed"
-          ) {
-            stopPolling();
-            setProcessingModal({ visible: false, requestId: null, message: "" });
-            setErrorModal({
-              visible: true,
-              message:
-                code === "040"
-                  ? "Transaction reversed."
-                  : "Transaction failed. You have been refunded.",
-            });
-            return;
-          }
-          const elapsed = Date.now() - pollStartRef.current;
-          if (elapsed >= POLL_MAX_ELAPSED_MS) {
-            stopPolling();
-            setProcessingModal({
-              visible: true,
-              requestId,
-              message:
-                "Your transaction is still processing. Please check back shortly.",
-            });
-            return;
-          }
-          pollTimeoutRef.current = setTimeout(
-            () => pollStatus(requestId, false),
-            isFirst ? POLL_FIRST_DELAY_MS : POLL_INTERVAL_MS,
-          );
-        })
-        .catch(() => {
-          const elapsed = Date.now() - pollStartRef.current;
-          if (elapsed >= POLL_MAX_ELAPSED_MS) {
-            stopPolling();
-            setProcessingModal({
-              visible: true,
-              requestId,
-              message:
-                "Your transaction is still processing. Please check back shortly.",
-            });
-            return;
-          }
-          pollTimeoutRef.current = setTimeout(
-            () => pollStatus(requestId, false),
-            POLL_INTERVAL_MS,
-          );
-        });
-    },
-    [stopPolling],
-  );
-
-  useEffect(() => () => stopPolling(), [stopPolling]);
-
-  const handleRefreshStatus = useCallback(() => {
-    const { requestId } = processingModal;
-    if (!requestId) return;
-    pollStartRef.current = Date.now();
-    pollStatus(requestId, true);
-  }, [processingModal.requestId, pollStatus]);
 
   const amount = parseInt(amountStr.replace(/\D/g, ""), 10) || 0;
   const billersCodeTrimmed = billersCode.replace(/\s/g, "").replace(/\D/g, "");
@@ -309,9 +203,7 @@ export default function IntlAirtimeAmountScreen() {
 
         if (res.success && res.data) {
           closeConfirmModal();
-          const requestId =
-            res.data.requestId ??
-            (res.data as { request_id?: string }).request_id;
+
           const status =
             res.data.content?.transactions?.status ?? res.data.status ?? "";
           const code = res.data.code ?? "";
@@ -322,27 +214,21 @@ export default function IntlAirtimeAmountScreen() {
             code === "099" ||
             res.data.response_description?.toUpperCase().includes("PROCESSING");
 
-          if (isProcessing && requestId) {
-            pollStartRef.current = Date.now();
-            setProcessingModal({
-              visible: true,
-              requestId,
-              message:
-                "Your purchase is being processed. We'll check the status shortly.",
-            });
-            pollStatus(requestId, true);
-          } else if (status === "delivered" || code === "000") {
+          if (!isProcessing && (status === "delivered" || code === "000")) {
             void logPurchaseSuccess("intl_airtime", amount);
-            setSuccessModal({
-              visible: true,
-              message: `International airtime of ${formatNaira(amount)} has been sent successfully.`,
-            });
+          }
+
+          setAmountStr("");
+          setBillersCode("");
+          setPhone("");
+          resetStore();
+          fetchHomepage();
+
+          const txId = res.data.id;
+          if (txId) {
+            router.replace(`/(app)/history/${txId}`);
           } else {
-            setSuccessModal({
-              visible: true,
-              message:
-                "Your request was received. You'll get a confirmation shortly.",
-            });
+            router.replace("/(app)/(tabs)");
           }
         } else {
           setErrorModal({
@@ -353,31 +239,30 @@ export default function IntlAirtimeAmountScreen() {
           });
         }
       } catch (e) {
-        handleApiError(e);
-        setErrorModal({
-          visible: true,
-          message:
-            (e as {
-              response?: { data?: { message?: string } };
-              message?: string;
-            })?.response?.data?.message ??
-            (e as Error).message ??
-            "Purchase failed.",
-        });
+        const failedTxId = getFailedTransactionId(e);
+        if (failedTxId) {
+          // Downstream failure: the backend recorded a failed transaction and
+          // refunded. Open its receipt instead of a dead-end error modal.
+          closeConfirmModal();
+          fetchHomepage();
+          router.replace(`/(app)/history/${failedTxId}`);
+        } else {
+          handleApiError(e);
+          setErrorModal({
+            visible: true,
+            message:
+              (e as {
+                response?: { data?: { message?: string } };
+                message?: string;
+              })?.response?.data?.message ??
+              (e as Error).message ??
+              "Purchase failed.",
+          });
+        }
       } finally {
         setPurchasing(false);
       }
     });
-  }
-
-  function handleSuccessClose() {
-    setSuccessModal({ visible: false, message: "" });
-    setAmountStr("");
-    setBillersCode("");
-    setPhone("");
-    resetStore();
-    fetchHomepage();
-    router.replace("/(app)/(tabs)");
   }
 
   if (
@@ -480,15 +365,6 @@ export default function IntlAirtimeAmountScreen() {
       />
 
       <AlertModal
-        visible={successModal.visible}
-        variant="success"
-        title="Done"
-        message={successModal.message}
-        primaryAction={{ label: "Done", onPress: handleSuccessClose }}
-        onClose={handleSuccessClose}
-      />
-
-      <AlertModal
         visible={errorModal.visible}
         variant="error"
         title="Error"
@@ -511,43 +387,6 @@ export default function IntlAirtimeAmountScreen() {
         closeable={false}
         onClose={() => {}}
       />
-
-      {processingModal.visible && processingModal.requestId && (
-        <AlertModal
-          visible
-          variant="info"
-          title="Processing"
-          message={
-            processingModal.message +
-            " You can tap Refresh to check status again."
-          }
-          primaryAction={{
-            label: "Refresh status",
-            onPress: handleRefreshStatus,
-          }}
-          secondaryAction={{
-            label: "Close",
-            onPress: () => {
-              setProcessingModal({
-                visible: false,
-                requestId: null,
-                message: "",
-              });
-              fetchHomepage();
-              router.replace("/(app)/vtpass/intl-airtime");
-            },
-          }}
-          onClose={() => {
-            setProcessingModal({
-              visible: false,
-              requestId: null,
-              message: "",
-            });
-            fetchHomepage();
-            router.replace("/(app)/vtpass/intl-airtime");
-          }}
-        />
-      )}
     </SafeAreaView>
   );
 }
