@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from "react";
 import {
   Image,
   Keyboard,
+  Platform,
   Pressable,
   TextInput,
   View,
@@ -338,6 +339,11 @@ export default function SignUpScreen() {
 
   // ── Render ────────────────────────────────────────────────────────
 
+  // Android + long profile form: window resize alone doesn't keep PIN / referral
+  // above the keyboard. Extra offset is Android-only — iOS already behaves correctly.
+  const androidProfileKeyboard =
+    Platform.OS === "android" && step === "profile";
+
   return (
     <SafeAreaView className="flex-1 bg-background">
       <KeyboardAwareScrollView
@@ -345,12 +351,14 @@ export default function SignUpScreen() {
         contentContainerStyle={{
           flexGrow: 1,
           justifyContent: step === "profile" ? "flex-start" : "center",
-          paddingVertical: 24,
+          paddingTop: 24,
+          paddingBottom: androidProfileKeyboard ? 120 : 24,
         }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
-        bottomOffset={28}
+        bottomOffset={androidProfileKeyboard ? 120 : 28}
+        extraKeyboardSpace={androidProfileKeyboard ? 64 : 0}
       >
           <AuthCenteredForm layout="top" className="px-6">
           {/* ── Header ── */}
