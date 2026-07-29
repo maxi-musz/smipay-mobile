@@ -6,5 +6,6 @@ export { useProfileStore } from "./profile.store";
 export { useFundingResultSheetStore } from "./funding-result-sheet.store";
 export { useInboxStore } from "./inbox.store";
 export { useSmileaiStore } from "./smileai-store";
+export { useKycVerificationStore } from "./kyc-verification.store";
 export { createPersistConfig } from "./middleware";
 export { createSelectors } from "./create-selectors";

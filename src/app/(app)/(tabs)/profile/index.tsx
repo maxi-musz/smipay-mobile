@@ -37,6 +37,7 @@ const PRIVACY_POLICY_URL = "https://www.smipay.ng/privacy";
 
 const menuItems: MenuItem[] = [
   { id: "basic-information", icon: "person-outline", label: "Basic Information" },
+  { id: "account-limits", icon: "speedometer-outline", label: "Account Limits" },
   { id: "referral", icon: "gift-outline", label: "Referral" },
   { id: "security", icon: "shield-checkmark-outline", label: "Security" },
   { id: "notifications", icon: "notifications-outline", label: "Notifications" },
@@ -112,6 +113,8 @@ export default function ProfileScreen() {
       router.push("/(app)/profile/security");
     } else if (id === "basic-information") {
       router.push("/(app)/profile/basic-information");
+    } else if (id === "account-limits") {
+      router.push("/(app)/profile/account-limits");
     } else if (id === "referral") {
       router.push("/(app)/profile/referral");
     } else if (id === "notifications") {

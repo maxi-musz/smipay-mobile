@@ -109,3 +109,9 @@ export {
   queryElectricityTransaction,
 } from "./services/vtpass-electricity";
 export { fetchVersionGate, type VersionGateData } from "./services/app-config";
+export {
+  fetchKycVerificationStatus,
+  requestPhoneVerificationOtp,
+  verifyPhoneVerificationOtp,
+  updatePhoneVerificationNumber,
+} from "./services/kyc-verification";

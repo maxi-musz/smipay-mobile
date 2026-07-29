@@ -10,13 +10,14 @@ import {
   BalanceCard,
   DashboardHeader,
   FloatingSmileButton,
+  PhoneVerificationRequiredModal,
   PromoBanner,
   RecentTransactions,
   ServicesGrid,
   TransactionPinRequiredModal,
 } from "@/components/dashboard";
 import { useVersionGateContext } from "@/context/version-gate-context";
-import { useAuthStore, useHomepageStore } from "@/store";
+import { useAuthStore, useHomepageStore, useKycVerificationStore } from "@/store";
 import { colors } from "@/constants/colors";
 import { prefetchProviders } from "@/lib/provider-prefetch";
 
@@ -27,6 +28,9 @@ export default function HomeScreen() {
   const error = useHomepageStore.use.error();
   const fetchHomepage = useHomepageStore.use.fetchHomepage();
   const refreshHomepageSilently = useHomepageStore.use.refreshHomepageSilently();
+  const kycStatus = useKycVerificationStore.use.data();
+  const fetchKycStatus = useKycVerificationStore.use.fetchStatus();
+  const refreshKycStatusSilently = useKycVerificationStore.use.refreshStatusSilently();
   const { versionCheckComplete, effectiveLevel } = useVersionGateContext();
   const wasLockedRef = useRef(isLocked);
   const didPrefetchRef = useRef(false);
@@ -42,10 +46,12 @@ export default function HomeScreen() {
    * user who returns without finishing setup is prompted again.
    */
   const [pinPromptSnoozed, setPinPromptSnoozed] = useState(false);
+  const [phonePromptSnoozed, setPhonePromptSnoozed] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       setPinPromptSnoozed(false);
+      setPhonePromptSnoozed(false);
       // The initial mount already fetches via the effect below, so skip that
       // first focus. On every RE-focus — e.g. returning from a purchase or a
       // transaction receipt — silently revalidate so new transactions and
@@ -56,6 +62,7 @@ export default function HomeScreen() {
       }
       if (!isLocked) {
         void refreshHomepageSilently();
+        void refreshKycStatusSilently();
       }
     }, [isLocked, refreshHomepageSilently]),
   );
@@ -66,7 +73,8 @@ export default function HomeScreen() {
   // while we revalidate in the background.
   useEffect(() => {
     fetchHomepage();
-  }, [fetchHomepage]);
+    void fetchKycStatus();
+  }, [fetchHomepage, fetchKycStatus]);
 
   // After unlock: revalidate silently so we never block the UI behind a loader.
   useEffect(() => {
@@ -75,10 +83,12 @@ export default function HomeScreen() {
     if (!justUnlocked) return;
     if (data) {
       void refreshHomepageSilently();
+      void refreshKycStatusSilently();
     } else {
       void fetchHomepage();
+      void fetchKycStatus();
     }
-  }, [isLocked, data, fetchHomepage, refreshHomepageSilently]);
+  }, [isLocked, data, fetchHomepage, refreshHomepageSilently, fetchKycStatus, refreshKycStatusSilently]);
 
   // Foreground transitions: when the user returns to the app from background,
   // silently refresh balances + recent transactions in the background. The UI
@@ -91,6 +101,7 @@ export default function HomeScreen() {
       appStateRef.current = next;
       if (next === "active" && wasBackground && !isLocked) {
         void refreshHomepageSilently();
+        void refreshKycStatusSilently();
       }
     });
     return () => sub.remove();
@@ -105,15 +116,20 @@ export default function HomeScreen() {
     void prefetchProviders();
   }, [data, isLocked]);
 
+  const phoneModalVisible =
+    versionCheckComplete &&
+    effectiveLevel === "none" &&
+    kycStatus?.should_block === true;
+
   /**
-   * PIN setup is mandatory, but a soft update prompt takes priority: we only
-   * show the PIN modal after the version check has run and `effectiveLevel`
-   * is `"none"` (including after the user taps "Later" on a soft update, which
-   * snoozes and clears the effective level until the next window).
+   * PIN setup is mandatory, but phone verification and soft update prompts take
+   * priority. We only show the PIN modal after the version check has run,
+   * phone verification is satisfied, and `effectiveLevel` is `"none"`.
    */
   const pinModalVisible =
     versionCheckComplete &&
     effectiveLevel === "none" &&
+    !phoneModalVisible &&
     !!data?.user &&
     !(
       data.user.is_four_digit_pin_set === true ||
@@ -193,6 +209,14 @@ export default function HomeScreen() {
         visible={addMoneyModalVisible}
         onClose={() => setAddMoneyModalVisible(false)}
         accounts={data?.accounts ?? []}
+      />
+      <PhoneVerificationRequiredModal
+        visible={phoneModalVisible && !phonePromptSnoozed}
+        maskedPhone={kycStatus?.phone_verification?.masked_phone}
+        onProceed={() => {
+          setPhonePromptSnoozed(true);
+          router.push("/(app)/profile/account-limits");
+        }}
       />
       <TransactionPinRequiredModal
         visible={pinModalVisible && !pinPromptSnoozed}

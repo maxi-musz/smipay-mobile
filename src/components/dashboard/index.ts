@@ -11,3 +11,4 @@ export { PromoBanner } from "./promo-banner";
 export { ServicesGrid } from "./services-grid";
 export { RecentTransactions } from "./recent-transactions";
 export { TransactionPinRequiredModal } from "./transaction-pin-required-modal";
+export { PhoneVerificationRequiredModal } from "./phone-verification-required-modal";

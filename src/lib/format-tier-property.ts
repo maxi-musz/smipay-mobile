@@ -12,7 +12,13 @@ export function formatTierPropertyValue(property: TierProperty): string {
     const amount = Number(property.value);
     if (Number.isNaN(amount)) return "—";
     const formatted = amount.toLocaleString("en-NG");
+    if (property.unit?.toUpperCase() === "NGN") {
+      return `₦${formatted}`;
+    }
     return property.unit ? `${formatted} ${property.unit}` : formatted;
+  }
+  if (property.value === null || property.value === undefined || property.value === "") {
+    return "—";
   }
   return String(property.value ?? "—");
 }
