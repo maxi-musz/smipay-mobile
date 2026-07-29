@@ -1,63 +1,64 @@
-import React, { useRef, useState } from "react";
-import {
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  TextInput,
-  View,
-} from "react-native";
-import { router } from "expo-router";
-import Animated, { FadeInDown } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useCallback, useState } from "react";
+import { BackHandler, Keyboard, Pressable, View } from "react-native";
+import { router, useFocusEffect } from "expo-router";
 
 import { forgotPassword, resetPassword } from "@/api";
-import { AuthCenteredForm } from "@/components/auth/auth-centered-form";
-import { AuthVersionFooter } from "@/components/auth/auth-version-footer";
-import { Button } from "@/components/ui/button";
+import { AuthShell } from "@/components/auth/auth-shell";
+import {
+  CodeSlots,
+  Keypad,
+  KeypadDock,
+  PinDots,
+  useNumericInput,
+  type KeypadKey,
+} from "@/components/keypad";
+import { ArrowButton } from "@/components/ui/arrow-button";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
+import { useToastStore } from "@/components/ui/toast";
+import { ApiClientError } from "@/lib/api";
 import {
   AUTH_OTP_DIGITS,
   AUTH_PASSWORD_DIGITS,
   isAuthPasswordValid,
 } from "@/lib/auth-password";
 import { handleApiError } from "@/lib/errors";
-import { useToastStore } from "@/components/ui/toast";
-type Step = "email" | "reset";
+
+type Step = "email" | "code" | "password";
 
 const EMAIL_RE = /\S+@\S+\.\S+/;
+
+/** Heuristic: does a reset failure point at the code rather than the password? */
+function looksLikeCodeError(message: string): boolean {
+  return /otp|code|expire|invalid|incorrect/i.test(message);
+}
 
 export default function ForgotPasswordScreen() {
   const [step, setStep] = useState<Step>("email");
   const [loading, setLoading] = useState(false);
-
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
-  const [newPassword, setNewPassword] = useState("");
+  const [error, setError] = useState("");
+  const [shakeKey, setShakeKey] = useState(0);
   const [resendCooldown, setResendCooldown] = useState(0);
 
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const code = useNumericInput({
+    length: AUTH_OTP_DIGITS,
+    onComplete: () => {
+      setError("");
+      setStep("password");
+    },
+    onChange: () => setError(""),
+  });
 
-  const passwordRef = useRef<TextInput>(null);
-
-  function clearError(key: string) {
-    if (errors[key])
-      setErrors((p) => {
-        const n = { ...p };
-        delete n[key];
-        return n;
-      });
-  }
+  const newPassword = useNumericInput({
+    length: AUTH_PASSWORD_DIGITS,
+    onComplete: (value) => {
+      void handleResetPassword(value);
+    },
+    onChange: () => setError(""),
+  });
 
   const canSubmitEmail = EMAIL_RE.test(email.trim()) && !loading;
-  const canSubmitReset =
-    otp.length === AUTH_OTP_DIGITS &&
-    isAuthPasswordValid(newPassword) &&
-    !loading;
 
   function startResendCooldown() {
     setResendCooldown(60);
@@ -72,24 +73,22 @@ export default function ForgotPasswordScreen() {
     }, 1000);
   }
 
-  // ── Step 1 — Request OTP ──────────────────────────────────────────
-
   async function handleRequestOtp() {
-    if (!email.trim()) {
-      setErrors({ email: "Email is required" });
-      return;
-    }
-    if (!EMAIL_RE.test(email)) {
-      setErrors({ email: "Enter a valid email" });
+    const trimmed = email.trim();
+    if (!EMAIL_RE.test(trimmed)) {
+      setError("Enter a valid email address");
+      setShakeKey((k) => k + 1);
       return;
     }
 
     Keyboard.dismiss();
-    setErrors({});
+    setError("");
     setLoading(true);
     try {
-      await forgotPassword(email.trim().toLowerCase());
-      setStep("reset");
+      await forgotPassword(trimmed.toLowerCase());
+      code.clear();
+      newPassword.clear();
+      setStep("code");
       startResendCooldown();
     } catch (e) {
       handleApiError(e);
@@ -99,11 +98,11 @@ export default function ForgotPasswordScreen() {
   }
 
   async function handleResendOtp() {
-    if (resendCooldown > 0) return;
+    if (resendCooldown > 0 || loading) return;
     setLoading(true);
     try {
       await forgotPassword(email.trim().toLowerCase());
-      setOtp("");
+      code.clear();
       startResendCooldown();
       useToastStore.getState().show({
         variant: "success",
@@ -117,202 +116,239 @@ export default function ForgotPasswordScreen() {
     }
   }
 
-  // ── Step 2 — OTP + new password → reset in one call ───────────────
-
-  async function handleResetPassword() {
-    const next: Record<string, string> = {};
-    if (otp.length !== AUTH_OTP_DIGITS)
-      next.otp = `Enter the ${AUTH_OTP_DIGITS}-digit code`;
-    if (!isAuthPasswordValid(newPassword))
-      next.newPassword = `Use exactly ${AUTH_PASSWORD_DIGITS} digits (0–9)`;
-    if (Object.keys(next).length > 0) {
-      setErrors(next);
+  async function handleResetPassword(passwordValue: string = newPassword.value) {
+    if (code.value.length !== AUTH_OTP_DIGITS) {
+      setStep("code");
+      setError("Enter the full reset code first");
+      setShakeKey((k) => k + 1);
       return;
     }
+    if (!isAuthPasswordValid(passwordValue)) {
+      setError(`Use exactly ${AUTH_PASSWORD_DIGITS} digits`);
+      setShakeKey((k) => k + 1);
+      return;
+    }
+    if (loading) return;
 
     Keyboard.dismiss();
-    setErrors({});
+    setError("");
     setLoading(true);
     try {
       await resetPassword({
         email: email.trim().toLowerCase(),
-        otp,
-        new_password: newPassword,
+        otp: code.value,
+        new_password: passwordValue,
       });
       useToastStore.getState().show({
         variant: "success",
         title: "Password Reset",
-        message: "Your password has been reset successfully.",
+        message: "Your password has been reset. Sign in with your new password.",
       });
       router.replace("/(auth)/sign-in");
     } catch (e) {
-      handleApiError(e);
+      const message =
+        e instanceof ApiClientError
+          ? e.message
+          : "We couldn't reset your password. Please try again.";
+      newPassword.clear();
+      setShakeKey((k) => k + 1);
+      // A bad/expired code is fixed on the code step, so send the user back there.
+      if (e instanceof ApiClientError && e.statusCode !== 500 && looksLikeCodeError(message)) {
+        setStep("code");
+        code.clear();
+      }
+      setError(message);
     } finally {
       setLoading(false);
     }
   }
 
-  // ── Render ────────────────────────────────────────────────────────
+  function handleBack() {
+    setError("");
+    if (step === "code") {
+      setStep("email");
+    } else if (step === "password") {
+      setStep("code");
+    } else {
+      router.back();
+    }
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      const onHardwareBack = () => {
+        handleBack();
+        return true;
+      };
+
+      const sub = BackHandler.addEventListener("hardwareBackPress", onHardwareBack);
+      return () => sub.remove();
+    }, [step]),
+  );
+
+  const resendKey: KeypadKey = {
+    type: "action",
+    id: "resend",
+    label: resendCooldown > 0 ? `${resendCooldown}s` : "Resend",
+    ghost: true,
+    disabled: resendCooldown > 0 || loading,
+    accessibilityLabel:
+      resendCooldown > 0
+        ? `Resend available in ${resendCooldown} seconds`
+        : "Resend reset code",
+    onPress: () => void handleResendOtp(),
+  };
+
+  const title =
+    step === "email"
+      ? "Forgot password?"
+      : step === "code"
+        ? "Enter reset code"
+        : "Set a new password";
+
+  const subtitle =
+    step === "email"
+      ? "Enter your account email and we'll send a reset code."
+      : step === "code"
+        ? `We sent a 6-digit code to ${email}.`
+        : `Choose a new ${AUTH_PASSWORD_DIGITS}-digit login password.`;
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <KeyboardAvoidingView
-        enabled={Platform.OS === "ios"}
-        behavior="padding"
-        className="flex-1"
-        style={{ flex: 1 }}
-      >
-        <ScrollView
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: "center",
-            paddingVertical: 24,
-          }}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          automaticallyAdjustKeyboardInsets={false}
-        >
-          <AuthCenteredForm layout="top" className="px-6">
-          {/* Header */}
-          <Animated.View
-            className="items-center"
-            entering={FadeInDown.duration(220)}
-          >
-            <Image
-              source={require("@/assets/images/icon.png")}
-              className="mb-3 h-14 w-14 rounded-2xl"
-              resizeMode="contain"
+    <AuthShell
+      title={title}
+      subtitle={subtitle}
+      showVersion={step === "email"}
+      bottom={
+        step === "code" ? (
+          <KeypadDock secure title="SmiPay Secure Keypad">
+            <Keypad
+              controller={code}
+              disabled={loading}
+              leftKey={resendKey}
+              backspaceBehavior="clear"
             />
-            <Text variant="h4">
-              {step === "email" ? "Forgot Password?" : "Reset Password"}
-            </Text>
-            <Text className="mt-2 text-center text-sm text-muted-foreground">
-              {step === "email"
-                ? "Enter your email and we'll send you a reset code."
-                : `Enter the code sent to ${email} and your new password.`}
-            </Text>
-          </Animated.View>
+          </KeypadDock>
+        ) : step === "password" ? (
+          <KeypadDock secure title="SmiPay Secure Keypad">
+            <Keypad
+              controller={newPassword}
+              disabled={loading}
+              backspaceBehavior="clear"
+            />
+          </KeypadDock>
+        ) : undefined
+      }
+    >
+      {step === "email" ? (
+        <View className="mt-9">
+          <Input
+            label="Email"
+            placeholder="you@example.com"
+            value={email}
+            onChangeText={(v) => {
+              setEmail(v);
+              setError("");
+            }}
+            error={error || undefined}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            textContentType="emailAddress"
+            autoFocus
+            returnKeyType="done"
+            onSubmitEditing={canSubmitEmail ? handleRequestOtp : undefined}
+          />
 
-          {/* ── Step 1: Email ── */}
-          {step === "email" && (
-            <Animated.View
-              className="mt-10 gap-4"
-              entering={FadeInDown.delay(40).duration(220)}
+          <View className="mt-7 flex-row items-center justify-between">
+            <Pressable
+              onPress={() => router.replace("/(auth)/sign-in")}
+              hitSlop={10}
+              accessibilityRole="button"
+              className="active:opacity-70"
             >
-              <Input
-                label="Email"
-                placeholder="you@example.com"
-                value={email}
-                onChangeText={(v) => {
-                  setEmail(v);
-                  clearError("email");
-                }}
-                error={errors.email}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                returnKeyType="done"
-                onSubmitEditing={canSubmitEmail ? handleRequestOtp : undefined}
-              />
+              <Text className="text-sm font-semibold text-primary">
+                Back to sign in
+              </Text>
+            </Pressable>
 
-              <Button
-                className="mt-4 h-14 rounded-2xl"
-                onPress={handleRequestOtp}
-                disabled={!canSubmitEmail}
+            <ArrowButton
+              onPress={handleRequestOtp}
+              disabled={!canSubmitEmail}
+              loading={loading}
+              accessibilityLabel="Send reset code"
+              testID="forgot-send-code"
+            />
+          </View>
+        </View>
+      ) : step === "code" ? (
+        <View className="mt-9">
+          <CodeSlots
+            value={code.value}
+            length={AUTH_OTP_DIGITS}
+            variant="underline"
+            focused={!loading}
+            error={Boolean(error)}
+            shakeKey={shakeKey}
+            slotHeight={54}
+            accessibilityLabel="Password reset code"
+          />
+
+          {error ? (
+            <Text className="mt-4 text-sm font-medium text-destructive">
+              {error}
+            </Text>
+          ) : null}
+
+          <View className="mt-7">
+            <Text className="text-sm text-muted-foreground">
+              Didn&apos;t get it?{" "}
+              <Text
+                className={
+                  resendCooldown > 0
+                    ? "text-sm text-muted-foreground"
+                    : "text-sm font-semibold text-primary"
+                }
+                onPress={resendCooldown > 0 ? undefined : () => void handleResendOtp()}
               >
-                {loading ? (
-                  <Spinner color="#fff" />
-                ) : (
-                  <Text className="text-base font-semibold">
-                    Send Reset Code
-                  </Text>
-                )}
-              </Button>
+                {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+              </Text>
+            </Text>
+          </View>
+        </View>
+      ) : (
+        <View className="mt-9">
+          <Text className="text-[13px] font-medium text-muted-foreground">
+            New {AUTH_PASSWORD_DIGITS}-digit password
+          </Text>
+          <PinDots
+            value={newPassword.value}
+            length={AUTH_PASSWORD_DIGITS}
+            error={Boolean(error)}
+            shakeKey={shakeKey}
+            style={{ justifyContent: "flex-start", marginTop: 18 }}
+          />
 
-              <Pressable onPress={() => router.back()}>
-                <Text className="text-center text-sm text-primary">
-                  Back to Sign In
-                </Text>
-              </Pressable>
-            </Animated.View>
+          {error ? (
+            <Text className="mt-4 text-sm font-medium text-destructive">
+              {error}
+            </Text>
+          ) : (
+            <Text className="mt-4 text-sm text-muted-foreground">
+              This replaces the password you use to sign in.
+            </Text>
           )}
 
-          {/* ── Step 2: OTP + New Password ── */}
-          {step === "reset" && (
-            <Animated.View
-              className="mt-10 gap-4"
-              entering={FadeInDown.delay(40).duration(220)}
-            >
-              <Input
-                label="Reset Code"
-                placeholder="000000"
-                value={otp}
-                onChangeText={(t) => {
-                  setOtp(t.replace(/\D/g, "").slice(0, AUTH_OTP_DIGITS));
-                  clearError("otp");
-                }}
-                error={errors.otp}
-                keyboardType="number-pad"
-                maxLength={AUTH_OTP_DIGITS}
-                returnKeyType="next"
-                onSubmitEditing={() => passwordRef.current?.focus()}
-              />
-
-              <View>
-                <Input
-                  ref={passwordRef}
-                  label="New Password"
-                  placeholder="••••••"
-                  value={newPassword}
-                  onChangeText={(v) => {
-                    setNewPassword(v.replace(/\D/g, "").slice(0, AUTH_PASSWORD_DIGITS));
-                    clearError("newPassword");
-                  }}
-                  error={errors.newPassword}
-                  secureTextEntry
-                  toggleable
-                  keyboardType="number-pad"
-                  maxLength={AUTH_PASSWORD_DIGITS}
-                  returnKeyType="done"
-                  onSubmitEditing={
-                    canSubmitReset ? handleResetPassword : undefined
-                  }
-                />
-                <Text className="mt-1.5 text-xs text-muted-foreground">
-                  Exactly {AUTH_PASSWORD_DIGITS} numbers — same as sign-in password
-                </Text>
-              </View>
-
-              <Button
-                className="mt-4 h-14 rounded-2xl"
-                onPress={handleResetPassword}
-                disabled={!canSubmitReset}
-              >
-                {loading ? (
-                  <Spinner color="#fff" />
-                ) : (
-                  <Text className="text-base font-semibold">
-                    Reset Password
-                  </Text>
-                )}
-              </Button>
-
-              <Pressable
-                onPress={handleResendOtp}
-                disabled={resendCooldown > 0}
-              >
-                <Text className="text-center text-sm text-primary">
-                  {resendCooldown > 0
-                    ? `Resend code in ${resendCooldown}s`
-                    : "Resend code"}
-                </Text>
-              </Pressable>
-            </Animated.View>
-          )}
-          </AuthCenteredForm>
-        </ScrollView>
-      </KeyboardAvoidingView>
-      <AuthVersionFooter />
-    </SafeAreaView>
+          <View className="mt-7 flex-row justify-end">
+            <ArrowButton
+              onPress={() => void handleResetPassword()}
+              disabled={newPassword.value.length !== AUTH_PASSWORD_DIGITS || loading}
+              loading={loading}
+              accessibilityLabel="Reset password"
+              testID="forgot-reset-submit"
+            />
+          </View>
+        </View>
+      )}
+    </AuthShell>
   );
 }

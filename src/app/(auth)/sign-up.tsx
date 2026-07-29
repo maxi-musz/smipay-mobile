@@ -1,17 +1,8 @@
-import React, { useCallback, useRef, useState } from "react";
-import {
-  Image,
-  Keyboard,
-  Platform,
-  Pressable,
-  TextInput,
-  View,
-} from "react-native";
+import { useCallback, useRef, useState } from "react";
+import { BackHandler, Image, Keyboard, Pressable, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Link, router } from "expo-router";
-import Animated, { FadeInDown } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Link, router, useFocusEffect } from "expo-router";
 
 import {
   register,
@@ -24,13 +15,18 @@ import {
   ProfilePhotoPreviewModal,
   ProfilePhotoSourceSheet,
 } from "@/components/profile";
-import { AuthCenteredForm } from "@/components/auth/auth-centered-form";
-import { AuthVersionFooter } from "@/components/auth/auth-version-footer";
-import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
-import { Button } from "@/components/ui/button";
+import { AuthShell } from "@/components/auth/auth-shell";
+import {
+  CodeSlots,
+  Keypad,
+  KeypadDock,
+  useNumericInput,
+  type KeypadKey,
+} from "@/components/keypad";
+import { ArrowButton } from "@/components/ui/arrow-button";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
+import { useToastStore } from "@/components/ui/toast";
 import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import {
@@ -47,12 +43,12 @@ import {
   rejectIfProfileImageTooLarge,
   type PickedProfileImage,
 } from "@/lib/pick-profile-image";
-import { useToastStore } from "@/components/ui/toast";
 import { useAuthStore } from "@/store";
 
 type Step = "email" | "otp" | "profile";
 
 const STEPS: Step[] = ["email", "otp", "profile"];
+const STEP_LABELS = ["Email", "Verify", "Profile"];
 const EMAIL_RE = /\S+@\S+\.\S+/;
 const TRANSACTION_PIN_DIGITS = 4;
 
@@ -82,8 +78,9 @@ export default function SignUpScreen() {
   const [loading, setLoading] = useState(false);
 
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [otpError, setOtpError] = useState("");
+  const [otpShakeKey, setOtpShakeKey] = useState(0);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -105,6 +102,14 @@ export default function SignUpScreen() {
   const passwordRef = useRef<TextInput>(null);
   const transactionPinRef = useRef<TextInput>(null);
 
+  const otp = useNumericInput({
+    length: AUTH_OTP_DIGITS,
+    onComplete: (value) => {
+      void handleVerifyOtp(value);
+    },
+    onChange: () => setOtpError(""),
+  });
+
   function clearError(key: string) {
     if (errors[key])
       setErrors((p) => {
@@ -115,7 +120,6 @@ export default function SignUpScreen() {
   }
 
   const canSubmitEmail = EMAIL_RE.test(email.trim()) && !loading;
-  const canSubmitOtp = otp.length === AUTH_OTP_DIGITS && !loading;
   const canSubmitProfile =
     firstName.trim().length > 0 &&
     lastName.trim().length > 0 &&
@@ -125,7 +129,7 @@ export default function SignUpScreen() {
     agreedToTerms &&
     !loading;
 
-  // ── Handlers ──────────────────────────────────────────────────────
+  // ── Cooldown ──────────────────────────────────────────────────────
 
   function startResendCooldown() {
     setResendCooldown(60);
@@ -140,12 +144,11 @@ export default function SignUpScreen() {
     }, 1000);
   }
 
+  // ── Handlers ──────────────────────────────────────────────────────
+
   async function handleVerifyEmail() {
-    if (!email.trim()) {
-      setErrors({ email: "Email is required" });
-      return;
-    }
-    if (!EMAIL_RE.test(email)) {
+    const trimmed = email.trim();
+    if (!EMAIL_RE.test(trimmed)) {
       setErrors({ email: "Enter a valid email" });
       return;
     }
@@ -154,7 +157,9 @@ export default function SignUpScreen() {
     setErrors({});
     setLoading(true);
     try {
-      await requestEmailVerification(email.trim().toLowerCase());
+      await requestEmailVerification(trimmed.toLowerCase());
+      otp.clear();
+      setOtpError("");
       setStep("otp");
       startResendCooldown();
     } catch (e) {
@@ -165,10 +170,11 @@ export default function SignUpScreen() {
   }
 
   async function handleResendOtp() {
-    if (resendCooldown > 0) return;
+    if (resendCooldown > 0 || loading) return;
     setLoading(true);
     try {
       await requestEmailVerification(email.trim().toLowerCase());
+      otp.clear();
       startResendCooldown();
       useToastStore.getState().show({
         variant: "success",
@@ -182,21 +188,29 @@ export default function SignUpScreen() {
     }
   }
 
-  async function handleVerifyOtp() {
-    if (otp.length !== AUTH_OTP_DIGITS) {
-      setErrors({ otp: `Enter the ${AUTH_OTP_DIGITS}-digit code` });
+  async function handleVerifyOtp(value: string = otp.value) {
+    if (value.length !== AUTH_OTP_DIGITS) {
+      setOtpError(`Enter the ${AUTH_OTP_DIGITS}-digit code`);
+      setOtpShakeKey((k) => k + 1);
       return;
     }
+    if (loading) return;
 
     Keyboard.dismiss();
-    setErrors({});
+    setOtpError("");
     setLoading(true);
     try {
-      if (__DEV__) console.log("[OTP] Verifying:", { email: email.trim().toLowerCase(), otp });
-      await verifyEmailForRegistration(email.trim().toLowerCase(), otp);
+      await verifyEmailForRegistration(email.trim().toLowerCase(), value);
       setStep("profile");
     } catch (e) {
-      handleApiError(e);
+      // Clear so the next attempt starts fresh rather than editing a rejected code.
+      otp.clear();
+      setOtpError(
+        e instanceof Error && e.message
+          ? e.message
+          : "That code didn't work. Please try again.",
+      );
+      setOtpShakeKey((k) => k + 1);
     } finally {
       setLoading(false);
     }
@@ -204,8 +218,8 @@ export default function SignUpScreen() {
 
   function validateProfile() {
     const next: Record<string, string> = {};
-    if (!firstName.trim()) next.firstName = "First name is required";
-    if (!lastName.trim()) next.lastName = "Last name is required";
+    if (!firstName.trim()) next.firstName = "Required";
+    if (!lastName.trim()) next.lastName = "Required";
     const trimmedPhone = phone.trim();
     if (!trimmedPhone) next.phone = "Phone number is required";
     else if (!isValidPhone(trimmedPhone))
@@ -246,9 +260,7 @@ export default function SignUpScreen() {
         phone_number: phone.trim(),
         agree_to_terms: true,
         country: "Nigeria",
-        ...(trimmedReferral.length > 0
-          ? { referral_code: trimmedReferral }
-          : {}),
+        ...(trimmedReferral.length > 0 ? { referral_code: trimmedReferral } : {}),
       };
 
       const res = registrationPhoto
@@ -280,476 +292,394 @@ export default function SignUpScreen() {
     }
   }
 
-  // ── Step indicator ────────────────────────────────────────────────
-
-  const stepLabels = ["Email", "Verify", "Profile"];
-  const currentIdx = STEPS.indexOf(step);
-
-  function StepIndicator() {
-    return (
-      <View className="flex-row items-center justify-center gap-3">
-        {STEPS.map((s, i) => {
-          const isActive = i === currentIdx;
-          const isDone = i < currentIdx;
-          return (
-            <View key={s} className="flex-row items-center gap-3">
-              {i > 0 && (
-                <View
-                  className={`h-px w-6 ${isDone ? "bg-primary" : "bg-muted"}`}
-                />
-              )}
-              <View className="items-center gap-1">
-                <View
-                  className={`h-7 w-7 items-center justify-center rounded-full ${
-                    isActive
-                      ? "bg-primary"
-                      : isDone
-                        ? "bg-primary/20"
-                        : "bg-muted"
-                  }`}
-                >
-                  <Text
-                    className={`text-xs font-semibold ${
-                      isActive
-                        ? "text-primary-foreground"
-                        : isDone
-                          ? "text-primary"
-                          : "text-muted-foreground"
-                    }`}
-                  >
-                    {isDone ? "✓" : i + 1}
-                  </Text>
-                </View>
-                <Text
-                  className={`text-[10px] ${
-                    isActive
-                      ? "font-medium text-primary"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  {stepLabels[i]}
-                </Text>
-              </View>
-            </View>
-          );
-        })}
-      </View>
-    );
+  function handleBack() {
+    if (step === "otp") {
+      setStep("email");
+    } else if (step === "profile") {
+      setStep("otp");
+    } else {
+      router.back();
+    }
   }
 
-  // ── Render ────────────────────────────────────────────────────────
+  useFocusEffect(
+    useCallback(() => {
+      const onHardwareBack = () => {
+        handleBack();
+        return true;
+      };
 
-  // Android + long profile form: window resize alone doesn't keep PIN / referral
-  // above the keyboard. Extra offset is Android-only — iOS already behaves correctly.
-  const androidProfileKeyboard =
-    Platform.OS === "android" && step === "profile";
+      const sub = BackHandler.addEventListener("hardwareBackPress", onHardwareBack);
+      return () => sub.remove();
+    }, [step]),
+  );
+
+  // ── Render helpers ────────────────────────────────────────────────
+
+  const currentIdx = STEPS.indexOf(step);
+
+  const resendKey: KeypadKey = {
+    type: "action",
+    id: "resend",
+    label: resendCooldown > 0 ? `${resendCooldown}s` : "Resend",
+    ghost: true,
+    disabled: resendCooldown > 0 || loading,
+    accessibilityLabel:
+      resendCooldown > 0
+        ? `Resend available in ${resendCooldown} seconds`
+        : "Resend verification code",
+    onPress: () => void handleResendOtp(),
+  };
+
+  const title =
+    step === "email"
+      ? "Create your account"
+      : step === "otp"
+        ? "Verify your email"
+        : "Complete your profile";
+
+  const subtitle =
+    step === "email"
+      ? "Enter your email to get started."
+      : step === "otp"
+        ? `We sent a 6-digit code to ${email}.`
+        : "A few more details and you're in.";
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <KeyboardAwareScrollView
-        className="flex-1"
-        contentContainerStyle={{
-          flexGrow: 1,
-          justifyContent: step === "profile" ? "flex-start" : "center",
-          paddingTop: 24,
-          paddingBottom: androidProfileKeyboard ? 120 : 24,
-        }}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        showsVerticalScrollIndicator={false}
-        bottomOffset={androidProfileKeyboard ? 120 : 28}
-        extraKeyboardSpace={androidProfileKeyboard ? 64 : 0}
-      >
-          <AuthCenteredForm layout="top" className="px-6">
-          {/* ── Header ── */}
-          <Animated.View
-            className={`items-center ${step === "profile" ? "mt-4" : ""}`}
-            entering={FadeInDown.duration(220)}
-          >
-            <Image
-              source={require("@/assets/images/icon.png")}
-              className="mb-3 h-14 w-14 rounded-2xl"
-              resizeMode="contain"
+    <AuthShell
+      title={title}
+      subtitle={subtitle}
+      showVersion={step === "email"}
+      bottom={
+        step === "otp" ? (
+          <KeypadDock secure title="SmiPay Secure Keypad">
+            <Keypad
+              controller={otp}
+              disabled={loading}
+              leftKey={resendKey}
+              backspaceBehavior="clear"
             />
-            <Text variant="h4" className="text-foreground">
-              {step === "email" && "Create Account"}
-              {step === "otp" && "Verify Email"}
-              {step === "profile" && "Complete Profile"}
+          </KeypadDock>
+        ) : undefined
+      }
+    >
+      <StepDots currentIdx={currentIdx} />
+
+      {step === "email" ? (
+        <View className="mt-8">
+          <Input
+            label="Email address"
+            placeholder="you@example.com"
+            value={email}
+            onChangeText={(v) => {
+              setEmail(v);
+              clearError("email");
+            }}
+            error={errors.email}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            textContentType="emailAddress"
+            autoFocus
+            returnKeyType="done"
+            onSubmitEditing={canSubmitEmail ? handleVerifyEmail : undefined}
+          />
+
+          <View className="mt-7 flex-row items-center justify-between">
+            <View className="flex-row items-center gap-1">
+              <Text className="text-sm text-muted-foreground">Have an account?</Text>
+              <Link href="/(auth)/sign-in" asChild>
+                <Text className="text-sm font-semibold text-primary">Sign in</Text>
+              </Link>
+            </View>
+
+            <ArrowButton
+              onPress={handleVerifyEmail}
+              disabled={!canSubmitEmail}
+              loading={loading}
+              accessibilityLabel="Continue"
+              testID="sign-up-email-continue"
+            />
+          </View>
+        </View>
+      ) : step === "otp" ? (
+        <View className="mt-8">
+          <CodeSlots
+            value={otp.value}
+            length={AUTH_OTP_DIGITS}
+            variant="underline"
+            focused={!loading}
+            error={Boolean(otpError)}
+            shakeKey={otpShakeKey}
+            slotHeight={54}
+            accessibilityLabel="Email verification code"
+          />
+
+          {otpError ? (
+            <Text className="mt-4 text-sm font-medium text-destructive">
+              {otpError}
             </Text>
-            <Text className="mt-1 text-sm text-muted-foreground">
-              {step === "email" && "Enter your email to get started"}
-              {step === "otp" && `Code sent to ${email}`}
-              {step === "profile" && "Just a few more details"}
+          ) : null}
+
+          <View className="mt-7 flex-row items-center justify-between">
+            <Text className="text-sm text-muted-foreground">
+              Didn&apos;t get it?{" "}
+              <Text
+                className={
+                  resendCooldown > 0
+                    ? "text-sm text-muted-foreground"
+                    : "text-sm font-semibold text-primary"
+                }
+                onPress={
+                  resendCooldown > 0 ? undefined : () => void handleResendOtp()
+                }
+              >
+                {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+              </Text>
             </Text>
-          </Animated.View>
 
-          {/* ── Step indicator ── */}
-          <Animated.View
-            className="mt-5"
-            entering={FadeInDown.delay(40).duration(220)}
-          >
-            <StepIndicator />
-          </Animated.View>
-
-          {/* ── Step 1: Email ── */}
-          {step === "email" && (
-            <Animated.View
-              className="mt-8 gap-5"
-              entering={FadeInDown.delay(80).duration(220)}
+            <ArrowButton
+              onPress={() => void handleVerifyOtp()}
+              disabled={otp.value.length !== AUTH_OTP_DIGITS || loading}
+              loading={loading}
+              accessibilityLabel="Verify code"
+              testID="sign-up-verify"
+            />
+          </View>
+        </View>
+      ) : (
+        <View className="mt-6 gap-4">
+          {/* Profile photo */}
+          <View className="items-center">
+            <LinearGradient
+              colors={[colors.orange[400], colors.orange[700], "#9A3412"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ borderRadius: 999, padding: 3 }}
             >
-              <Input
-                label="Email Address"
-                placeholder="you@example.com"
-                value={email}
-                onChangeText={(v) => {
-                  setEmail(v);
-                  clearError("email");
-                }}
-                error={errors.email}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                returnKeyType="done"
-                onSubmitEditing={canSubmitEmail ? handleVerifyEmail : undefined}
-              />
-
-              <Button
-                className="h-14 rounded-2xl"
-                onPress={handleVerifyEmail}
-                disabled={!canSubmitEmail}
-              >
-                {loading ? (
-                  <Spinner color="#fff" />
-                ) : (
-                  <Text className="text-base font-semibold">Continue</Text>
-                )}
-              </Button>
-
-              <View className="flex-row items-center justify-center gap-1">
-                <Text className="text-sm text-muted-foreground">
-                  Already have an account?
-                </Text>
-                <Link href="/(auth)/sign-in" asChild>
-                  <Text className="text-sm font-semibold text-primary">
-                    Sign in
-                  </Text>
-                </Link>
-              </View>
-            </Animated.View>
-          )}
-
-          {/* ── Step 2: OTP ── */}
-          {step === "otp" && (
-            <Animated.View
-              className="mt-8 gap-5"
-              entering={FadeInDown.delay(80).duration(220)}
-            >
-              <Input
-                label="Verification Code"
-                placeholder="000000"
-                value={otp}
-                onChangeText={(t) => {
-                  setOtp(t.replace(/\D/g, "").slice(0, AUTH_OTP_DIGITS));
-                  clearError("otp");
-                }}
-                error={errors.otp}
-                keyboardType="number-pad"
-                maxLength={AUTH_OTP_DIGITS}
-                returnKeyType="done"
-                onSubmitEditing={canSubmitOtp ? handleVerifyOtp : undefined}
-              />
-
-              <Button
-                className="h-14 rounded-2xl"
-                onPress={handleVerifyOtp}
-                disabled={!canSubmitOtp}
-              >
-                {loading ? (
-                  <Spinner color="#fff" />
-                ) : (
-                  <Text className="text-base font-semibold">Verify</Text>
-                )}
-              </Button>
-
               <Pressable
-                onPress={handleResendOtp}
-                disabled={resendCooldown > 0}
-              >
-                <Text className="text-center text-sm text-primary">
-                  {resendCooldown > 0
-                    ? `Resend code in ${resendCooldown}s`
-                    : "Resend code"}
-                </Text>
-              </Pressable>
-            </Animated.View>
-          )}
-
-          {/* ── Step 3: Profile ── */}
-          {step === "profile" && (
-            <Animated.View
-              className="mt-5 gap-4"
-              entering={FadeInDown.delay(80).duration(220)}
-            >
-              <View className="items-center">
-                <LinearGradient
-                  colors={[colors.orange[400], colors.orange[700], "#9A3412"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={{
-                    borderRadius: 999,
-                    padding: 3,
-                  }}
-                >
-                  <Pressable
-                    onPress={() => setSourceSheetOpen(true)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Add profile photo"
-                    style={{ position: "relative" }}
-                  >
-                    <View
-                      style={{
-                        borderRadius: 999,
-                        overflow: "hidden",
-                        backgroundColor: isDark ? "#1E293B" : "#F1F5F9",
-                        borderWidth: 3,
-                        borderColor: isDark ? "#0F172A" : "#FFFFFF",
-                      }}
-                    >
-                      {registrationPhoto ? (
-                        <Image
-                          source={{ uri: registrationPhoto.uri }}
-                          style={{ width: 64, height: 64 }}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View className="h-[64px] w-[64px] items-center justify-center bg-muted">
-                          <Ionicons name="person" size={28} color={colors.gray[400]} />
-                        </View>
-                      )}
-                    </View>
-                    <View
-                      className="absolute -bottom-0.5 -right-0.5 h-[26px] w-[26px] items-center justify-center rounded-full border-2 border-background"
-                      style={{ backgroundColor: colors.orange[500] }}
-                      pointerEvents="none"
-                    >
-                      <Ionicons name="camera" size={14} color="#FFFFFF" />
-                    </View>
-                  </Pressable>
-                </LinearGradient>
-                {registrationPhoto ? (
-                  <Pressable
-                    onPress={() => setRegistrationPhoto(null)}
-                    hitSlop={8}
-                    className="mt-2"
-                  >
-                    <Text className="text-xs font-medium text-primary">Remove photo</Text>
-                  </Pressable>
-                ) : (
-                  <Text className="mt-2 text-center text-xs text-muted-foreground">
-                    Profile photo (optional)
-                  </Text>
-                )}
-              </View>
-
-              {/* Name — side by side */}
-              <View className="flex-row gap-3">
-                <View className="flex-1">
-                  <Input
-                    label="First Name"
-                    placeholder="Jane"
-                    value={firstName}
-                    onChangeText={(v) => {
-                      setFirstName(v);
-                      clearError("firstName");
-                    }}
-                    error={errors.firstName}
-                    autoComplete="given-name"
-                    autoCapitalize="words"
-                    returnKeyType="next"
-                    onSubmitEditing={() => lastNameRef.current?.focus()}
-                  />
-                </View>
-                <View className="flex-1">
-                  <Input
-                    ref={lastNameRef}
-                    label="Last Name"
-                    placeholder="Doe"
-                    value={lastName}
-                    onChangeText={(v) => {
-                      setLastName(v);
-                      clearError("lastName");
-                    }}
-                    error={errors.lastName}
-                    autoComplete="family-name"
-                    autoCapitalize="words"
-                    returnKeyType="next"
-                    onSubmitEditing={() => phoneRef.current?.focus()}
-                  />
-                </View>
-              </View>
-
-              <Input
-                ref={phoneRef}
-                label="Phone Number"
-                placeholder="08012345678"
-                value={phone}
-                onChangeText={(v) => {
-                  setPhone(sanitizePhone(v));
-                  clearError("phone");
-                }}
-                error={errors.phone}
-                keyboardType="phone-pad"
-                maxLength={14}
-                autoComplete="tel"
-                returnKeyType="next"
-                onSubmitEditing={() => passwordRef.current?.focus()}
-              />
-
-              <Input
-                ref={passwordRef}
-                label="Login Password"
-                placeholder="Enter 6-Digit Login Password"
-                value={password}
-                onChangeText={(v) => {
-                  setPassword(v.replace(/\D/g, "").slice(0, AUTH_PASSWORD_DIGITS));
-                  clearError("password");
-                }}
-                error={errors.password}
-                secureTextEntry
-                toggleable
-                keyboardType="number-pad"
-                maxLength={AUTH_PASSWORD_DIGITS}
-                returnKeyType="next"
-                onSubmitEditing={() => transactionPinRef.current?.focus()}
-              />
-
-              <View>
-                <Input
-                  ref={transactionPinRef}
-                  label="Transaction PIN"
-                  placeholder="Enter 4 digit transaction pin"
-                  value={transactionPin}
-                  onChangeText={(v) => {
-                    setTransactionPin(
-                      v.replace(/\D/g, "").slice(0, TRANSACTION_PIN_DIGITS),
-                    );
-                    clearError("transactionPin");
-                  }}
-                  error={errors.transactionPin}
-                  secureTextEntry
-                  toggleable
-                  keyboardType="number-pad"
-                  maxLength={TRANSACTION_PIN_DIGITS}
-                  returnKeyType="done"
-                  onSubmitEditing={canSubmitProfile ? handleRegister : undefined}
-                />
-                <Text className="mt-1.5 text-xs text-muted-foreground">
-                  {AUTH_PASSWORD_DIGITS}-digit password to log in · {TRANSACTION_PIN_DIGITS}-digit PIN to approve payments
-                </Text>
-              </View>
-
-              <View>
-                <Pressable
-                  className="flex-row items-start gap-3"
-                  onPress={() => {
-                    setHasReferralCode((v) => {
-                      const next = !v;
-                      if (!next) {
-                        setReferralCode("");
-                        clearError("referralCode");
-                      }
-                      return next;
-                    });
-                  }}
-                >
-                  <View
-                    className={`mt-0.5 h-5 w-5 items-center justify-center rounded border ${
-                      hasReferralCode
-                        ? "border-primary bg-primary"
-                        : "border-input bg-background"
-                    }`}
-                  >
-                    {hasReferralCode && (
-                      <Text className="text-xs text-primary-foreground">✓</Text>
-                    )}
-                  </View>
-                  <Text className="flex-1 text-xs text-muted-foreground">
-                    I have a referral code
-                  </Text>
-                </Pressable>
-
-                {hasReferralCode && (
-                  <View className="mt-3">
-                    <Input
-                      label="Referral Code"
-                      placeholder="e.g. @janedoe"
-                      value={referralCode}
-                      onChangeText={(v) => {
-                        setReferralCode(v.replace(/\s+/g, ""));
-                        clearError("referralCode");
-                      }}
-                      error={errors.referralCode}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      returnKeyType="done"
-                      autoFocus
-                    />
-                    <Text className="mt-1.5 text-xs text-muted-foreground">
-                      Got invited? Enter your friend&apos;s code so you both get a welcome bonus.
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Terms */}
-              <Pressable
-                className="flex-row items-start gap-3"
-                onPress={() => {
-                  setAgreedToTerms((v) => !v);
-                  clearError("terms");
-                }}
+                onPress={() => setSourceSheetOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Add profile photo"
+                style={{ position: "relative" }}
               >
                 <View
-                  className={`mt-0.5 h-5 w-5 items-center justify-center rounded border ${
-                    agreedToTerms
-                      ? "border-primary bg-primary"
-                      : "border-input bg-background"
-                  }`}
+                  style={{
+                    borderRadius: 999,
+                    overflow: "hidden",
+                    backgroundColor: isDark ? "#1E293B" : "#F1F5F9",
+                    borderWidth: 3,
+                    borderColor: isDark ? "#0F172A" : "#FFFFFF",
+                  }}
                 >
-                  {agreedToTerms && (
-                    <Text className="text-xs text-primary-foreground">✓</Text>
+                  {registrationPhoto ? (
+                    <Image
+                      source={{ uri: registrationPhoto.uri }}
+                      style={{ width: 72, height: 72 }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View className="h-[72px] w-[72px] items-center justify-center bg-muted">
+                      <Ionicons name="person" size={30} color={colors.gray[400]} />
+                    </View>
                   )}
                 </View>
-                <Text className="flex-1 text-xs text-muted-foreground">
-                  I agree to the{" "}
-                  <Text className="text-xs text-primary">
-                    Terms of Service
-                  </Text>{" "}
-                  and{" "}
-                  <Text className="text-xs text-primary">Privacy Policy</Text>
-                </Text>
+                <View
+                  className="absolute -bottom-0.5 -right-0.5 h-[28px] w-[28px] items-center justify-center rounded-full border-2 border-background"
+                  style={{ backgroundColor: colors.orange[500] }}
+                  pointerEvents="none"
+                >
+                  <Ionicons name="camera" size={15} color="#FFFFFF" />
+                </View>
               </Pressable>
-              {errors.terms && (
-                <Text className="text-xs text-destructive">{errors.terms}</Text>
-              )}
-
-              <Button
-                className="mt-1 h-14 rounded-2xl"
-                onPress={handleRegister}
-                disabled={!canSubmitProfile}
+            </LinearGradient>
+            {registrationPhoto ? (
+              <Pressable
+                onPress={() => setRegistrationPhoto(null)}
+                hitSlop={8}
+                className="mt-2"
               >
-                {loading ? (
-                  <Spinner color="#fff" />
-                ) : (
-                  <Text className="text-base font-semibold">
-                    Create Account
-                  </Text>
-                )}
-              </Button>
-            </Animated.View>
+                <Text className="text-xs font-medium text-primary">Remove photo</Text>
+              </Pressable>
+            ) : (
+              <Text className="mt-2 text-center text-xs text-muted-foreground">
+                Profile photo (optional)
+              </Text>
+            )}
+          </View>
+
+          {/* Name — side by side */}
+          <View className="flex-row gap-3">
+            <View className="flex-1">
+              <Input
+                label="First name"
+                placeholder="Jane"
+                value={firstName}
+                onChangeText={(v) => {
+                  setFirstName(v);
+                  clearError("firstName");
+                }}
+                error={errors.firstName}
+                autoComplete="given-name"
+                autoCapitalize="words"
+                returnKeyType="next"
+                onSubmitEditing={() => lastNameRef.current?.focus()}
+              />
+            </View>
+            <View className="flex-1">
+              <Input
+                ref={lastNameRef}
+                label="Last name"
+                placeholder="Doe"
+                value={lastName}
+                onChangeText={(v) => {
+                  setLastName(v);
+                  clearError("lastName");
+                }}
+                error={errors.lastName}
+                autoComplete="family-name"
+                autoCapitalize="words"
+                returnKeyType="next"
+                onSubmitEditing={() => phoneRef.current?.focus()}
+              />
+            </View>
+          </View>
+
+          <Input
+            ref={phoneRef}
+            label="Phone number"
+            placeholder="08012345678"
+            value={phone}
+            onChangeText={(v) => {
+              setPhone(sanitizePhone(v));
+              clearError("phone");
+            }}
+            error={errors.phone}
+            keyboardType="phone-pad"
+            maxLength={14}
+            autoComplete="tel"
+            returnKeyType="next"
+            onSubmitEditing={() => passwordRef.current?.focus()}
+          />
+
+          <Input
+            ref={passwordRef}
+            label="Login password"
+            placeholder="6-digit login password"
+            value={password}
+            onChangeText={(v) => {
+              setPassword(v.replace(/\D/g, "").slice(0, AUTH_PASSWORD_DIGITS));
+              clearError("password");
+            }}
+            error={errors.password}
+            secureTextEntry
+            toggleable
+            keyboardType="number-pad"
+            maxLength={AUTH_PASSWORD_DIGITS}
+            returnKeyType="next"
+            onSubmitEditing={() => transactionPinRef.current?.focus()}
+          />
+
+          <View>
+            <Input
+              ref={transactionPinRef}
+              label="Transaction PIN"
+              placeholder="4-digit transaction PIN"
+              value={transactionPin}
+              onChangeText={(v) => {
+                setTransactionPin(v.replace(/\D/g, "").slice(0, TRANSACTION_PIN_DIGITS));
+                clearError("transactionPin");
+              }}
+              error={errors.transactionPin}
+              secureTextEntry
+              toggleable
+              keyboardType="number-pad"
+              maxLength={TRANSACTION_PIN_DIGITS}
+              returnKeyType="done"
+            />
+            <Text className="mt-1.5 text-xs text-muted-foreground">
+              {AUTH_PASSWORD_DIGITS}-digit password to log in ·{" "}
+              {TRANSACTION_PIN_DIGITS}-digit PIN to approve payments
+            </Text>
+          </View>
+
+          {/* Referral */}
+          <View>
+            <Pressable
+              className="flex-row items-start gap-3"
+              onPress={() => {
+                setHasReferralCode((v) => {
+                  const next = !v;
+                  if (!next) {
+                    setReferralCode("");
+                    clearError("referralCode");
+                  }
+                  return next;
+                });
+              }}
+            >
+              <Checkbox checked={hasReferralCode} />
+              <Text className="flex-1 text-sm text-muted-foreground">
+                I have a referral code
+              </Text>
+            </Pressable>
+
+            {hasReferralCode && (
+              <View className="mt-3">
+                <Input
+                  label="Referral code"
+                  placeholder="e.g. @janedoe"
+                  value={referralCode}
+                  onChangeText={(v) => {
+                    setReferralCode(v.replace(/\s+/g, ""));
+                    clearError("referralCode");
+                  }}
+                  error={errors.referralCode}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  autoFocus
+                />
+                <Text className="mt-1.5 text-xs text-muted-foreground">
+                  Got invited? Enter your friend&apos;s code so you both get a welcome bonus.
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Terms */}
+          <Pressable
+            className="flex-row items-start gap-3"
+            onPress={() => {
+              setAgreedToTerms((v) => !v);
+              clearError("terms");
+            }}
+          >
+            <Checkbox checked={agreedToTerms} />
+            <Text className="flex-1 text-sm text-muted-foreground">
+              I agree to the <Text className="text-sm text-primary">Terms of Service</Text> and{" "}
+              <Text className="text-sm text-primary">Privacy Policy</Text>
+            </Text>
+          </Pressable>
+          {errors.terms && (
+            <Text className="text-xs text-destructive">{errors.terms}</Text>
           )}
-          </AuthCenteredForm>
-      </KeyboardAwareScrollView>
+
+          <View className="mt-2 flex-row items-center justify-between">
+            <Text className="flex-1 pr-4 text-sm text-muted-foreground">
+              Create your SmiPay account
+            </Text>
+            <ArrowButton
+              label="Create account"
+              onPress={handleRegister}
+              disabled={!canSubmitProfile}
+              loading={loading}
+              accessibilityLabel="Create account"
+              testID="sign-up-submit"
+            />
+          </View>
+        </View>
+      )}
 
       <ProfilePhotoSourceSheet
         visible={sourceSheetOpen}
@@ -771,7 +701,47 @@ export default function SignUpScreen() {
         }}
         isSubmitting={false}
       />
-      <AuthVersionFooter />
-    </SafeAreaView>
+    </AuthShell>
+  );
+}
+
+function StepDots({ currentIdx }: { currentIdx: number }) {
+  return (
+    <View className="mt-6 flex-row items-center gap-2">
+      {STEPS.map((s, i) => {
+        const active = i === currentIdx;
+        const done = i < currentIdx;
+        return (
+          <View key={s} className="flex-row items-center gap-2">
+            <View
+              className={`h-1.5 rounded-full ${
+                active
+                  ? "w-6 bg-primary"
+                  : done
+                    ? "w-4 bg-primary/50"
+                    : "w-4 bg-muted"
+              }`}
+            />
+            {i === currentIdx ? (
+              <Text className="text-xs font-medium text-muted-foreground">
+                {STEP_LABELS[i]}
+              </Text>
+            ) : null}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function Checkbox({ checked }: { checked: boolean }) {
+  return (
+    <View
+      className={`mt-0.5 h-5 w-5 items-center justify-center rounded border ${
+        checked ? "border-primary bg-primary" : "border-input bg-background"
+      }`}
+    >
+      {checked && <Ionicons name="checkmark" size={13} color="#FFFFFF" />}
+    </View>
   );
 }

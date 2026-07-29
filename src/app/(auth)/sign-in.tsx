@@ -1,26 +1,31 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Alert, DevSettings, Image, Keyboard, Pressable, TextInput, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, BackHandler, DevSettings, Keyboard, Pressable, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Link, router } from "expo-router";
-import Animated, { FadeInDown } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Link, router, useFocusEffect } from "expo-router";
 
 import { signIn } from "@/api";
-import { AuthCenteredForm } from "@/components/auth/auth-centered-form";
-import { AuthVersionFooter } from "@/components/auth/auth-version-footer";
-import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
-import { Button } from "@/components/ui/button";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { PhoneNumberDisplay } from "@/components/auth/phone-number-display";
+import {
+  Keypad,
+  KeypadDock,
+  PinDots,
+  useNumericInput,
+  type KeypadKey,
+} from "@/components/keypad";
+import { ArrowButton, ArrowButtonRow } from "@/components/ui/arrow-button";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
-import { useKeyboardVisible } from "@/hooks/use-keyboard-visible";
 import {
   isValidAuthIdentifier,
+  isValidPhoneIdentifier,
   maskAuthIdentifier,
   normalizeAuthIdentifier,
   sanitizeAuthIdentifier,
   toSignInIdentifier,
 } from "@/lib/auth-identifier";
+import { AUTH_PASSWORD_DIGITS } from "@/lib/auth-password";
 import { authenticate, getBiometricsAvailability, getBiometricLabel } from "@/lib/biometrics";
 import { ApiClientError } from "@/lib/api";
 import { handleApiError } from "@/lib/errors";
@@ -29,6 +34,15 @@ import { canUseRequireAuthentication, secureStorage, SECURE_KEYS } from "@/lib/s
 import { useAuthStore, useAppStore, useSmileaiStore } from "@/store";
 
 type Step = "identifier" | "password";
+/** Phone is the primary sign-in identifier; email is the fallback. */
+type IdentifierMode = "phone" | "email";
+/**
+ * Passwords are 6 digits on current accounts, but sign-in still accepts legacy
+ * alphanumeric ones — `keyboard` mode exists so those users aren't locked out.
+ */
+type PasswordMode = "keypad" | "keyboard";
+
+const PHONE_DIGITS = 11;
 
 export default function SignInScreen() {
   const login = useAuthStore.use.login();
@@ -36,40 +50,92 @@ export default function SignInScreen() {
   const setBiometricsEnabled = useAppStore.use.setBiometricsEnabled();
 
   const [step, setStep] = useState<Step>("identifier");
+  const [identifierMode, setIdentifierMode] = useState<IdentifierMode>("phone");
+  const [passwordMode, setPasswordMode] = useState<PasswordMode>("keypad");
   const [identifier, setIdentifier] = useState("");
   const [maskedIdentifier, setMaskedIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ identifier?: string; password?: string }>({});
+  const [shakeKey, setShakeKey] = useState(0);
 
   const passwordRef = useRef<TextInput>(null);
-  const keyboardVisible = useKeyboardVisible();
 
-  const canProceed =
-    isValidAuthIdentifier(identifier) && !loading;
-  /** Allow legacy alphanumeric passwords; new accounts use 6-digit PIN (validated on sign-up). */
-  const canSubmit = password.length > 0 && !loading;
+  const phone = useNumericInput({
+    maxLength: PHONE_DIGITS,
+    onChange: (value) => {
+      setIdentifier(value);
+      clearError("identifier");
+    },
+  });
+
+  const pin = useNumericInput({
+    length: AUTH_PASSWORD_DIGITS,
+    onComplete: (value) => {
+      void handleSignIn(value);
+    },
+    onChange: () => clearError("password"),
+  });
+
+  const canProceed = isValidAuthIdentifier(identifier) && !loading;
+  const currentPassword = passwordMode === "keypad" ? pin.value : password;
+  const canSubmit = currentPassword.length > 0 && !loading;
 
   useEffect(() => {
-    if (step !== "password") return;
+    if (step !== "password" || passwordMode !== "keyboard") return;
     const id = setTimeout(() => passwordRef.current?.focus(), 280);
     return () => clearTimeout(id);
-  }, [step]);
+  }, [step, passwordMode]);
 
   function clearError(key: keyof typeof errors) {
-    if (errors[key]) setErrors((p) => ({ ...p, [key]: undefined }));
+    setErrors((p) => (p[key] ? { ...p, [key]: undefined } : p));
+  }
+
+  /** Carries the typed value across so switching modes never costs input. */
+  function switchIdentifierMode(next: IdentifierMode) {
+    setIdentifierMode(next);
+    setErrors({});
+    if (next === "phone") {
+      Keyboard.dismiss();
+      const digits = identifier.replace(/\D/g, "").slice(0, PHONE_DIGITS);
+      phone.setValue(digits);
+      setIdentifier(digits);
+    } else {
+      setIdentifier(phone.value);
+    }
+  }
+
+  function switchPasswordMode(next: PasswordMode) {
+    setPasswordMode(next);
+    clearError("password");
+    if (next === "keyboard") {
+      setPassword(pin.value);
+    } else {
+      Keyboard.dismiss();
+      pin.setValue(password.replace(/\D/g, "").slice(0, AUTH_PASSWORD_DIGITS));
+    }
   }
 
   function validateIdentifier() {
     const trimmed = identifier.trim();
     if (!trimmed) {
-      setErrors({ identifier: "Email or phone number is required" });
+      setErrors({
+        identifier:
+          identifierMode === "phone"
+            ? "Enter your phone number"
+            : "Email address is required",
+      });
+      setShakeKey((k) => k + 1);
       return false;
     }
     if (!isValidAuthIdentifier(trimmed)) {
       setErrors({
-        identifier: "Enter a valid email or phone (e.g. 08012345678 or +2348012345678)",
+        identifier:
+          identifierMode === "phone"
+            ? "Enter a valid phone number (e.g. 08012345678)"
+            : "Enter a valid email address",
       });
+      setShakeKey((k) => k + 1);
       return false;
     }
     setErrors({});
@@ -84,7 +150,10 @@ export default function SignInScreen() {
     await secureStorage.set(SECURE_KEYS.SIGN_IN_IDENTIFIER, normalized);
     setMaskedIdentifier(maskAuthIdentifier(normalized));
     setIdentifier("");
+    phone.clear();
     setPassword("");
+    pin.clear();
+    setPasswordMode("keypad");
     setErrors({});
     setStep("password");
   }
@@ -92,24 +161,51 @@ export default function SignInScreen() {
   async function handleBack() {
     Keyboard.dismiss();
     const stored = await secureStorage.get<string>(SECURE_KEYS.SIGN_IN_IDENTIFIER);
-    if (stored) setIdentifier(stored);
+    if (stored) {
+      // Restore into whichever field can actually hold the value.
+      if (isValidPhoneIdentifier(stored) && !stored.startsWith("+")) {
+        setIdentifierMode("phone");
+        phone.setValue(stored);
+        setIdentifier(stored);
+      } else {
+        setIdentifierMode("email");
+        setIdentifier(stored);
+      }
+    }
     await secureStorage.remove(SECURE_KEYS.SIGN_IN_IDENTIFIER);
     setPassword("");
+    pin.clear();
     setMaskedIdentifier("");
     setErrors({});
     setStep("identifier");
   }
 
-  async function handleSignIn() {
-    if (!password) {
+  useFocusEffect(
+    useCallback(() => {
+      if (step !== "password") return;
+
+      const onHardwareBack = () => {
+        void handleBack();
+        return true;
+      };
+
+      const sub = BackHandler.addEventListener("hardwareBackPress", onHardwareBack);
+      return () => sub.remove();
+    }, [step]),
+  );
+
+  async function handleSignIn(value: string = currentPassword) {
+    if (!value) {
       setErrors({ password: "Password is required" });
+      setShakeKey((k) => k + 1);
       return;
     }
+    if (loading) return;
 
     const storedIdentifier = await secureStorage.get<string>(SECURE_KEYS.SIGN_IN_IDENTIFIER);
     if (!storedIdentifier) {
       setStep("identifier");
-      setErrors({ identifier: "Enter your email or phone number to continue" });
+      setErrors({ identifier: "Enter your phone number or email to continue" });
       return;
     }
 
@@ -117,7 +213,7 @@ export default function SignInScreen() {
     setLoading(true);
     try {
       const signInIdentifier = toSignInIdentifier(storedIdentifier);
-      const res = await signIn({ email: signInIdentifier, password });
+      const res = await signIn({ email: signInIdentifier, password: value });
       const accountEmail = res.data.user.email?.trim().toLowerCase() ?? signInIdentifier;
 
       await login(
@@ -127,7 +223,7 @@ export default function SignInScreen() {
           refreshToken: res.data.refresh_token,
         },
       );
-      await storeCredentials(accountEmail, password);
+      await storeCredentials(accountEmail, value);
       await secureStorage.remove(SECURE_KEYS.SIGN_IN_IDENTIFIER);
       void logSignIn();
       void setAnalyticsUser(res.data.user.id);
@@ -155,7 +251,7 @@ export default function SignInScreen() {
                 promptMessage: "Use " + label + " to unlock SmiPay",
               });
               if (result.success) {
-                await storeCredentials(accountEmail, password, canUseRequireAuthentication()
+                await storeCredentials(accountEmail, value, canUseRequireAuthentication()
                   ? { requireAuthentication: true }
                   : undefined);
                 setBiometricsEnabled(true);
@@ -166,8 +262,12 @@ export default function SignInScreen() {
         ],
       );
     } catch (e) {
+      // Wipe the entry so a rejected attempt starts fresh instead of being edited.
+      pin.clear();
+      setPassword("");
+      setShakeKey((k) => k + 1);
       if (e instanceof ApiClientError && e.statusCode === 401) {
-        setErrors({ password: e.message || "Invalid email or password" });
+        setErrors({ password: e.message || "Incorrect password. Please try again." });
       } else {
         handleApiError(e);
       }
@@ -176,184 +276,253 @@ export default function SignInScreen() {
     }
   }
 
+  const showIdentifierKeypad = step === "identifier" && identifierMode === "phone";
+  const showPasswordKeypad = step === "password" && passwordMode === "keypad";
+
+  const emailSwitchKey: KeypadKey = {
+    type: "action",
+    id: "email-mode",
+    label: "Email",
+    ghost: true,
+    accessibilityLabel: "Sign in with email instead",
+    onPress: () => switchIdentifierMode("email"),
+  };
+
+  const keyboardSwitchKey: KeypadKey = {
+    type: "action",
+    id: "abc-mode",
+    label: "ABC",
+    ghost: true,
+    accessibilityLabel: "Switch to the letter keyboard",
+    onPress: () => switchPasswordMode("keyboard"),
+  };
+
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <KeyboardAwareScrollView
-        className="flex-1"
-        contentContainerStyle={{
-          flexGrow: 1,
-          justifyContent: keyboardVisible ? "flex-start" : "center",
-          paddingVertical: 24,
-        }}
-        keyboardDismissMode="on-drag"
-        bottomOffset={28}
-      >
-        <AuthCenteredForm layout={keyboardVisible ? "top" : "center"} className="px-6">
-          <Animated.View
-            className="items-center"
-            entering={FadeInDown.duration(220)}
-          >
-            <Image
-              source={require("@/assets/images/icon.png")}
-              className="mb-3 h-14 w-14 rounded-2xl"
-              resizeMode="contain"
-            />
-            <Text variant="h3" className="text-primary">SmiPay</Text>
-            <Text className="mt-1 text-muted-foreground">
-              {step === "identifier" ? "Welcome back" : "Enter your password"}
+    <AuthShell
+      title={step === "identifier" ? "Welcome back" : "Enter your password"}
+      subtitle={
+        step === "identifier"
+          ? identifierMode === "phone"
+            ? "Sign in with the phone number on your SmiPay account."
+            : "Sign in with the email on your SmiPay account."
+          : maskedIdentifier
+            ? `Signing in as ${maskedIdentifier}`
+            : undefined
+      }
+      headerRight={step === "identifier" ? <ThemeToggle /> : undefined}
+      showVersion={!showIdentifierKeypad && !showPasswordKeypad}
+      footer={
+        step === "identifier" ? (
+          <View className="items-center gap-3 pb-1">
+            <Text className="text-center text-sm text-muted-foreground">
+              {"Don't have an account? "}
+              <Link href="/(auth)/sign-up" asChild>
+                <Text className="text-sm font-medium text-primary">Create one</Text>
+              </Link>
             </Text>
-            {step === "password" && maskedIdentifier ? (
-              <Text className="mt-1 text-sm text-muted-foreground">
-                Signing in as {maskedIdentifier}
-              </Text>
-            ) : null}
-          </Animated.View>
-
-          {step === "identifier" && (
-            <Animated.View
-              className="mt-10 gap-4"
-              entering={FadeInDown.delay(40).duration(220)}
-            >
-              <Input
-                label="Email or Phone"
-                placeholder="Email or Phone"
-                value={identifier}
-                onChangeText={(v) => {
-                  setIdentifier(sanitizeAuthIdentifier(v));
-                  clearError("identifier");
-                }}
-                error={errors.identifier}
-                autoCapitalize="none"
-                autoComplete="username"
-                textContentType="username"
-                returnKeyType="next"
-                onSubmitEditing={canProceed ? handleProceed : undefined}
-              />
-
-              <Button
-                className="mt-4 h-14 rounded-2xl"
-                onPress={handleProceed}
-                disabled={!canProceed}
-              >
-                {loading ? (
-                  <Spinner color="#fff" />
-                ) : (
-                  <Text className="text-base font-semibold">Proceed</Text>
-                )}
-              </Button>
-
-              <Animated.View
-                className="flex-row items-center justify-center gap-1"
-                entering={FadeInDown.delay(80).duration(220)}
-              >
-                <Text className="text-muted-foreground">
-                  Do not have an account?
-                </Text>
-                <Link href="/(auth)/sign-up" asChild>
-                  <Text className="font-semibold text-primary">Create one</Text>
-                </Link>
-              </Animated.View>
-            </Animated.View>
+            {__DEV__ ? <DevClearAppData /> : null}
+          </View>
+        ) : undefined
+      }
+      bottom={
+        showIdentifierKeypad ? (
+          <KeypadDock>
+            <Keypad
+              controller={phone}
+              disabled={loading}
+              leftKey={emailSwitchKey}
+              backspaceBehavior="clear"
+            />
+          </KeypadDock>
+        ) : showPasswordKeypad ? (
+          <KeypadDock secure title="SmiPay Secure Keypad">
+            <Keypad
+              controller={pin}
+              disabled={loading}
+              leftKey={keyboardSwitchKey}
+              backspaceBehavior="clear"
+            />
+          </KeypadDock>
+        ) : undefined
+      }
+    >
+      {step === "identifier" ? (
+        <View className="mt-9">
+          {identifierMode === "phone" ? (
+            <PhoneNumberDisplay
+              value={phone.value}
+              error={errors.identifier}
+              focused={!loading}
+              shakeKey={shakeKey}
+            />
+          ) : (
+            <Input
+              label="Email address"
+              placeholder="you@example.com"
+              value={identifier}
+              onChangeText={(v) => {
+                setIdentifier(sanitizeAuthIdentifier(v));
+                clearError("identifier");
+              }}
+              error={errors.identifier}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              textContentType="emailAddress"
+              autoFocus
+              returnKeyType="next"
+              onSubmitEditing={canProceed ? handleProceed : undefined}
+            />
           )}
 
-          {step === "password" && (
-            <Animated.View
-              className="mt-10 gap-4"
-              entering={FadeInDown.delay(40).duration(220)}
-            >
-              <View>
-                <Input
-                  ref={passwordRef}
-                  label="Password"
-                  placeholder="Enter 6-digit Password"
-                  value={password}
-                  onChangeText={(v) => {
-                    setPassword(v);
-                    clearError("password");
-                  }}
-                  error={errors.password}
-                  secureTextEntry
-                  toggleable
-                  autoComplete="password"
-                  textContentType="password"
-                  returnKeyType="done"
-                  onSubmitEditing={canSubmit ? handleSignIn : undefined}
-                />
-              </View>
+          {identifierMode === "phone" ? (
+            <ArrowButtonRow className="mt-6">
+              <ArrowButton
+                onPress={handleProceed}
+                disabled={!canProceed}
+                loading={loading}
+                accessibilityLabel="Proceed"
+                testID="sign-in-proceed"
+              />
+            </ArrowButtonRow>
+          ) : (
+            <View className="mt-7 flex-row items-center justify-between">
+              <Pressable
+                onPress={() => switchIdentifierMode("phone")}
+                hitSlop={10}
+                accessibilityRole="button"
+                className="active:opacity-70"
+              >
+                <Text className="text-sm text-muted-foreground">Use phone number</Text>
+              </Pressable>
 
+              <ArrowButton
+                onPress={handleProceed}
+                disabled={!canProceed}
+                loading={loading}
+                accessibilityLabel="Proceed"
+                testID="sign-in-proceed"
+              />
+            </View>
+          )}
+        </View>
+      ) : (
+        <View className="mt-9">
+          {passwordMode === "keypad" ? (
+            <>
+              <Text className="text-[13px] font-medium text-muted-foreground">
+                {AUTH_PASSWORD_DIGITS}-digit password
+              </Text>
+              <PinDots
+                value={pin.value}
+                length={AUTH_PASSWORD_DIGITS}
+                error={Boolean(errors.password)}
+                shakeKey={shakeKey}
+                style={{ justifyContent: "flex-start", marginTop: 18 }}
+              />
+              {errors.password ? (
+                <Text className="mt-4 text-sm font-medium text-destructive">
+                  {errors.password}
+                </Text>
+              ) : null}
+            </>
+          ) : (
+            <Input
+              ref={passwordRef}
+              label="Password"
+              placeholder="Enter your password"
+              value={password}
+              onChangeText={(v) => {
+                setPassword(v);
+                clearError("password");
+              }}
+              error={errors.password}
+              secureTextEntry
+              toggleable
+              autoComplete="password"
+              textContentType="password"
+              returnKeyType="done"
+              onSubmitEditing={canSubmit ? () => void handleSignIn() : undefined}
+            />
+          )}
+
+          <View className="mt-7 flex-row items-center justify-between">
+            <View className="gap-2">
               <Link href="/(auth)/forgot-password" asChild>
-                <Text className="self-end text-sm text-primary">
+                <Text className="text-sm font-semibold text-primary">
                   Forgot password?
                 </Text>
               </Link>
-
-              <Button
-                className="mt-4 h-14 rounded-2xl"
-                onPress={handleSignIn}
-                disabled={!canSubmit}
+              <Pressable
+                onPress={() =>
+                  switchPasswordMode(passwordMode === "keypad" ? "keyboard" : "keypad")
+                }
+                hitSlop={10}
+                accessibilityRole="button"
+                className="active:opacity-70"
               >
-                {loading ? (
-                  <Spinner color="#fff" />
-                ) : (
-                  <Text className="text-base font-semibold">Sign In</Text>
-                )}
-              </Button>
-
-              <Pressable onPress={handleBack} accessibilityRole="button">
-                <Text className="text-center text-sm text-primary">
-                  Back
+                <Text className="text-sm text-muted-foreground">
+                  {passwordMode === "keypad"
+                    ? "Use letter keyboard"
+                    : "Use number keypad"}
                 </Text>
               </Pressable>
-            </Animated.View>
-          )}
+            </View>
 
-          {__DEV__ && step === "identifier" && (
-            <Pressable
-              className="mt-10 self-center"
-              onPress={() =>
-                Alert.alert(
-                  "Clear App Data",
-                  "This will reset onboarding, auth, theme, and all local data. Continue?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "Clear",
-                      style: "destructive",
-                      onPress: async () => {
-                        // Clear disk first, then in-memory Zustand stores. Without
-                        // the store resets, smileai UI prefs (e.g. suggested
-                        // replies) stay in RAM and get re-persisted after clear.
-                        await AsyncStorage.clear();
-                        await secureStorage.clear([
-                          SECURE_KEYS.ACCESS_TOKEN,
-                          SECURE_KEYS.REFRESH_TOKEN,
-                          SECURE_KEYS.USER_EMAIL,
-                          SECURE_KEYS.USER_PASSWORD,
-                          SECURE_KEYS.SIGN_IN_IDENTIFIER,
-                        ]);
-                        useSmileaiStore.getState().reset();
-                        useAppStore.getState().reset();
-                        useAuthStore.getState().logout();
-                        if (__DEV__ && typeof DevSettings.reload === "function") {
-                          DevSettings.reload();
-                        } else {
-                          router.replace("/");
-                        }
-                      },
-                    },
-                  ],
-                )
-              }
-            >
-              <Text className="text-xs text-red-400">
-                [DEV] Clear app data
-              </Text>
-            </Pressable>
-          )}
-        </AuthCenteredForm>
-      </KeyboardAwareScrollView>
+            <ArrowButton
+              onPress={() => void handleSignIn()}
+              disabled={!canSubmit}
+              loading={loading}
+              accessibilityLabel="Sign in"
+              testID="sign-in-submit"
+            />
+          </View>
+        </View>
+      )}
+    </AuthShell>
+  );
+}
 
-      <AuthVersionFooter />
-    </SafeAreaView>
+function DevClearAppData() {
+  return (
+    <Pressable
+      className="active:opacity-70"
+      onPress={() =>
+        Alert.alert(
+          "Clear App Data",
+          "This will reset onboarding, auth, theme, and all local data. Continue?",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Clear",
+              style: "destructive",
+              onPress: async () => {
+                // Clear disk first, then in-memory Zustand stores. Without
+                // the store resets, smileai UI prefs (e.g. suggested
+                // replies) stay in RAM and get re-persisted after clear.
+                await AsyncStorage.clear();
+                await secureStorage.clear([
+                  SECURE_KEYS.ACCESS_TOKEN,
+                  SECURE_KEYS.REFRESH_TOKEN,
+                  SECURE_KEYS.USER_EMAIL,
+                  SECURE_KEYS.USER_PASSWORD,
+                  SECURE_KEYS.SIGN_IN_IDENTIFIER,
+                ]);
+                useSmileaiStore.getState().reset();
+                useAppStore.getState().reset();
+                useAuthStore.getState().logout();
+                if (__DEV__ && typeof DevSettings.reload === "function") {
+                  DevSettings.reload();
+                } else {
+                  router.replace("/");
+                }
+              },
+            },
+          ],
+        )
+      }
+    >
+      <Text className="text-[11px] text-muted-foreground/70">Clear app data</Text>
+    </Pressable>
   );
 }

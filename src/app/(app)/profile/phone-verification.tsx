@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  AppState,
+  type AppStateStatus,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -10,6 +12,7 @@ import {
 } from "react-native";
 import { Stack, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   FadeInDown,
@@ -21,6 +24,13 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { requestPhoneVerificationOtp, updatePhoneVerificationNumber, verifyPhoneVerificationOtp } from "@/api";
+import {
+  CodeSlots,
+  Keypad,
+  KeypadDock,
+  useNumericInput,
+  type KeypadKey,
+} from "@/components/keypad";
 import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
 import { useToastStore } from "@/components/ui/toast";
@@ -79,7 +89,6 @@ export default function PhoneVerificationScreen() {
   const authUser = useAuthStore.use.user();
   const updateAuthUser = useAuthStore.use.updateUser();
 
-  const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [editingPhone, setEditingPhone] = useState(false);
   const [newPhone, setNewPhone] = useState("");
@@ -91,8 +100,25 @@ export default function PhoneVerificationScreen() {
   const [requesting, setRequesting] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Bumped on every rejected code so the slots re-shake even for the same error. */
+  const [errorShakeKey, setErrorShakeKey] = useState(0);
+  const [clipboardHasText, setClipboardHasText] = useState(false);
 
-  const otpInputRef = useRef<TextInput>(null);
+  /**
+   * The code is driven by the in-app keypad, not the system keyboard: OEM
+   * keyboards on Android are the main source of OTP entry bugs (IMEs that
+   * ignore `number-pad`, autocorrect, layouts without a visible delete key).
+   */
+  const code = useNumericInput({
+    length: OTP_LENGTH,
+    onComplete: (value) => {
+      void handleVerifyOtp(value);
+    },
+    onChange: () => {
+      if (error) setError(null);
+    },
+  });
+
   const maskedPhone = kycStatus?.phone_verification?.masked_phone ?? "";
   const otpPolicy: PhoneOtpPolicy | null | undefined =
     kycStatus?.phone_verification?.otp_policy;
@@ -133,11 +159,30 @@ export default function PhoneVerificationScreen() {
     return () => clearInterval(interval);
   }, [resendAvailableAt]);
 
+  // A custom keypad means no SMS autofill, so offer an explicit paste key
+  // instead. `hasStringAsync` never triggers the iOS paste prompt — only the
+  // read on tap does, and that one is user-initiated.
   useEffect(() => {
-    if (otpSent) {
-      const t = setTimeout(() => otpInputRef.current?.focus(), 280);
-      return () => clearTimeout(t);
-    }
+    if (!otpSent) return;
+    let active = true;
+
+    const check = () => {
+      Clipboard.hasStringAsync()
+        .then((has) => {
+          if (active) setClipboardHasText(has);
+        })
+        .catch(() => {});
+    };
+
+    check();
+    const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
+      if (next === "active") check();
+    });
+
+    return () => {
+      active = false;
+      sub.remove();
+    };
   }, [otpSent]);
 
   function applyOtpRequestError(err: unknown): string {
@@ -158,11 +203,26 @@ export default function PhoneVerificationScreen() {
 
   function resetOtpFlow() {
     setOtpSent(false);
-    setOtp("");
+    code.clear();
     setOtpExpiresAt(null);
     setResendAvailableAt(null);
     setResendOnCooldown(false);
     setError(null);
+  }
+
+  async function handlePasteCode() {
+    try {
+      const text = await Clipboard.getStringAsync();
+      const match = text?.match(new RegExp(`\\d{${OTP_LENGTH}}`));
+      if (!match) {
+        setError(`No ${OTP_LENGTH}-digit code found on your clipboard.`);
+        setErrorShakeKey((k) => k + 1);
+        return;
+      }
+      code.setValue(match[0]);
+    } catch {
+      setError("We couldn't read your clipboard.");
+    }
   }
 
   function openPhoneEditor() {
@@ -235,7 +295,7 @@ export default function PhoneVerificationScreen() {
       setResendAvailableAt(Date.now() + cooldownMs);
       setResendOnCooldown(cooldownMs > 0);
       setOtpSent(true);
-      setOtp("");
+      code.clear();
       void fetchKycStatus();
       showToast({
         variant: "success",
@@ -249,17 +309,18 @@ export default function PhoneVerificationScreen() {
     }
   }
 
-  async function handleVerifyOtp() {
-    if (otp.length !== OTP_LENGTH || verifying) return;
+  async function handleVerifyOtp(value: string = code.value) {
+    if (value.length !== OTP_LENGTH || verifying) return;
     if (otpExpiresAt != null && otpExpiresAt <= Date.now()) {
       setError("That code has expired. Tap resend to get a new one.");
+      setErrorShakeKey((k) => k + 1);
       return;
     }
     Keyboard.dismiss();
     setVerifying(true);
     setError(null);
     try {
-      await verifyPhoneVerificationOtp(otp);
+      await verifyPhoneVerificationOtp(value);
       showToast({
         variant: "success",
         title: "Phone verified",
@@ -276,8 +337,13 @@ export default function PhoneVerificationScreen() {
       const apiMessage =
         data?.message ??
         (err instanceof ApiClientError ? err.message : undefined);
+      // Clear first — clearing runs `onChange`, which resets `error`. Then show
+      // the failure so the next keypress starts a fresh attempt rather than
+      // editing a rejected code.
+      code.clear();
       // Verify-step errors (wrong/expired code) are intentional user feedback.
       setError(apiMessage ?? "We couldn't verify that code. Please try again.");
+      setErrorShakeKey((k) => k + 1);
     } finally {
       setVerifying(false);
     }
@@ -285,13 +351,25 @@ export default function PhoneVerificationScreen() {
 
   const bg = isDark ? "#0F172A" : "#F8F9FB";
   const cardBg = isDark ? "#1E293B" : "#FFFFFF";
-  const slotBorder = isDark ? "#334155" : "#D1D5DB";
   const slotActive = colors.orange[500];
   const subtleText = isDark ? "#94A3B8" : "#6B7280";
 
-  const canVerifyOtp = otp.length === OTP_LENGTH && !verifying;
+  const canVerifyOtp = code.isComplete && !verifying;
   const canSendCode =
     !requesting && canRequestOtp && (!otpSent || !resendOnCooldown);
+
+  const showKeypad = otpSent && !editingPhone;
+  const pasteKey: KeypadKey | undefined = clipboardHasText
+    ? {
+        type: "action",
+        id: "paste",
+        label: "Paste",
+        ghost: true,
+        tint: slotActive,
+        accessibilityLabel: "Paste code from clipboard",
+        onPress: () => void handlePasteCode(),
+      }
+    : undefined;
 
   return (
     <>
@@ -320,7 +398,9 @@ export default function PhoneVerificationScreen() {
             className="flex-1"
             contentContainerStyle={{
               paddingHorizontal: 20,
-              paddingBottom: Math.max(insets.bottom, 24) + 24,
+              // The dock is a flex sibling below, so it already reserves the
+              // bottom inset when it's on screen.
+              paddingBottom: showKeypad ? 24 : Math.max(insets.bottom, 24) + 24,
             }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
@@ -441,54 +521,14 @@ export default function PhoneVerificationScreen() {
                 </>
               ) : (
                 <Animated.View entering={FadeInDown.duration(220)} className="mt-8">
-                  <Pressable
-                    onPress={() => otpInputRef.current?.focus()}
-                    className="flex-row items-end justify-between"
-                  >
-                    {Array.from({ length: OTP_LENGTH }).map((_, i) => {
-                      const digit = otp[i];
-                      const isActive = otp.length === i;
-                      const filled = !!digit;
-                      return (
-                        <View
-                          key={i}
-                          style={{
-                            borderBottomColor: isActive || filled ? slotActive : slotBorder,
-                            borderBottomWidth: 2,
-                            width: 44,
-                            height: 52,
-                          }}
-                          className="items-center justify-center"
-                        >
-                          <Text
-                            className="text-2xl font-semibold"
-                            style={{ color: isDark ? "#F8FAFC" : "#0F172A" }}
-                          >
-                            {digit ?? ""}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </Pressable>
-
-                  <TextInput
-                    ref={otpInputRef}
-                    value={otp}
-                    onChangeText={(value) => {
-                      setOtp(value.replace(/\D/g, "").slice(0, OTP_LENGTH));
-                      if (error) setError(null);
-                    }}
-                    keyboardType="number-pad"
-                    maxLength={OTP_LENGTH}
-                    caretHidden
-                    autoComplete="one-time-code"
-                    textContentType="oneTimeCode"
-                    style={{
-                      position: "absolute",
-                      opacity: 0,
-                      height: 1,
-                      width: 1,
-                    }}
+                  <CodeSlots
+                    value={code.value}
+                    length={OTP_LENGTH}
+                    variant="underline"
+                    focused={!verifying}
+                    error={Boolean(error)}
+                    shakeKey={errorShakeKey}
+                    slotHeight={52}
                     accessibilityLabel="Phone verification code"
                   />
 
@@ -570,6 +610,17 @@ export default function PhoneVerificationScreen() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+
+        {showKeypad ? (
+          <KeypadDock secure title="SmiPay Secure Keypad">
+            <Keypad
+              controller={code}
+              disabled={verifying}
+              leftKey={pasteKey}
+              backspaceBehavior="clear"
+            />
+          </KeypadDock>
+        ) : null}
       </View>
     </>
   );
