@@ -1,9 +1,17 @@
-import { useEffect, useLayoutEffect, useState } from "react";
-import { View } from "react-native";
-import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
+
+import {
+  Keypad,
+  KeypadDock,
+  useNumericInput,
+  useScrollFieldAboveKeypad,
+  useSecureKeypadOverlay,
+} from "@/components/keypad";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
 
 import { purchaseData } from "@/api";
 import {
@@ -41,6 +49,10 @@ import { logPurchaseSuccess } from "@/lib/analytics";
 import { getFailedTransactionId, handleApiError } from "@/lib/errors";
 
 export default function DataAmountScreen() {
+  const compact = useCompactScreen();
+  const scrollRef = useRef<ScrollView>(null);
+  const phoneFieldRef = useRef<View>(null);
+
   const homepageData = useHomepageStore.use.data();
   const fetchHomepage = useHomepageStore.use.fetchHomepage();
   const walletBalance =
@@ -68,9 +80,9 @@ export default function DataAmountScreen() {
     reset: resetConfirmWallet,
   } = useConfirmWalletSnapshot();
 
-  const [phone, setPhone] = useState("");
   const [useCashback, setUseCashback] = useState(false);
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [phoneKeypadOpen, setPhoneKeypadOpen] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [showContactMatchDisclaimer, setShowContactMatchDisclaimer] = useState(false);
@@ -79,6 +91,35 @@ export default function DataAmountScreen() {
     visible: boolean;
     message: string;
   }>({ visible: false, message: "" });
+
+  const phoneInput = useNumericInput({
+    maxLength: 11,
+    onChange: () => {
+      if (phoneError) setPhoneError(null);
+    },
+  });
+
+  const phone = normalizeNgMobileDigits(phoneInput.value);
+
+  const showKeypad =
+    phoneKeypadOpen &&
+    !confirmModalVisible &&
+    !paymentAuthorizationModalProps.visible;
+
+  const { metricsOptions, scrollPaddingBottom, blockHeight } =
+    useSecureKeypadOverlay(showKeypad);
+
+  const { onScroll: onKeypadScroll } = useScrollFieldAboveKeypad({
+    active: showKeypad,
+    scrollRef,
+    fieldRef: phoneFieldRef,
+    keypadBlockHeight: blockHeight,
+    layoutRevision: scrollPaddingBottom,
+  });
+
+  function dismissKeypad() {
+    setPhoneKeypadOpen(false);
+  }
 
   const amount = selectedVariation?.variation_amount
     ? parseFloat(String(selectedVariation.variation_amount))
@@ -150,8 +191,10 @@ export default function DataAmountScreen() {
     if (!canSubmit) return;
     if (!phoneValid) {
       setPhoneError("Enter a valid 11-digit phone number (e.g. 08012345678)");
+      setPhoneKeypadOpen(true);
       return;
     }
+    dismissKeypad();
     setPhoneError(null);
     setConfirmModalVisible(true);
     void refreshConfirmBalances();
@@ -198,7 +241,7 @@ export default function DataAmountScreen() {
             void logPurchaseSuccess("data", amount, selectedProvider?.name);
           }
 
-          setPhone("");
+          phoneInput.clear();
           resetStore();
           fetchHomepage();
 
@@ -244,11 +287,13 @@ export default function DataAmountScreen() {
   }
 
   function handleSelectRecent(entry: DataRecentEntry) {
-    setPhone(
-      normalizeNgMobileDigits(getRecentDataEntryDisplay(entry).replace(/\D/g, "")),
+    const normalized = normalizeNgMobileDigits(
+      getRecentDataEntryDisplay(entry).replace(/\D/g, ""),
     );
+    phoneInput.setValue(normalized);
     setPhoneError(null);
     setShowContactMatchDisclaimer(false);
+    dismissKeypad();
   }
 
   if (!selectedProvider || !selectedVariation) return null;
@@ -257,17 +302,27 @@ export default function DataAmountScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <DataHeader showBuyDataTitle={false} title="Amount & pay" />
 
-      <KeyboardAwareScrollView
-        className="flex-1"
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
-      >
-        <WalletBalanceCard
-          walletBalance={walletBalance}
-          cashbackBalance={cashbackBalance}
-          hasCashback={!!hasCashback}
-        />
+      <View className="flex-1">
+        <ScrollView
+          ref={scrollRef}
+          className="flex-1"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={onKeypadScroll}
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            paddingBottom: scrollPaddingBottom,
+          }}
+          onScrollBeginDrag={dismissKeypad}
+        >
+        <Pressable onPress={dismissKeypad}>
+          <WalletBalanceCard
+            walletBalance={walletBalance}
+            cashbackBalance={cashbackBalance}
+            hasCashback={!!hasCashback}
+          />
+        </Pressable>
 
         <Animated.View
           entering={FadeInDown.delay(50).duration(300)}
@@ -291,19 +346,21 @@ export default function DataAmountScreen() {
           </Text>
           <DataPhoneRow
             provider={selectedProvider}
-            phone={phone}
+            phone={phoneInput.value}
             onPhoneChange={(t) => {
-              setPhone(t);
-              if (phoneError) setPhoneError(null);
+              phoneInput.setValue(normalizeNgMobileDigits(t));
             }}
             onClearPhone={() => {
-              setPhone("");
+              phoneInput.clear();
               setPhoneError(null);
               setShowContactMatchDisclaimer(false);
             }}
             showContactMatchDisclaimer={showContactMatchDisclaimer}
             onContactPicked={() => setShowContactMatchDisclaimer(true)}
             phoneError={phoneError ?? undefined}
+            phoneFocused={phoneKeypadOpen}
+            onPhoneFocus={() => setPhoneKeypadOpen(true)}
+            phoneInputAnchorRef={phoneFieldRef}
           />
         </Animated.View>
 
@@ -328,17 +385,42 @@ export default function DataAmountScreen() {
           <Text className="text-base font-semibold text-white">Continue</Text>
         </Button>
 
-        <RecentDataList
-          entries={recentList}
-          currentServiceID={selectedProvider.serviceID}
-          onSelect={handleSelectRecent}
-          getProviderName={(sid) => {
-            if (sid === selectedProvider.serviceID)
-              return selectedProvider.name?.replace(/\s*data\s*/i, "").trim() ?? sid;
-            return sid.replace(/\s*data\s*/i, "").trim() || "Data";
-          }}
-        />
-      </KeyboardAwareScrollView>
+        {!showKeypad ? (
+          <RecentDataList
+            entries={recentList}
+            currentServiceID={selectedProvider.serviceID}
+            onSelect={handleSelectRecent}
+            getProviderName={(sid) => {
+              if (sid === selectedProvider.serviceID)
+                return selectedProvider.name?.replace(/\s*data\s*/i, "").trim() ?? sid;
+              return sid.replace(/\s*data\s*/i, "").trim() || "Data";
+            }}
+          />
+        ) : null}
+        </ScrollView>
+
+        {showKeypad ? (
+          <View
+            pointerEvents="box-none"
+            style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}
+          >
+            <KeypadDock
+              secure
+              title="SmiPay Secure Keypad"
+              animated
+              onDone={dismissKeypad}
+              doneLabel="Done"
+              bottomPadding={compact ? 4 : 8}
+            >
+              <Keypad
+                controller={phoneInput}
+                backspaceBehavior="repeat"
+                metrics={metricsOptions}
+              />
+            </KeypadDock>
+          </View>
+        ) : null}
+      </View>
 
       <ConfirmDataModal
         visible={

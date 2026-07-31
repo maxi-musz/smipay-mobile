@@ -8,7 +8,6 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
-  Keyboard,
   Platform,
   Pressable,
   ScrollView,
@@ -16,6 +15,10 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
+import {
+  KeyboardStickyView,
+  useKeyboardState,
+} from "react-native-keyboard-controller";
 import * as Crypto from "expo-crypto";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -274,7 +277,8 @@ export function ChatScreen({
     replyToMessageId?: string | null;
     snippet?: string | null;
   } | null>(null);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const composerBottomInset = Math.max(insets.bottom, 12);
+  const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const scrollRef = useRef<ScrollView>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const pendingCitationsRef = useRef<SmileCitation[]>([]);
@@ -401,30 +405,15 @@ export function ChatScreen({
     );
   }, [messages, agentMessages]);
 
-  // Sit the composer flush on the keyboard (same approach as support chat).
+  // Keep the latest messages visible when the composer rides the keyboard.
   useEffect(() => {
-    const show = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      (e) => setKeyboardHeight(e.endCoordinates.height),
-    );
-    const hide = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      () => setKeyboardHeight(0),
-    );
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (keyboardHeight <= 0) return;
+    if (!keyboardVisible) return;
     const timer = setTimeout(
       () => scrollRef.current?.scrollToEnd({ animated: true }),
       Platform.OS === "ios" ? 50 : 100,
     );
     return () => clearTimeout(timer);
-  }, [keyboardHeight]);
+  }, [keyboardVisible]);
 
   const loadConversation = useCallback(
     async (convId: string, opts?: { force?: boolean }) => {
@@ -903,9 +892,6 @@ export function ChatScreen({
               ? (conversationTitle ?? "Customer support")
               : "Reconnecting…";
 
-  const footerBottomInset =
-    keyboardHeight > 0 ? keyboardHeight : Math.max(insets.bottom, 12);
-
   return (
     <View className="flex-1">
       <View
@@ -1134,41 +1120,45 @@ export function ChatScreen({
         ) : null}
         </ScrollView>
 
-        <View
-          className="border-t border-border bg-background"
-          style={{ paddingBottom: footerBottomInset }}
-        >
-          {isClosed ? (
-            <ClosedConversationFooter
-              hasRated={hasRated}
-              onSubmit={handleRatingSubmit}
-              submitting={ratingSubmitting}
-            />
-          ) : (
-            <>
-              {showSuggestedReplies && suggestions.length > 0 && !isHandedOff ? (
-                <QuickReplyBar
-                  suggestions={suggestions}
-                  onSelect={sendUserText}
-                  disabled={false}
-                />
-              ) : null}
-
-              <Composer
-                value={draftText}
-                onChange={setDraftText}
-                onSend={() => sendUserText(draftText)}
-                placeholder={
-                  isHandedOff
-                    ? effectiveAgentName
-                      ? `Message ${firstWord(effectiveAgentName)}…`
-                      : "Message the specialist…"
-                    : `Message ${SMILEY_ASSISTANT_NAME}…`
-                }
+        <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
+          <View
+            className="border-t border-border bg-background"
+            style={{
+              paddingBottom: keyboardVisible ? 0 : composerBottomInset,
+            }}
+          >
+            {isClosed ? (
+              <ClosedConversationFooter
+                hasRated={hasRated}
+                onSubmit={handleRatingSubmit}
+                submitting={ratingSubmitting}
               />
-            </>
-          )}
-        </View>
+            ) : (
+              <>
+                {showSuggestedReplies && suggestions.length > 0 && !isHandedOff ? (
+                  <QuickReplyBar
+                    suggestions={suggestions}
+                    onSelect={sendUserText}
+                    disabled={false}
+                  />
+                ) : null}
+
+                <Composer
+                  value={draftText}
+                  onChange={setDraftText}
+                  onSend={() => sendUserText(draftText)}
+                  placeholder={
+                    isHandedOff
+                      ? effectiveAgentName
+                        ? `Message ${firstWord(effectiveAgentName)}…`
+                        : "Message the specialist…"
+                      : `Message ${SMILEY_ASSISTANT_NAME}…`
+                  }
+                />
+              </>
+            )}
+          </View>
+        </KeyboardStickyView>
       </View>
 
       <CitationsSheet

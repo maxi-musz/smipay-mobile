@@ -26,6 +26,14 @@ export function normalizeNgMobileDigits(input: string): string {
   return d;
 }
 
+/** Groups Nigerian mobile digits for display (080 123 45678). */
+export function formatNgPhoneDisplay(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+  return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+}
+
 /**
  * Formats a raw phone number from contacts (e.g. +2348012345678, 081 234 5678)
  * to Nigerian format: 0XXXXXXXXXX (11 digits).

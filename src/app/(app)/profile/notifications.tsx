@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { AlertModal } from "@/components/ui/modals";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
 import { getDeviceId } from "@/lib/device";
 import {
   clearLastRegisteredToken,
@@ -23,6 +24,7 @@ import { useAppStore } from "@/store";
 
 export default function NotificationsScreen() {
   const { isDark } = useAppTheme();
+  const compact = useCompactScreen();
   const pushEnabled = useAppStore.use.pushNotificationsEnabled();
   const setPushEnabled = useAppStore.use.setPushNotificationsEnabled();
 
@@ -118,7 +120,7 @@ export default function NotificationsScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-1" style={{ backgroundColor: bg }}>
-        <View className="flex-row items-center justify-between px-5 pb-3 pt-14">
+        <View className={`flex-row items-center justify-between px-5 pb-3 ${compact ? "pt-8" : "pt-14"}`}>
           <Pressable
             onPress={() => router.back()}
             className="h-9 w-9 items-center justify-center rounded-full active:opacity-70"

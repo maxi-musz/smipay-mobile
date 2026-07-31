@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { SlideInDown, SlideOutDown } from "react-native-reanimated";
 
+import { useCompactScreen } from "@/hooks/use-compact-screen";
 import { useKeypadColors, type KeypadColorOverrides } from "./keypad-theme";
 
 export interface KeypadDockProps {
@@ -59,8 +60,11 @@ export function KeypadDock({
 }: KeypadDockProps) {
   const palette = useKeypadColors(colorOverrides, scheme);
   const insets = useSafeAreaInsets();
+  const compact = useCompactScreen();
 
   const showHeader = Boolean(title) || Boolean(onDone);
+  const headerPadV = compact ? 6 : 10;
+  const effBottomPad = compact ? Math.min(bottomPadding, 4) : bottomPadding;
 
   return (
     <Animated.View
@@ -72,8 +76,8 @@ export function KeypadDock({
           backgroundColor: palette.surface,
           borderTopWidth: StyleSheet.hairlineWidth,
           borderTopColor: palette.separator,
-          paddingTop: showHeader ? 0 : 10,
-          paddingBottom: Math.max(insets.bottom, 10) + bottomPadding,
+          paddingTop: showHeader ? 0 : compact ? 6 : 10,
+          paddingBottom: Math.max(insets.bottom, compact ? 6 : 10) + effBottomPad,
         },
         style,
       ]}
@@ -85,7 +89,7 @@ export function KeypadDock({
             alignItems: "center",
             justifyContent: "space-between",
             paddingHorizontal: 16,
-            paddingVertical: 10,
+            paddingVertical: headerPadV,
           }}
         >
           <View

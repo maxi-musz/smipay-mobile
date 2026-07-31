@@ -1,11 +1,13 @@
-import { Pressable, TextInput, View } from "react-native";
+import type { RefObject } from "react";
+import { Pressable, View } from "react-native";
 import * as Contacts from "expo-contacts";
 import { Ionicons } from "@expo/vector-icons";
 
+import { SecureNumericField } from "@/components/keypad";
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
-import { useAppTheme } from "@/hooks/use-app-theme";
 import {
+  formatNgPhoneDisplay,
   formatPhoneFromContact,
   normalizeNgMobileDigits,
   PHONE_REGEX,
@@ -13,10 +15,6 @@ import {
 import { isKnownPhoneProviderMismatch } from "@/features/vtpass-airtime/phone-network";
 import { cn } from "@/lib/utils";
 import type { DataServiceItem } from "@/types/vtpass-data";
-
-/** Faint placeholder so it doesn’t look like typed text on real devices. */
-const PLACEHOLDER_LIGHT = "rgba(107, 114, 128, 0.38)";
-const PLACEHOLDER_DARK = "rgba(255, 255, 255, 0.15)";
 
 export interface DataPhoneRowProps {
   provider: DataServiceItem;
@@ -28,6 +26,9 @@ export interface DataPhoneRowProps {
   /** Called when user picks a number from contacts (parent may set disclaimer). */
   onContactPicked?: () => void;
   phoneError?: string;
+  phoneFocused?: boolean;
+  onPhoneFocus?: () => void;
+  phoneInputAnchorRef?: RefObject<View | null>;
 }
 
 export function DataPhoneRow({
@@ -38,8 +39,10 @@ export function DataPhoneRow({
   showContactMatchDisclaimer = false,
   onContactPicked,
   phoneError,
+  phoneFocused = false,
+  onPhoneFocus,
+  phoneInputAnchorRef,
 }: DataPhoneRowProps) {
-  const { isDark } = useAppTheme();
   const phoneDigits = phone.replace(/\D/g, "");
   const phoneFormatValid = PHONE_REGEX.test(normalizeNgMobileDigits(phone));
   /** Advisory only — never used to disable checkout. */
@@ -47,17 +50,6 @@ export function DataPhoneRow({
     phoneFormatValid &&
     isKnownPhoneProviderMismatch(phone, provider.serviceID);
   const showDisclaimer = possibleMismatch || showContactMatchDisclaimer;
-
-  function handlePhoneChange(text: string) {
-    onPhoneChange(normalizeNgMobileDigits(text));
-  }
-
-  function formatDisplayPhone(value: string): string {
-    const digits = value.replace(/\D/g, "");
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
-    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
-  }
 
   async function handlePickContact() {
     try {
@@ -89,6 +81,8 @@ export function DataPhoneRow({
       </View>
 
       <View
+        ref={phoneInputAnchorRef}
+        collapsable={false}
         className={cn(
           "flex-row items-center rounded-2xl border bg-card overflow-hidden",
           phoneError ? "border-destructive" : "border-border",
@@ -96,16 +90,15 @@ export function DataPhoneRow({
       >
         <View className="pl-4 flex-row items-center flex-1 min-w-0 py-1">
           <Text className="text-[15px] text-muted-foreground mr-1">+234</Text>
-          <TextInput
-            className="flex-1 text-[15px] font-normal text-foreground min-h-[48px] py-3"
+          <SecureNumericField
+            value={phone}
+            onPress={() => onPhoneFocus?.()}
+            focused={phoneFocused}
             placeholder="801 234 5678"
-            placeholderTextColor={isDark ? PLACEHOLDER_DARK : PLACEHOLDER_LIGHT}
-            value={formatDisplayPhone(phone)}
-            onChangeText={handlePhoneChange}
-            keyboardType="phone-pad"
-            maxLength={13}
-            autoCapitalize="none"
-            autoCorrect={false}
+            formatValue={formatNgPhoneDisplay}
+            error={Boolean(phoneError)}
+            className="min-h-[48px] py-3"
+            accessibilityLabel="Recipient phone number"
           />
         </View>
         {phone.length > 0 && onClearPhone ? (

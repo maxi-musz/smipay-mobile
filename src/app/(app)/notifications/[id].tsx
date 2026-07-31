@@ -7,6 +7,7 @@ import type { InboxItem } from "@/api";
 import { Text } from "@/components/ui/text";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
 import { colors } from "@/constants/colors";
 import { useInboxStore } from "@/store";
 
@@ -14,6 +15,7 @@ export default function NotificationDetailScreen() {
   const { id: idParam } = useLocalSearchParams<{ id: string }>();
   const id = idParam ? String(idParam) : "";
   const { isDark } = useAppTheme();
+  const compact = useCompactScreen();
 
   const ensureInboxItem = useInboxStore.use.ensureInboxItem();
 
@@ -90,7 +92,7 @@ export default function NotificationDetailScreen() {
             flexDirection: "row",
             alignItems: "center",
             paddingHorizontal: 16,
-            paddingTop: 56,
+            paddingTop: compact ? 32 : 56,
             paddingBottom: 12,
             backgroundColor: cardBg,
             borderBottomWidth: 1,

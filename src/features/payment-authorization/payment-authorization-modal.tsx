@@ -1,17 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Pressable, TextInput, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Modal, Platform, Pressable, ScrollView, View } from "react-native";
 import {
-  KeyboardAvoidingView,
-  KeyboardProvider,
-} from "react-native-keyboard-controller";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
+import {
+  CodeSlots,
+  Keypad,
+  KeypadDock,
+  useNumericInput,
+  type KeypadColorOverrides,
+} from "@/components/keypad";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { Spinner } from "@/components/ui/loaders";
 import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
 import {
   getBiometricLabel,
   getBiometricsAvailability,
@@ -47,16 +54,29 @@ export function PaymentAuthorizationModal({
 }: PaymentAuthorizationModalProps) {
   const { isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
+  const compact = useCompactScreen();
 
-  const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
+  const [errorShakeKey, setErrorShakeKey] = useState(0);
   const [biometricLabel, setBiometricLabel] = useState("Biometrics");
   const [pinFlowBusy, setPinFlowBusy] = useState(false);
-  const pinInputRef = useRef<TextInput>(null);
+
+  const keypadColors = useMemo<KeypadColorOverrides>(
+    () => ({
+      accent: colors.green[500],
+      filled: isDark ? "#F8FAFC" : "#0F172A",
+    }),
+    [isDark],
+  );
+
+  const pinInput = useNumericInput({
+    length: PIN_LENGTH,
+    onChange: () => {
+      if (pinError) setPinError(null);
+    },
+  });
 
   const panelBg = isDark ? "#1C1C1E" : "#FFFFFF";
-  const slotBorderIdle = isDark ? "#3A3A3C" : "#E5E7EB";
-  const slotActive = colors.green[500];
 
   useEffect(() => {
     let cancelled = false;
@@ -72,28 +92,19 @@ export function PaymentAuthorizationModal({
 
   useEffect(() => {
     if (!visible) {
-      setPin("");
+      pinInput.clear();
       setPinError(null);
       setPinFlowBusy(false);
+      setErrorShakeKey(0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when sheet closes
   }, [visible]);
-
-  useEffect(() => {
-    if (!visible) return;
-    const id = setTimeout(() => pinInputRef.current?.focus(), 350);
-    return () => clearTimeout(id);
-  }, [visible]);
-
-  function onPinChange(text: string) {
-    if (isBusy || pinFlowBusy) return;
-    const digits = text.replace(/\D/g, "").slice(0, PIN_LENGTH);
-    setPin(digits);
-    if (pinError) setPinError(null);
-  }
 
   async function submitPinEntry() {
+    const pin = pinInput.value;
     if (pin.length !== PIN_LENGTH) {
       setPinError("Enter your 4-digit transaction PIN.");
+      setErrorShakeKey((k) => k + 1);
       return;
     }
     setPinError(null);
@@ -101,9 +112,11 @@ export function PaymentAuthorizationModal({
     try {
       try {
         await onVerifyPin(pin);
-        setPin("");
+        pinInput.clear();
       } catch (e) {
+        pinInput.clear();
         setPinError(purchaseAuthPinErrorMessage(e));
+        setErrorShakeKey((k) => k + 1);
         return;
       }
       await onCompletePayment();
@@ -122,20 +135,16 @@ export function PaymentAuthorizationModal({
       animationType="slide"
       onRequestClose={() => canDismiss && onClose()}
       statusBarTranslucent
+      navigationBarTranslucent={Platform.OS === "android"}
     >
       {/*
-       * An RN `Modal` renders in a separate native window on Android, which the
-       * app-root `KeyboardProvider` does not reach. We mount a dedicated provider
-       * here so keyboard-controller's `KeyboardAvoidingView` receives keyboard
-       * events and pushes the sheet above the keyboard on Android too (iOS already
-       * worked). `statusBarTranslucent` mirrors the Modal so insets measure right.
+       * In-app keypad instead of the system keyboard — budget Android OEMs often
+       * fail to resize RN Modals when the soft keyboard opens, which hid the PIN
+       * slots and "Verify and pay" behind the keyboard. Same approach as
+       * Profile → Transaction PIN and the lock screen.
        */}
-      <KeyboardProvider statusBarTranslucent>
-        <KeyboardAvoidingView
-          className="flex-1 justify-end"
-          behavior="padding"
-          style={{ flex: 1 }}
-        >
+      <SafeAreaProvider>
+        <View className="flex-1 justify-end">
           <Pressable
             className="absolute inset-0 bg-black/55"
             accessibilityRole="button"
@@ -144,166 +153,155 @@ export function PaymentAuthorizationModal({
             onPress={() => canDismiss && onClose()}
           />
 
-        <View
-          style={{
-            backgroundColor: panelBg,
-            paddingBottom: Math.max(insets.bottom, 12),
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
-          }}
-        >
-          <View className="flex-row items-center px-4 pb-2 pt-4">
-            <Pressable
-              disabled={!canDismiss}
-              onPress={onClose}
-              hitSlop={14}
-              className="h-11 w-11 items-center justify-center rounded-full active:opacity-70"
-              style={{
-                backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.06)",
-                opacity: canDismiss ? 1 : 0.35,
+          <View
+            style={{
+              backgroundColor: panelBg,
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              maxHeight: compact ? "96%" : "92%",
+            }}
+          >
+            <ScrollView
+              bounces={false}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{
+                paddingTop: compact ? 12 : 16,
+                paddingBottom: compact ? 8 : 12,
               }}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
             >
-              <Ionicons name="close" size={22} color={isDark ? "#E5E7EB" : "#374151"} />
-            </Pressable>
-            <Text className="flex-1 text-center text-lg font-semibold text-foreground pr-11">
-              Enter payment PIN
-            </Text>
-          </View>
-
-          <Text className="px-5 pb-4 text-center text-sm text-muted-foreground">
-            Use your 4-digit SmiPay transaction PIN to authorize this payment.
-          </Text>
-
-          {showRetryBiometrics ? (
-            <>
-              <View className="px-4">
-                <Button
-                  variant="outline"
-                  className="h-11 rounded-xl"
-                  disabled={keypadLocked}
-                  onPress={() => void onRetryBiometrics()}
+              <View className="flex-row items-center px-4 pb-2">
+                <Pressable
+                  disabled={!canDismiss}
+                  onPress={onClose}
+                  hitSlop={14}
+                  className="h-11 w-11 items-center justify-center rounded-full active:opacity-70"
+                  style={{
+                    backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.06)",
+                    opacity: canDismiss ? 1 : 0.35,
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
                 >
-                  {isBusy ? (
-                    <Spinner color={colors.green[500]} size="small" />
+                  <Ionicons name="close" size={22} color={isDark ? "#E5E7EB" : "#374151"} />
+                </Pressable>
+                <Text className="flex-1 text-center text-lg font-semibold text-foreground pr-11">
+                  Enter payment PIN
+                </Text>
+              </View>
+
+              <Text className="px-5 pb-3 text-center text-sm text-muted-foreground">
+                Use your 4-digit SmiPay transaction PIN to authorize this payment.
+              </Text>
+
+              {showRetryBiometrics ? (
+                <>
+                  <View className="px-4">
+                    <Button
+                      variant="outline"
+                      className="h-11 rounded-xl"
+                      disabled={keypadLocked}
+                      onPress={() => void onRetryBiometrics()}
+                    >
+                      {isBusy ? (
+                        <Spinner color={colors.green[500]} size="small" />
+                      ) : (
+                        <View className="flex-row items-center gap-2">
+                          <Ionicons
+                            name="finger-print-outline"
+                            size={20}
+                            color={colors.green[500]}
+                          />
+                          <Text className="text-sm font-semibold text-foreground">
+                            Retry {biometricLabel}
+                          </Text>
+                        </View>
+                      )}
+                    </Button>
+                  </View>
+                  <View className="my-3 flex-row items-center gap-2 px-6">
+                    <View className="h-px flex-1 bg-border" />
+                    <Text className="text-xs uppercase text-muted-foreground">or enter PIN</Text>
+                    <View className="h-px flex-1 bg-border" />
+                  </View>
+                </>
+              ) : null}
+
+              <CodeSlots
+                value={pinInput.value}
+                length={PIN_LENGTH}
+                variant="box"
+                secure
+                focused={!keypadLocked}
+                error={Boolean(pinError)}
+                shakeKey={errorShakeKey}
+                slotHeight={compact ? 46 : 52}
+                maxSlotWidth={compact ? 52 : 56}
+                colors={keypadColors}
+                scheme={isDark ? "dark" : "light"}
+                accessibilityLabel="Transaction PIN, 4 digits"
+                style={{ paddingHorizontal: 24, marginBottom: compact ? 8 : 12 }}
+              />
+
+              {onForgotPinPress ? (
+                <Pressable
+                  onPress={onForgotPinPress}
+                  disabled={keypadLocked}
+                  className="items-center py-1 active:opacity-70"
+                  accessibilityRole="link"
+                  accessibilityLabel="Forgot transaction PIN"
+                >
+                  <Text style={{ color: colors.green[600] }} className="text-sm font-medium">
+                    Forgot transaction PIN?
+                  </Text>
+                </Pressable>
+              ) : (
+                <View className="h-1" />
+              )}
+
+              {pinError ? (
+                <Text className="mt-2 px-6 text-center text-sm text-destructive">{pinError}</Text>
+              ) : null}
+
+              <View className="mt-3 px-4">
+                <Button
+                  className="h-12 w-full rounded-xl"
+                  style={{ backgroundColor: colors.green[500] }}
+                  disabled={keypadLocked || pinInput.value.length !== PIN_LENGTH}
+                  onPress={() => void submitPinEntry()}
+                >
+                  {pinFlowBusy ? (
+                    <Spinner color="#fff" size="small" />
                   ) : (
-                    <View className="flex-row items-center gap-2">
-                      <Ionicons
-                        name="finger-print-outline"
-                        size={20}
-                        color={colors.green[500]}
-                      />
-                      <Text className="text-sm font-semibold text-foreground">
-                        Retry {biometricLabel}
-                      </Text>
-                    </View>
+                    <Text className="text-base font-semibold text-white">Verify and pay</Text>
                   )}
                 </Button>
               </View>
-              <View className="my-4 flex-row items-center gap-2 px-6">
-                <View className="h-px flex-1 bg-border" />
-                <Text className="text-xs uppercase text-muted-foreground">or enter PIN</Text>
-                <View className="h-px flex-1 bg-border" />
-              </View>
-            </>
-          ) : null}
+            </ScrollView>
 
-          {/* 4 boxed slots; system number pad via overlaid TextInput */}
-          <Pressable
-            className="relative mx-6 pb-3"
-            disabled={keypadLocked}
-            onPress={() => pinInputRef.current?.focus()}
-            accessibilityRole="none"
-          >
-            <View className="flex-row justify-center gap-3">
-              {Array.from({ length: PIN_LENGTH }).map((_, i) => {
-                const digit = pin[i];
-                const isActive = pin.length === i;
-                return (
-                  <View
-                    key={i}
-                    style={{
-                      height: 52,
-                      width: 52,
-                      borderRadius: 14,
-                      borderWidth: 2,
-                      borderColor: isActive ? slotActive : slotBorderIdle,
-                      backgroundColor: isDark ? "#2C2C2E" : "#F9FAFB",
-                    }}
-                    className="items-center justify-center"
-                  >
-                    {digit ? (
-                      <Text
-                        className="text-xl font-semibold tabular-nums"
-                        style={{ color: isDark ? "#F8FAFC" : "#0F172A" }}
-                      >
-                        •
-                      </Text>
-                    ) : isActive ? (
-                      <View
-                        className="h-5 w-0.5 rounded-full"
-                        style={{ backgroundColor: slotActive }}
-                      />
-                    ) : null}
-                  </View>
-                );
-              })}
-            </View>
-            <TextInput
-              ref={pinInputRef}
-              value={pin}
-              onChangeText={onPinChange}
-              keyboardType="number-pad"
-              maxLength={PIN_LENGTH}
-              secureTextEntry
-              editable={!keypadLocked}
-              caretHidden
-              importantForAutofill="no"
-              autoComplete="off"
-              textContentType="password"
-              accessibilityLabel="Transaction PIN, 4 digits"
-              className="absolute inset-0 opacity-0"
-            />
-          </Pressable>
-
-          {onForgotPinPress ? (
-            <Pressable
-              onPress={onForgotPinPress}
-              disabled={keypadLocked}
-              className="items-center py-2 active:opacity-70"
-              accessibilityRole="link"
-              accessibilityLabel="Forgot transaction PIN"
+            <KeypadDock
+              secure
+              title="SmiPay Secure Keypad"
+              colors={keypadColors}
+              scheme={isDark ? "dark" : "light"}
+              animated={false}
+              bottomPadding={compact ? 4 : 8}
+              style={{
+                backgroundColor: panelBg,
+                paddingBottom: Math.max(insets.bottom, compact ? 6 : 10),
+              }}
             >
-              <Text style={{ color: colors.green[600] }} className="text-sm font-medium">
-                Forgot transaction PIN?
-              </Text>
-            </Pressable>
-          ) : (
-            <View className="h-2" />
-          )}
-
-          {pinError ? (
-            <Text className="mt-3 px-6 text-center text-sm text-destructive">{pinError}</Text>
-          ) : null}
-
-          <View className="mt-4 px-4">
-            <Button
-              className="h-12 w-full rounded-xl"
-              style={{ backgroundColor: colors.green[500] }}
-              disabled={keypadLocked || pin.length !== PIN_LENGTH}
-              onPress={() => void submitPinEntry()}
-            >
-              {pinFlowBusy ? (
-                <Spinner color="#fff" size="small" />
-              ) : (
-                <Text className="text-base font-semibold text-white">Verify and pay</Text>
-              )}
-            </Button>
+              <Keypad
+                controller={pinInput}
+                disabled={keypadLocked}
+                colors={keypadColors}
+                scheme={isDark ? "dark" : "light"}
+                backspaceBehavior="clear"
+              />
+            </KeypadDock>
           </View>
         </View>
-        </KeyboardAvoidingView>
-      </KeyboardProvider>
+      </SafeAreaProvider>
     </Modal>
   );
 }

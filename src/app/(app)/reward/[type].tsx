@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Text } from "@/components/ui/text";
 import { formatNairaNumberForDisplay } from "@/lib/money";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
 import { useHomepageStore } from "@/store";
 import type { RewardBanner } from "@/types";
 
@@ -38,6 +39,7 @@ function labelForDataKey(key: string): string {
 export default function RewardBannerDetailScreen() {
   const { type: typeParam } = useLocalSearchParams<{ type: string }>();
   const { isDark } = useAppTheme();
+  const compact = useCompactScreen();
   const data = useHomepageStore.use.data();
   const fetchHomepage = useHomepageStore.use.fetchHomepage();
   const isLoading = useHomepageStore.use.isLoading();
@@ -70,7 +72,7 @@ export default function RewardBannerDetailScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-1" style={{ backgroundColor: bg }}>
-        <View className="flex-row items-center justify-between px-5 pb-3 pt-14">
+        <View className={`flex-row items-center justify-between px-5 pb-3 ${compact ? "pt-8" : "pt-14"}`}>
           <Pressable
             onPress={() => router.back()}
             className="h-9 w-9 items-center justify-center rounded-full active:opacity-70"

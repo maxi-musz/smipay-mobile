@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Keyboard, Modal, Pressable, ScrollView, View } from "react-native";
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  View,
+} from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Stack, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,12 +15,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { signIn } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Keypad, KeypadDock, PinDots, useNumericInput } from "@/components/keypad";
 import { Spinner } from "@/components/ui/loaders";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useToastStore } from "@/components/ui/toast";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
 import { authenticate, getBiometricsAvailability, getBiometricLabel } from "@/lib/biometrics";
+import { AUTH_PASSWORD_DIGITS } from "@/lib/auth-password";
 import { canUseRequireAuthentication } from "@/lib/secure-storage";
 import { useAppStore, useAuthStore, useProfileStore } from "@/store";
 import type { LockTimeout } from "@/store/app.store";
@@ -39,7 +50,17 @@ export default function SecurityScreen() {
   const [enablePassword, setEnablePassword] = useState("");
   const [enableLoading, setEnableLoading] = useState(false);
   const [enableError, setEnableError] = useState("");
+  const [enableShakeKey, setEnableShakeKey] = useState(0);
+  // Numeric keypad is primary; `keyboard` supports legacy alphanumeric passwords.
+  const [enableMode, setEnableMode] = useState<"keypad" | "keyboard">("keypad");
   const [appLockExpanded, setAppLockExpanded] = useState(false);
+  const compact = useCompactScreen();
+
+  const enablePin = useNumericInput({
+    length: AUTH_PASSWORD_DIGITS,
+    onComplete: (value) => void handleEnableBiometricsSubmit(value),
+    onChange: () => setEnableError(""),
+  });
 
   const profileData = useProfileStore.use.data();
   const fetchProfile = useProfileStore.use.fetchProfile();
@@ -68,36 +89,75 @@ export default function SecurityScreen() {
     LOCK_OPTIONS.find((o) => o.value === lockTimeout) ?? LOCK_OPTIONS[0];
   const pinSet = profileData?.user?.is_four_digit_pin_set === true;
 
+  function openEnableModal() {
+    setEnablePassword("");
+    enablePin.clear();
+    setEnableMode("keypad");
+    setEnableError("");
+    setEnableModalVisible(true);
+  }
+
+  function closeEnableModal() {
+    if (enableLoading) return;
+    Keyboard.dismiss();
+    setEnableModalVisible(false);
+    setEnablePassword("");
+    enablePin.clear();
+    setEnableError("");
+  }
+
+  /** Carry the typed value across so switching modes never costs input. */
+  function switchEnableMode(next: "keypad" | "keyboard") {
+    setEnableMode(next);
+    setEnableError("");
+    if (next === "keyboard") {
+      setEnablePassword(enablePin.value);
+    } else {
+      Keyboard.dismiss();
+      enablePin.setValue(
+        enablePassword.replace(/\D/g, "").slice(0, AUTH_PASSWORD_DIGITS),
+      );
+    }
+  }
+
   async function handleBiometricsSwitch(value: boolean) {
     if (value) {
       if (!biometricsAvailable) return;
-      setEnableModalVisible(true);
-      setEnablePassword("");
-      setEnableError("");
+      openEnableModal();
     } else {
       setBiometricsEnabled(false);
     }
   }
 
-  async function handleEnableBiometricsSubmit() {
+  const currentEnablePassword =
+    enableMode === "keypad" ? enablePin.value : enablePassword;
+
+  async function handleEnableBiometricsSubmit(
+    passwordValue: string = currentEnablePassword,
+  ) {
     const trimmedEmail = email.trim().toLowerCase();
-    if (!trimmedEmail || !enablePassword.trim()) {
+    if (!trimmedEmail || !passwordValue.trim()) {
       setEnableError("Please enter your password.");
+      setEnableShakeKey((k) => k + 1);
       return;
     }
+    if (enableLoading) return;
     Keyboard.dismiss();
     setEnableError("");
     setEnableLoading(true);
     try {
-      const res = await signIn({ email: trimmedEmail, password: enablePassword });
+      // Verify the password by attempting sign-in; throws on wrong password.
+      await signIn({ email: trimmedEmail, password: passwordValue });
       const authResult = await authenticate({
         promptMessage: `Use ${biometricLabel} to unlock SmiPay`,
+        disableDeviceFallback: true,
+        cancelLabel: "Cancel",
       });
       if (!authResult.success) {
         setEnableError("Biometric authentication was not completed.");
         return;
       }
-      await storeCredentials(trimmedEmail, enablePassword, canUseRequireAuthentication()
+      await storeCredentials(trimmedEmail, passwordValue, canUseRequireAuthentication()
         ? { requireAuthentication: true }
         : undefined);
       setBiometricsEnabled(true);
@@ -108,7 +168,11 @@ export default function SecurityScreen() {
         message: `You can now use ${biometricLabel} to unlock the app.`,
       });
     } catch {
-      setEnableError("Incorrect password. Please try again.");
+      // Wipe the keypad so a rejected attempt starts fresh.
+      enablePin.clear();
+      setEnablePassword("");
+      setEnableError("Incorrect pin. Please try again.");
+      setEnableShakeKey((k) => k + 1);
     } finally {
       setEnableLoading(false);
     }
@@ -118,7 +182,7 @@ export default function SecurityScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-1" style={{ backgroundColor: bg }}>
-        <View className="flex-row items-center justify-between px-5 pb-3 pt-14">
+        <View className={`flex-row items-center justify-between px-5 pb-3 ${compact ? "pt-8" : "pt-14"}`}>
           <Pressable
             onPress={() => router.back()}
             className="h-9 w-9 items-center justify-center rounded-full active:opacity-70"
@@ -272,66 +336,147 @@ export default function SecurityScreen() {
         </ScrollView>
       </View>
 
-      {/* Enable biometrics modal */}
+      {/* Enable biometrics — modern bottom sheet with the custom keypad. */}
       <Modal
         visible={enableModalVisible}
         transparent
-        animationType="fade"
-        onRequestClose={() => setEnableModalVisible(false)}
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={closeEnableModal}
       >
-        <Pressable
-          className="flex-1 justify-center bg-black/50 p-5"
-          onPress={() => setEnableModalVisible(false)}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
         >
-          <Pressable
-            className="rounded-2xl bg-card p-5"
-            style={{ backgroundColor: cardBg }}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <Text className="text-lg font-semibold text-foreground">
-              Enable {biometricLabel}
-            </Text>
-            <Text className="mt-1 text-sm text-muted-foreground">
-              Enter your password to enable biometric unlock.
-            </Text>
-            <Input
-              containerClassName="mt-4"
-              label="Password"
-              placeholder="Enter your password"
-              value={enablePassword}
-              onChangeText={(v) => {
-                setEnablePassword(v);
-                if (enableError) setEnableError("");
-              }}
-              error={enableError}
-              secureTextEntry
-              toggleable
-              autoComplete="password"
-              editable={!enableLoading}
-            />
-            <View className="mt-5 flex-row gap-3">
-              <Button
-                variant="outline"
-                className="flex-1 rounded-xl"
-                onPress={() => setEnableModalVisible(false)}
-                disabled={enableLoading}
-              >
-                <Text className="text-foreground">Cancel</Text>
-              </Button>
-              <Button
-                className="flex-1 rounded-xl"
-                onPress={handleEnableBiometricsSubmit}
-                disabled={enableLoading}
-              >
-                {enableLoading ? (
-                  <Spinner color="#fff" />
+          <View className="flex-1 justify-end" style={{ backgroundColor: "rgba(0,0,0,0.55)" }}>
+            <Pressable className="flex-1" onPress={closeEnableModal} />
+
+            <View className="overflow-hidden rounded-t-3xl" style={{ backgroundColor: bg }}>
+              <View className="items-center pt-3">
+                <View
+                  className="h-1 w-10 rounded-full"
+                  style={{ backgroundColor: dividerColor }}
+                />
+              </View>
+
+              <View className="px-5 pt-3">
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-lg font-semibold text-foreground">
+                    Enable {biometricLabel}
+                  </Text>
+                  <Pressable
+                    onPress={closeEnableModal}
+                    hitSlop={10}
+                    disabled={enableLoading}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                  >
+                    <Ionicons name="close" size={22} color={chevronColor} />
+                  </Pressable>
+                </View>
+                <Text className="mt-1 text-sm text-muted-foreground">
+                  Enter your {AUTH_PASSWORD_DIGITS}-digit login pin to turn on{" "}
+                  {biometricLabel}.
+                </Text>
+
+                {enableMode === "keypad" ? (
+                  <>
+                    <PinDots
+                      value={enablePin.value}
+                      length={AUTH_PASSWORD_DIGITS}
+                      error={Boolean(enableError)}
+                      shakeKey={enableShakeKey}
+                      style={{
+                        justifyContent: "flex-start",
+                        marginTop: compact ? 16 : 22,
+                      }}
+                    />
+                    {enableError ? (
+                      <Text className="mt-3 text-sm font-medium text-destructive">
+                        {enableError}
+                      </Text>
+                    ) : null}
+                    {/* <View className="mt-4 flex-row items-center justify-between">
+                      <Pressable
+                        onPress={() => switchEnableMode("keyboard")}
+                        hitSlop={8}
+                        className="active:opacity-70"
+                        accessibilityRole="button"
+                      >
+                        <Text className="text-sm text-muted-foreground">
+                          Use letter keyboard
+                        </Text>
+                      </Pressable>
+                      {enableLoading ? (
+                        <Spinner size="small" color="#F4831F" />
+                      ) : null}
+                    </View> */}
+                  </>
                 ) : (
-                  <Text className="font-semibold text-primary-foreground">Enable</Text>
+                  <>
+                    <Input
+                      containerClassName="mt-4"
+                      label="Password"
+                      placeholder="Enter your password"
+                      value={enablePassword}
+                      onChangeText={(v) => {
+                        setEnablePassword(v);
+                        if (enableError) setEnableError("");
+                      }}
+                      error={enableError}
+                      secureTextEntry
+                      toggleable
+                      autoComplete="password"
+                      editable={!enableLoading}
+                      autoFocus
+                      returnKeyType="done"
+                      onSubmitEditing={() => void handleEnableBiometricsSubmit()}
+                    />
+                    <View className="mt-4 flex-row items-center justify-between">
+                      <Pressable
+                        onPress={() => switchEnableMode("keypad")}
+                        hitSlop={8}
+                        className="active:opacity-70"
+                        accessibilityRole="button"
+                      >
+                        <Text className="text-sm text-muted-foreground">
+                          Use number keypad
+                        </Text>
+                      </Pressable>
+                      <Button
+                        className="rounded-xl px-5"
+                        onPress={() => void handleEnableBiometricsSubmit()}
+                        disabled={enableLoading || !enablePassword.trim()}
+                      >
+                        {enableLoading ? (
+                          <Spinner color="#fff" />
+                        ) : (
+                          <Text className="font-semibold text-primary-foreground">
+                            Enable
+                          </Text>
+                        )}
+                      </Button>
+                    </View>
+                  </>
                 )}
-              </Button>
+              </View>
+
+              {enableMode === "keypad" ? (
+                <View className="mt-3">
+                  <KeypadDock secure title="SmiPay Secure Keypad">
+                    <Keypad
+                      controller={enablePin}
+                      disabled={enableLoading}
+                      backspaceBehavior="clear"
+                    />
+                  </KeypadDock>
+                </View>
+              ) : (
+                <View style={{ height: 16 }} />
+              )}
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );

@@ -209,10 +209,17 @@ export function LockScreen() {
     try {
       const authResult = await authenticate({
         promptMessage: "Unlock SmiPay",
+        // Never let the OS device-PIN unlock the app — the app has its own
+        // password. Tapping the negative button just returns to our keypad.
+        disableDeviceFallback: true,
+        cancelLabel: "Use password",
       });
       if (!authResult.success) {
         suppressAutoBiometricRef.current = true;
-        setError("Authentication failed. Try your password.");
+        // A deliberate "Use password" / cancel is not an error — just fall back
+        // to the keypad silently. Only real biometric failures show a message.
+        const cancelled = /cancel|fallback/i.test(authResult.error ?? "");
+        if (!cancelled) setError("Authentication failed. Try your password.");
         return;
       }
       setUnlocking(true);

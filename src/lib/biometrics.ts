@@ -85,6 +85,12 @@ export async function authenticate(
      * `false` (default) = OS may fall back to device PIN — appropriate for optional flows like enabling biometrics after sign-in.
      */
     disableDeviceFallback?: boolean;
+    /**
+     * Text of the prompt's negative/cancel button (Android negative button, iOS
+     * cancel). Pair with `disableDeviceFallback: true` so tapping it simply
+     * dismisses back to the app's own password entry — e.g. "Use password".
+     */
+    cancelLabel?: string;
   } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -92,6 +98,7 @@ export async function authenticate(
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: options.promptMessage ?? DEFAULT_PROMPT,
       disableDeviceFallback,
+      ...(options.cancelLabel ? { cancelLabel: options.cancelLabel } : {}),
       // iOS: hide "Enter Passcode" / use-password path when biometric-only policy is enforced
       ...(Platform.OS === "ios" && disableDeviceFallback ? { fallbackLabel: "" } : {}),
     });

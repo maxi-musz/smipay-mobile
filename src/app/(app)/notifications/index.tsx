@@ -13,12 +13,14 @@ import type { InboxItem } from "@/api";
 import { Text } from "@/components/ui/text";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
 import { colors } from "@/constants/colors";
 import { useToastStore } from "@/components/ui/toast/toast-store";
 import { useInboxStore } from "@/store";
 
 export default function NotificationInboxScreen() {
   const { isDark } = useAppTheme();
+  const compact = useCompactScreen();
   const items = useInboxStore.use.items();
   const isLoadingList = useInboxStore.use.isLoadingList();
   const isLoadingMore = useInboxStore.use.isLoadingMore();
@@ -148,7 +150,7 @@ export default function NotificationInboxScreen() {
             alignItems: "center",
             justifyContent: "space-between",
             paddingHorizontal: 16,
-            paddingTop: 56,
+            paddingTop: compact ? 32 : 56,
             paddingBottom: 12,
             backgroundColor: cardBg,
             borderBottomWidth: 1,

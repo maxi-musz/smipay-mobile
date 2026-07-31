@@ -46,13 +46,15 @@ export function ArrowButton({
   testID,
 }: ArrowButtonProps) {
   const { isDark } = useAppTheme();
-  const enabled = !disabled && !loading;
+  /** Block taps while loading, but keep the active (orange) look so the spinner reads clearly. */
+  const pressDisabled = disabled || loading;
+  const showActiveStyle = loading || !disabled;
 
   const nudge = useSharedValue(0);
   const press = useSharedValue(0);
 
   useEffect(() => {
-    if (enabled) {
+    if (showActiveStyle && !loading) {
       nudge.value = withRepeat(
         withSequence(
           withTiming(4, { duration: 650 }),
@@ -64,7 +66,7 @@ export function ArrowButton({
     } else {
       nudge.value = withTiming(0, { duration: 120 });
     }
-  }, [enabled, nudge]);
+  }, [showActiveStyle, loading, nudge]);
 
   const arrowStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: nudge.value }],
@@ -76,14 +78,14 @@ export function ArrowButton({
 
   const disabledBg = isDark ? "#334155" : "#E5E7EB";
   const disabledTint = isDark ? "#94A3B8" : "#9CA3AF";
-  const background = enabled ? colors.orange[500] : disabledBg;
-  const tint = enabled ? "#FFFFFF" : disabledTint;
+  const background = showActiveStyle ? colors.orange[500] : disabledBg;
+  const tint = showActiveStyle ? "#FFFFFF" : disabledTint;
 
   return (
     <Pressable
       testID={testID}
       onPress={onPress}
-      disabled={!enabled}
+      disabled={pressDisabled}
       onPressIn={() => {
         press.value = withTiming(1, { duration: 70 });
       }}
@@ -93,7 +95,7 @@ export function ArrowButton({
       hitSlop={10}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled: !enabled }}
+      accessibilityState={{ disabled: pressDisabled, busy: loading }}
       style={style}
     >
       <Animated.View
@@ -108,17 +110,16 @@ export function ArrowButton({
             paddingHorizontal: label ? 22 : 0,
             width: label ? undefined : size,
             gap: label ? 10 : 0,
-            // Lifts the control off the page without a heavy card shadow.
             shadowColor: colors.orange[600],
-            shadowOpacity: enabled ? 0.28 : 0,
+            shadowOpacity: showActiveStyle ? 0.28 : 0,
             shadowRadius: 12,
             shadowOffset: { width: 0, height: 6 },
-            elevation: enabled ? 4 : 0,
+            elevation: showActiveStyle ? 4 : 0,
           },
           containerStyle,
         ]}
       >
-        {label ? (
+        {label && !loading ? (
           <Text
             className="text-base font-semibold"
             style={{ color: tint }}
@@ -129,7 +130,7 @@ export function ArrowButton({
         ) : null}
 
         {loading ? (
-          <Spinner size="small" color={tint} />
+          <Spinner size="small" color="#FFFFFF" />
         ) : (
           <Animated.View style={arrowStyle}>
             <Ionicons name="arrow-forward" size={Math.round(size * 0.4)} color={tint} />

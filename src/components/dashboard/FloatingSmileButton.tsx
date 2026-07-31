@@ -14,6 +14,8 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
+import { useResponsiveScale } from "@/hooks/use-responsive-scale";
 
 /**
  * Floating AI assistant entry point (Siri-style breathing orb).
@@ -23,14 +25,27 @@ import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
  * offset to create a continuous "alive" feel; the inner gradient orb has a
  * subtle breathing scale so it never reads as static.
  *
+ * Size scales with screen width (see `useResponsiveScale`) and shrinks further
+ * on compact / budget phones so the pulse rings do not dominate small screens.
+ *
  * Tapping opens the Smile landing (`/(app)/smileai`).
  */
-const ORB_SIZE = 56;
-const RING_MAX_SCALE = 1.7;
+const BASE_ORB_SIZE = 56;
+const BASE_RING_MAX_SCALE = 1.7;
+const COMPACT_RING_MAX_SCALE = 1.55;
 const PULSE_DURATION_MS = 2400;
 
 export function FloatingSmileButton() {
   const insets = useSafeAreaInsets();
+  const compact = useCompactScreen();
+  const { s } = useResponsiveScale();
+
+  const orbSize = s(BASE_ORB_SIZE);
+  const iconSize = s(24);
+  const edgeInset = s(compact ? 14 : 18);
+  const gapAboveTab = s(compact ? 12 : 18);
+  const ringMaxScale = compact ? COMPACT_RING_MAX_SCALE : BASE_RING_MAX_SCALE;
+
   // Mirror the tab bar height calculation in (tabs)/_layout.tsx so the orb
   // floats just above the bar with a consistent gap.
   const tabBarHeight = 64 + Math.max(insets.bottom, 12);
@@ -68,12 +83,12 @@ export function FloatingSmileButton() {
   }, [breathe, ring1, ring2]);
 
   const ring1Style = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + ring1.value * (RING_MAX_SCALE - 1) }],
+    transform: [{ scale: 1 + ring1.value * (ringMaxScale - 1) }],
     opacity: 0.45 * (1 - ring1.value),
   }));
 
   const ring2Style = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + ring2.value * (RING_MAX_SCALE - 1) }],
+    transform: [{ scale: 1 + ring2.value * (ringMaxScale - 1) }],
     opacity: 0.35 * (1 - ring2.value),
   }));
 
@@ -87,15 +102,15 @@ export function FloatingSmileButton() {
       pointerEvents="box-none"
       style={{
         position: "absolute",
-        right: 18,
-        bottom: tabBarHeight + 18,
+        right: edgeInset,
+        bottom: tabBarHeight + gapAboveTab,
         zIndex: 50,
       }}
     >
       <View
         style={{
-          width: ORB_SIZE,
-          height: ORB_SIZE,
+          width: orbSize,
+          height: orbSize,
           alignItems: "center",
           justifyContent: "center",
         }}
@@ -105,9 +120,9 @@ export function FloatingSmileButton() {
           style={[
             {
               position: "absolute",
-              width: ORB_SIZE,
-              height: ORB_SIZE,
-              borderRadius: ORB_SIZE / 2,
+              width: orbSize,
+              height: orbSize,
+              borderRadius: orbSize / 2,
               backgroundColor: "#F58220",
             },
             ring1Style,
@@ -118,9 +133,9 @@ export function FloatingSmileButton() {
           style={[
             {
               position: "absolute",
-              width: ORB_SIZE,
-              height: ORB_SIZE,
-              borderRadius: ORB_SIZE / 2,
+              width: orbSize,
+              height: orbSize,
+              borderRadius: orbSize / 2,
               backgroundColor: "#D946EF",
             },
             ring2Style,
@@ -135,22 +150,22 @@ export function FloatingSmileButton() {
           onPressOut={() => {
             press.value = withTiming(0, { duration: 160 });
           }}
-          hitSlop={10}
+          hitSlop={compact ? 8 : 10}
           accessibilityRole="button"
           accessibilityLabel={`Open ${SMILEY_ASSISTANT_NAME}, your AI assistant`}
         >
           <Animated.View
             style={[
               {
-                width: ORB_SIZE,
-                height: ORB_SIZE,
-                borderRadius: ORB_SIZE / 2,
+                width: orbSize,
+                height: orbSize,
+                borderRadius: orbSize / 2,
                 overflow: "hidden",
                 shadowColor: "#F58220",
                 shadowOpacity: 0.45,
-                shadowRadius: 14,
-                shadowOffset: { width: 0, height: 6 },
-                elevation: 12,
+                shadowRadius: s(14),
+                shadowOffset: { width: 0, height: s(6) },
+                elevation: compact ? 8 : 12,
               },
               orbStyle,
             ]}
@@ -170,16 +185,16 @@ export function FloatingSmileButton() {
                 pointerEvents="none"
                 style={{
                   position: "absolute",
-                  top: 6,
-                  left: 8,
-                  width: ORB_SIZE * 0.45,
-                  height: ORB_SIZE * 0.3,
-                  borderRadius: ORB_SIZE * 0.45,
+                  top: orbSize * 0.11,
+                  left: orbSize * 0.14,
+                  width: orbSize * 0.45,
+                  height: orbSize * 0.3,
+                  borderRadius: orbSize * 0.45,
                   backgroundColor: "rgba(255,255,255,0.35)",
                   transform: [{ rotate: "-25deg" }],
                 }}
               />
-              <Ionicons name="sparkles" size={24} color="#FFFFFF" />
+              <Ionicons name="sparkles" size={iconSize} color="#FFFFFF" />
             </LinearGradient>
           </Animated.View>
         </Pressable>

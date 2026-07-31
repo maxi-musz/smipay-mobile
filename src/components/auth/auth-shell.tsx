@@ -7,6 +7,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
 import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
 import { getAppVersionLabel } from "@/lib/app-version";
 
 export interface AuthShellProps {
@@ -55,12 +56,20 @@ export function AuthShell({
   const insets = useSafeAreaInsets();
   const { isDark } = useAppTheme();
   const version = getAppVersionLabel();
+  const compact = useCompactScreen();
+  // On short screens the brand lockup is the cheapest thing to drop — it frees
+  // ~50 dp so the field + primary button clear the keypad without scrolling.
+  const brand = showBrand && !compact;
 
   return (
     <View testID={testID} className="flex-1 bg-background">
       <View
         className="flex-row items-center justify-between px-6"
-        style={{ paddingTop: insets.top + 6, paddingBottom: 4, minHeight: 44 }}
+        style={{
+          paddingTop: insets.top + (compact ? 2 : 6),
+          paddingBottom: compact ? 2 : 4,
+          minHeight: compact ? 40 : 44,
+        }}
       >
         {onBack ? (
           <Pressable
@@ -92,11 +101,14 @@ export function AuthShell({
           (email sign-in, legacy alphanumeric password) still scroll clear of it. */}
       <KeyboardAwareScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 24 }}
+        contentContainerStyle={{
+          paddingHorizontal: 24,
+          paddingBottom: compact ? 12 : 24,
+        }}
         keyboardDismissMode="on-drag"
         bottomOffset={28}
       >
-        {showBrand ? (
+        {brand ? (
           <Animated.View
             entering={FadeInDown.duration(220)}
             className="mt-2 flex-row items-center gap-2"
@@ -112,18 +124,28 @@ export function AuthShell({
 
         <Animated.View
           entering={FadeInDown.delay(40).duration(240)}
-          className={showBrand ? "mt-7" : "mt-2"}
+          className={brand ? "mt-7" : compact ? "mt-3" : "mt-2"}
         >
           <Text
-            className="text-[30px] font-bold leading-9 text-foreground"
+            className={
+              compact
+                ? "text-[23px] font-bold leading-7 text-foreground"
+                : "text-[30px] font-bold leading-9 text-foreground"
+            }
             maxFontSizeMultiplier={1.25}
           >
             {title}
           </Text>
           {subtitle ? (
-            <View className="mt-2">
+            <View className={compact ? "mt-1" : "mt-2"}>
               {typeof subtitle === "string" ? (
-                <Text className="text-[15px] leading-6 text-muted-foreground">
+                <Text
+                  className={
+                    compact
+                      ? "text-[13px] leading-5 text-muted-foreground"
+                      : "text-[15px] leading-6 text-muted-foreground"
+                  }
+                >
                   {subtitle}
                 </Text>
               ) : (

@@ -14,6 +14,7 @@ import { fetchTransactionById } from "@/api";
 import { Text } from "@/components/ui/text";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
 import { colors } from "@/constants/colors";
 import { getProviderLogo } from "@/lib/provider-logo";
 import { coerceMoneyNumber, formatBalanceForDisplay } from "@/lib/money";
@@ -27,6 +28,7 @@ import { shareReceiptAsImage, shareReceiptAsPdf } from "@/lib/share-transaction-
 export default function TransactionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { isDark } = useAppTheme();
+  const compact = useCompactScreen();
   const [tx, setTx] = useState<SingleTransaction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,7 +122,7 @@ export default function TransactionDetailScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-1" style={{ backgroundColor: bg }}>
         {/* Header */}
-        <View className="flex-row items-center px-5 pb-3 pt-14">
+        <View className={compact ? "flex-row items-center px-5 pb-3 pt-8" : "flex-row items-center px-5 pb-3 pt-14"}>
           <Pressable
             onPress={() => router.back()}
             className="h-9 w-9 items-center justify-center rounded-full"

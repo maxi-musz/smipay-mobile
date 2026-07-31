@@ -1,6 +1,8 @@
-import { Keyboard, Pressable, TextInput, View } from "react-native";
+import type { RefObject } from "react";
+import { Pressable, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
+import { SecureNumericField } from "@/components/keypad";
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
@@ -29,6 +31,9 @@ interface AmountSectionProps {
   rewardBanners?: RewardBanner[];
   onPay?: () => void;
   canSubmit?: boolean;
+  amountFocused?: boolean;
+  onAmountFocus?: () => void;
+  amountInputAnchorRef?: RefObject<View | null>;
 }
 
 export function AmountSection({
@@ -43,6 +48,9 @@ export function AmountSection({
   rewardBanners,
   onPay,
   canSubmit = false,
+  amountFocused = false,
+  onAmountFocus,
+  amountInputAnchorRef,
 }: AmountSectionProps) {
   const { isDark } = useAppTheme();
   const amount = parseInt(amountStr.replace(/\D/g, ""), 10) || 0;
@@ -57,9 +65,9 @@ export function AmountSection({
       : amountMax;
 
   function selectQuickAmount(value: number) {
-    Keyboard.dismiss();
     onAmountChange(String(value));
     onClearAmountError();
+    onAmountFocus?.();
   }
 
   const validQuickAmounts = QUICK_AMOUNTS.filter(
@@ -157,20 +165,24 @@ export function AmountSection({
 
       {/* Amount input row: ₦ + minimal line + small Pay button */}
       <View
+        ref={amountInputAnchorRef}
+        collapsable={false}
         className={cn(
           "flex-row items-center gap-2 border-b py-2",
           error ? "border-destructive" : "border-border",
         )}
       >
         <Text className="text-base font-medium text-muted-foreground">₦</Text>
-        <TextInput
-          className="flex-1 text-base font-medium text-foreground min-h-[24px] py-0"
-          placeholder={`${amountMin} - ${effectiveMax.toLocaleString()}`}
-          placeholderTextColor="#9CA3AF"
+        <SecureNumericField
           value={amountStr}
-          onChangeText={onAmountChange}
-          keyboardType="number-pad"
-          onFocus={onClearAmountError}
+          onPress={() => {
+            onClearAmountError();
+            onAmountFocus?.();
+          }}
+          focused={amountFocused}
+          placeholder="Enter amount"
+          error={Boolean(error)}
+          accessibilityLabel="Airtime amount"
         />
         {onPay && (
           <Pressable
@@ -201,6 +213,11 @@ export function AmountSection({
           </Pressable>
         )}
       </View>
+      {!amountStr && !error ? (
+        <Text className="mt-1 text-xs font-normal text-muted-foreground">
+          Between ₦{amountMin.toLocaleString()} and ₦{effectiveMax.toLocaleString()}
+        </Text>
+      ) : null}
       {error && (
         <Text className="mt-1.5 text-sm text-destructive">{error}</Text>
       )}

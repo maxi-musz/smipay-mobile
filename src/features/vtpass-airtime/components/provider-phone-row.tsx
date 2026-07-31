@@ -1,13 +1,19 @@
-import { useState } from "react";
-import { Image, Pressable, TextInput, View } from "react-native";
+import { useState, type RefObject } from "react";
+import { Image, Pressable, View } from "react-native";
 import * as Contacts from "expo-contacts";
 import { Ionicons } from "@expo/vector-icons";
 
+import { SecureNumericField } from "@/components/keypad";
 import { BottomSheetModal } from "@/components/ui/modals";
 import { Text } from "@/components/ui/text";
 import { colors } from "@/constants/colors";
 import { getNetworkProviderLogo } from "@/lib/network-provider-logo";
-import { formatPhoneFromContact, normalizeNgMobileDigits, PHONE_REGEX } from "../constants";
+import {
+  formatNgPhoneDisplay,
+  formatPhoneFromContact,
+  normalizeNgMobileDigits,
+  PHONE_REGEX,
+} from "../constants";
 import { isKnownPhoneProviderMismatch, getServiceIdFromPhone } from "../phone-network";
 import { cn } from "@/lib/utils";
 import type { AirtimeServiceItem } from "@/types/vtpass-airtime";
@@ -75,6 +81,12 @@ interface ProviderPhoneRowProps {
   phoneError?: string;
   providerError: string | null;
   onRetryProviders: () => void;
+  /** Secure keypad: highlight this row as the active field. */
+  phoneFocused?: boolean;
+  onPhoneFocus?: () => void;
+  /** Called when the network picker opens — collapse any docked keypad. */
+  onPickerOpen?: () => void;
+  phoneInputAnchorRef?: RefObject<View | null>;
 }
 
 export function ProviderPhoneRow({
@@ -89,6 +101,10 @@ export function ProviderPhoneRow({
   phoneError,
   providerError,
   onRetryProviders,
+  phoneFocused = false,
+  onPhoneFocus,
+  onPickerOpen,
+  phoneInputAnchorRef,
 }: ProviderPhoneRowProps) {
   const [pickerVisible, setPickerVisible] = useState(false);
 
@@ -100,17 +116,6 @@ export function ProviderPhoneRow({
     selectedProvider !== null &&
     isKnownPhoneProviderMismatch(phone, selectedProvider.serviceID);
   const showDisclaimer = possibleMismatch || showContactMatchDisclaimer;
-
-  function handlePhoneChange(text: string) {
-    onPhoneChange(normalizeNgMobileDigits(text));
-  }
-
-  function formatDisplayPhone(value: string): string {
-    const digits = value.replace(/\D/g, "");
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
-    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
-  }
 
   async function handlePickContact() {
     try {
@@ -150,6 +155,7 @@ export function ProviderPhoneRow({
             if (providerError) {
               onRetryProviders();
             } else if (providers.length) {
+              onPickerOpen?.();
               setPickerVisible(true);
             }
           }}
@@ -170,21 +176,21 @@ export function ProviderPhoneRow({
 
         {/* Minimal phone input - almost invisible line */}
         <View
+          ref={phoneInputAnchorRef}
+          collapsable={false}
           className={cn(
             "flex-1 flex-row items-center border-b py-2",
             phoneError ? "border-destructive" : "border-border",
           )}
         >
-          <TextInput
-            className="flex-1 text-base font-medium text-foreground min-h-[24px] py-0"
+          <SecureNumericField
+            value={phone}
+            onPress={() => onPhoneFocus?.()}
+            focused={phoneFocused}
             placeholder="Phone Number"
-            placeholderTextColor="#9CA3AF"
-            value={formatDisplayPhone(phone)}
-            onChangeText={handlePhoneChange}
-            keyboardType="phone-pad"
-            maxLength={13}
-            autoCapitalize="none"
-            autoCorrect={false}
+            formatValue={formatNgPhoneDisplay}
+            error={Boolean(phoneError)}
+            accessibilityLabel="Phone number"
           />
           {phone.length > 0 && onClearPhone ? (
             <Pressable

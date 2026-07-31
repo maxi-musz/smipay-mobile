@@ -54,8 +54,8 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#FFFFFF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 120
+          "image": "./assets/images/smipay-logo.png",
+          "imageWidth": 280
         }
       ],
       "expo-font",

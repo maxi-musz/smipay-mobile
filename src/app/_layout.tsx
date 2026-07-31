@@ -235,7 +235,12 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <KeyboardProvider>{inner}</KeyboardProvider>
+      <KeyboardProvider
+        navigationBarTranslucent={Platform.OS === "android"}
+        statusBarTranslucent={Platform.OS === "android"}
+      >
+        {inner}
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

@@ -14,14 +14,8 @@ import { Stack, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, {
-  FadeInDown,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from "react-native-reanimated";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
+import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { requestPhoneVerificationOtp, updatePhoneVerificationNumber, verifyPhoneVerificationOtp } from "@/api";
 import {
@@ -31,6 +25,7 @@ import {
   useNumericInput,
   type KeypadKey,
 } from "@/components/keypad";
+import { ArrowButton, ArrowButtonRow } from "@/components/ui/arrow-button";
 import { Spinner } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
 import { useToastStore } from "@/components/ui/toast";
@@ -46,7 +41,6 @@ import {
   isUserSafePhoneOtpRequestMessage,
   toUserFacingPhoneOtpRequestError,
 } from "@/lib/phone-otp-user-error";
-import { cn } from "@/lib/utils";
 import type { PhoneOtpErrorData, PhoneOtpPolicy } from "@/types/kyc-verification";
 import {
   useAuthStore,
@@ -79,6 +73,7 @@ function readPhoneOtpErrorData(err: unknown): PhoneOtpErrorData | null {
 export default function PhoneVerificationScreen() {
   const { isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
+  const compact = useCompactScreen();
   const showToast = useToastStore((s) => s.show);
 
   const kycStatus = useKycVerificationStore.use.data();
@@ -289,8 +284,9 @@ export default function PhoneVerificationScreen() {
         : Date.now() + (res.data?.ttl_ms ?? 10 * 60 * 1000);
       const cooldownMs =
         res.data?.cooldown_ms ??
-        (res.data?.cooldown_seconds ?? 300) * 1000 ??
-        RESEND_COOLDOWN_FALLBACK_MS;
+        (res.data?.cooldown_seconds != null
+          ? res.data.cooldown_seconds * 1000
+          : RESEND_COOLDOWN_FALLBACK_MS);
       setOtpExpiresAt(expires);
       setResendAvailableAt(Date.now() + cooldownMs);
       setResendOnCooldown(cooldownMs > 0);
@@ -375,21 +371,6 @@ export default function PhoneVerificationScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-1" style={{ backgroundColor: bg }}>
-        <View className="flex-row items-center justify-between px-5 pb-3 pt-14">
-          <Pressable
-            onPress={() => router.back()}
-            disabled={requesting || verifying}
-            className="h-9 w-9 items-center justify-center rounded-full active:opacity-70"
-            style={{ backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "#F3F4F6" }}
-          >
-            <Ionicons name="chevron-back" size={20} color={isDark ? "#E5E7EB" : "#111827"} />
-          </Pressable>
-          <Text className="text-base font-semibold text-foreground">
-            Phone verification
-          </Text>
-          <View className="h-9 w-9" />
-        </View>
-
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1 }}
@@ -398,6 +379,7 @@ export default function PhoneVerificationScreen() {
             className="flex-1"
             contentContainerStyle={{
               paddingHorizontal: 20,
+              paddingTop: Math.max(insets.top, compact ? 8 : 16) + (compact ? 6 : 16),
               // The dock is a flex sibling below, so it already reserves the
               // bottom inset when it's on screen.
               paddingBottom: showKeypad ? 24 : Math.max(insets.bottom, 24) + 24,
@@ -407,7 +389,11 @@ export default function PhoneVerificationScreen() {
             showsVerticalScrollIndicator={false}
           >
             <View
-              className="mt-4 overflow-hidden rounded-3xl px-5 pb-6 pt-6"
+              className={
+                compact
+                  ? "mt-2 overflow-hidden rounded-3xl px-5 pb-5 pt-5"
+                  : "mt-4 overflow-hidden rounded-3xl px-5 pb-6 pt-6"
+              }
               style={{ backgroundColor: cardBg }}
             >
               <View className="h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
@@ -464,12 +450,14 @@ export default function PhoneVerificationScreen() {
                   ) : null}
 
                   <View className="mt-8">
-                    <ProceedButton
-                      label="Save number"
-                      loading={updatingPhone}
-                      disabled={!newPhone.trim() || updatingPhone}
-                      onPress={() => void handleUpdatePhone()}
-                    />
+                    <ArrowButtonRow className="mt-0">
+                      <ArrowButton
+                        onPress={() => void handleUpdatePhone()}
+                        disabled={!newPhone.trim() || updatingPhone}
+                        loading={updatingPhone}
+                        accessibilityLabel="Save phone number"
+                      />
+                    </ArrowButtonRow>
                   </View>
 
                   <Pressable
@@ -489,17 +477,29 @@ export default function PhoneVerificationScreen() {
                     <Text className="mt-4 text-sm text-red-500">{error}</Text>
                   ) : null}
 
-                  <View className="mt-8">
-                    <ProceedButton
-                      label={
-                        resendOnCooldown
-                          ? `Send again in ${formatCountdown(resendSecondsLeft)}`
-                          : "Send verification code"
-                      }
-                      loading={requesting}
-                      disabled={!canSendCode}
-                      onPress={() => void handleRequestOtp()}
-                    />
+                  {resendOnCooldown && !otpSent ? (
+                    <Text className="mt-6 text-sm font-medium" style={{ color: subtleText }}>
+                      Send again in {formatCountdown(resendSecondsLeft)}
+                    </Text>
+                  ) : null}
+
+                  <View className={resendOnCooldown && !otpSent ? "mt-3" : "mt-8"}>
+                    <View className="flex-row items-center justify-end gap-3">
+                      {requesting ? (
+                        <Text
+                          className="text-sm font-medium"
+                          style={{ color: colors.orange[500] }}
+                        >
+                          Sending…
+                        </Text>
+                      ) : null}
+                      <ArrowButton
+                        onPress={() => void handleRequestOtp()}
+                        disabled={!canSendCode}
+                        loading={requesting}
+                        accessibilityLabel="Send verification code"
+                      />
+                    </View>
                   </View>
 
                   <Pressable
@@ -580,14 +580,14 @@ export default function PhoneVerificationScreen() {
                     <Text className="mt-4 text-sm font-medium text-red-500">{error}</Text>
                   ) : null}
 
-                  <View className="mt-7">
-                    <ProceedButton
-                      label="Verify phone number"
-                      loading={verifying}
-                      disabled={!canVerifyOtp}
+                  <ArrowButtonRow className="mt-7">
+                    <ArrowButton
                       onPress={() => void handleVerifyOtp()}
+                      disabled={!canVerifyOtp}
+                      loading={verifying}
+                      accessibilityLabel="Verify phone number"
                     />
-                  </View>
+                  </ArrowButtonRow>
 
                   <Pressable
                     onPress={openPhoneEditor}
@@ -623,84 +623,6 @@ export default function PhoneVerificationScreen() {
         ) : null}
       </View>
     </>
-  );
-}
-
-interface ProceedButtonProps {
-  label: string;
-  loading?: boolean;
-  disabled?: boolean;
-  onPress: () => void;
-}
-
-function ProceedButton({ label, loading, disabled, onPress }: ProceedButtonProps) {
-  const { isDark } = useAppTheme();
-  const enabled = !disabled && !loading;
-  const nudge = useSharedValue(0);
-
-  useEffect(() => {
-    if (enabled) {
-      nudge.value = withRepeat(
-        withSequence(
-          withTiming(4, { duration: 650 }),
-          withTiming(0, { duration: 650 }),
-        ),
-        -1,
-        true,
-      );
-    } else {
-      nudge.value = withTiming(0, { duration: 120 });
-    }
-  }, [enabled, nudge]);
-
-  const arrowStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: nudge.value }],
-  }));
-
-  const disabledBg = isDark ? "#334155" : "#E5E7EB";
-  const disabledText = isDark ? "#94A3B8" : "#9CA3AF";
-
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={!enabled}
-      accessibilityRole="button"
-      accessibilityState={{ disabled: !enabled }}
-      className={cn("h-14 flex-row items-center rounded-2xl pl-5 pr-2", enabled && "active:opacity-90")}
-      style={{ backgroundColor: enabled ? colors.orange[500] : disabledBg }}
-    >
-      <View className="flex-1">
-        {loading ? (
-          <Spinner size="small" color="#FFFFFF" />
-        ) : (
-          <Text
-            className="text-base font-semibold"
-            style={{ color: enabled ? "#FFFFFF" : disabledText }}
-          >
-            {label}
-          </Text>
-        )}
-      </View>
-      <Animated.View
-        style={[
-          arrowStyle,
-          {
-            height: 40,
-            width: 40,
-            borderRadius: 20,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: enabled ? "rgba(255,255,255,0.22)" : "transparent",
-          },
-        ]}
-      >
-        <Ionicons
-          name="arrow-forward"
-          size={20}
-          color={enabled ? "#FFFFFF" : disabledText}
-        />
-      </Animated.View>
-    </Pressable>
   );
 }
 

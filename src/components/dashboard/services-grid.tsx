@@ -1,4 +1,5 @@
-import { Pressable, useWindowDimensions, View } from "react-native";
+import { useState } from "react";
+import { type LayoutChangeEvent, Pressable, View } from "react-native";
 import { router, type Href } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -113,16 +114,23 @@ function getCashbackLabel(
 
 export function ServicesGrid({ cashbackRates }: ServicesGridProps) {
   const { isDark } = useAppTheme();
-  const { width: screenWidth } = useWindowDimensions();
   const { s } = useResponsiveScale();
 
   const horizontalMargin = s(12);
   const cardPadding = s(12);
   const colGap = s(10);
   const rowGap = s(26);
-  const contentWidth =
-    screenWidth - horizontalMargin * 2 - cardPadding * 2;
-  const itemWidth = (contentWidth - colGap * 3) / 4;
+
+  // Measure the real row width on the device instead of guessing it from screen
+  // math (margins/padding/box-model differ per OEM). Always 4 columns; floor so
+  // a fractional width can never round up and wrap the 4th tile.
+  const [rowWidth, setRowWidth] = useState(0);
+  const itemWidth = rowWidth > 0 ? Math.floor((rowWidth - colGap * 3) / 4) : 0;
+
+  const onRowLayout = (e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    if (w > 0 && Math.abs(w - rowWidth) > 0.5) setRowWidth(w);
+  };
 
   return (
     <View
@@ -139,8 +147,10 @@ export function ServicesGrid({ cashbackRates }: ServicesGridProps) {
       <View
         className="flex-row flex-wrap"
         style={{ rowGap, columnGap: colGap }}
+        onLayout={onRowLayout}
       >
-        {SERVICES.map((service) => (
+        {rowWidth > 0 &&
+          SERVICES.map((service) => (
           <ServiceIcon
             key={service.id}
             service={service}

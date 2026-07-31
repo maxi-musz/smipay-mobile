@@ -66,16 +66,22 @@ export function useKeypadMetrics(
     rows = 4,
     maxWidth = 480,
     minKeyHeight = 44,
-    maxKeyHeight = 68,
-    aspect = 0.6,
   } = options;
 
   const isLandscape = windowWidth > windowHeight;
-  const isCompact = Math.min(windowWidth, windowHeight) < 360 || windowHeight < 700;
+  const isCompact = Math.min(windowWidth, windowHeight) < 360 || windowHeight < 740;
+  // Even shorter phones (≈ ≤ 600 dp tall) need the tightest grid.
+  const isTiny = windowHeight < 620;
 
-  const gap = options.gap ?? (isCompact ? 7 : 9);
+  const gap = options.gap ?? (isCompact ? (isTiny ? 6 : 7) : 9);
   const paddingHorizontal = options.paddingHorizontal ?? (isCompact ? 12 : 16);
-  const maxHeightRatio = options.maxHeightRatio ?? (isLandscape ? 0.62 : 0.44);
+  const maxHeightRatio =
+    options.maxHeightRatio ??
+    (isLandscape ? 0.62 : isTiny ? 0.4 : isCompact ? 0.42 : 0.44);
+  // Cap key height harder on short screens so four rows plus the value display
+  // and the primary button all fit above the fold without scrolling.
+  const maxKeyHeight = options.maxKeyHeight ?? (isTiny ? 50 : isCompact ? 56 : 68);
+  const aspect = options.aspect ?? (isCompact ? 0.52 : 0.6);
 
   return useMemo<KeypadMetrics>(() => {
     const width = Math.min(windowWidth, maxWidth);

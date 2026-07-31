@@ -15,6 +15,7 @@ import { Text } from "@/components/ui/text";
 import { useToastStore } from "@/components/ui/toast";
 import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
 import { formatTierRequirement } from "@/lib/format-tier-requirement";
 import {
   formatTierPropertyValue,
@@ -211,6 +212,7 @@ function SectionTitleRow({
 
 export default function BasicInformationScreen() {
   const { isDark } = useAppTheme();
+  const compact = useCompactScreen();
   const profile = useProfileStore.use.data();
   const loading = useProfileStore.use.isLoading();
   const error = useProfileStore.use.error();
@@ -306,7 +308,7 @@ export default function BasicInformationScreen() {
           />
         </View>
 
-        <View className="flex-row items-center justify-between px-5 pb-3 pt-14">
+        <View className={`flex-row items-center justify-between px-5 pb-3 ${compact ? "pt-8" : "pt-14"}`}>
           <Pressable
             onPress={() => router.back()}
             className="h-10 w-10 items-center justify-center rounded-full active:opacity-70"

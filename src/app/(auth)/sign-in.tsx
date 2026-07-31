@@ -249,6 +249,7 @@ export default function SignInScreen() {
             onPress: async () => {
               const result = await authenticate({
                 promptMessage: "Use " + label + " to unlock SmiPay",
+                disableDeviceFallback: true,
               });
               if (result.success) {
                 await storeCredentials(accountEmail, value, canUseRequireAuthentication()

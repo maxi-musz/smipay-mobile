@@ -1,9 +1,17 @@
-import { useEffect, useLayoutEffect, useState } from "react";
-import { View } from "react-native";
-import { KeyboardAwareScrollView } from "@/components/ui/keyboard-aware-scroll-view";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
+
+import {
+  Keypad,
+  KeypadDock,
+  useNumericInput,
+  useScrollFieldAboveKeypad,
+  useSecureKeypadOverlay,
+} from "@/components/keypad";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
 
 import { purchaseAirtime } from "@/api/services/vtpass-airtime";
 import {
@@ -36,6 +44,11 @@ import { classifyError, getFailedTransactionId } from "@/lib/errors";
 import type { AirtimeServiceItem } from "@/types/vtpass-airtime";
 
 export default function VtpassAirtimeScreen() {
+  const compact = useCompactScreen();
+  const scrollRef = useRef<ScrollView>(null);
+  const phoneFieldRef = useRef<View>(null);
+  const amountFieldRef = useRef<View>(null);
+
   const homepageData = useHomepageStore.use.data();
   const walletBalance =
     homepageData?.wallet_card?.current_balance ?? "₦0.00";
@@ -66,10 +79,9 @@ export default function VtpassAirtimeScreen() {
 
   const [selectedProvider, setSelectedProvider] =
     useState<AirtimeServiceItem | null>(null);
-  const [phone, setPhone] = useState("");
-  const [amountStr, setAmountStr] = useState("");
   const [useCashback, setUseCashback] = useState(false);
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [activeField, setActiveField] = useState<"phone" | "amount" | null>(null);
   const [recentList, setRecentList] = useState<
     { phone: string; serviceID: string }[]
   >([]);
@@ -80,6 +92,50 @@ export default function VtpassAirtimeScreen() {
   const [purchasing, setPurchasing] = useState(false);
   const [hasPreFilled, setHasPreFilled] = useState(false);
   const [showContactMatchDisclaimer, setShowContactMatchDisclaimer] = useState(false);
+
+  const phoneInput = useNumericInput({
+    maxLength: 11,
+    onChange: () => {
+      if (fieldErrors.phone) setFieldErrors((e) => ({ ...e, phone: undefined }));
+    },
+  });
+
+  const amountInput = useNumericInput({
+    maxLength: 6,
+    onChange: () => {
+      if (fieldErrors.amount) setFieldErrors((e) => ({ ...e, amount: undefined }));
+    },
+  });
+
+  const phone = normalizeNgMobileDigits(phoneInput.value);
+  const amountStr = amountInput.value;
+
+  const showKeypad =
+    activeField != null &&
+    !confirmModalVisible &&
+    !paymentAuthorizationModalProps.visible;
+
+  const reserveScrollRoom = activeField === "amount";
+
+  const { metricsOptions, scrollPaddingBottom, blockHeight } =
+    useSecureKeypadOverlay(showKeypad, reserveScrollRoom);
+
+  const activeFieldRef =
+    activeField === "phone" ? phoneFieldRef : amountFieldRef;
+
+  const { onScroll: onKeypadScroll } = useScrollFieldAboveKeypad({
+    active: showKeypad,
+    scrollRef,
+    fieldRef: activeFieldRef,
+    keypadBlockHeight: blockHeight,
+    layoutRevision: scrollPaddingBottom,
+  });
+
+  const activeController = activeField === "phone" ? phoneInput : amountInput;
+
+  function dismissKeypad() {
+    setActiveField(null);
+  }
 
   const [errorModal, setErrorModal] = useState<{
     visible: boolean;
@@ -117,12 +173,12 @@ export default function VtpassAirtimeScreen() {
     const provider = providers.find((p) => p.serviceID === first.serviceID);
     if (provider) {
       setSelectedProvider(provider);
-      setPhone(
+      phoneInput.setValue(
         normalizeNgMobileDigits(getRecentEntryDisplay(first).replace(/\D/g, "")),
       );
       setHasPreFilled(true);
     }
-  }, [recentList, providers, hasPreFilled]);
+  }, [recentList, providers, hasPreFilled, phoneInput]);
 
   const { min: amountMin, max: amountMax } = selectedProvider
     ? parseMinMax(selectedProvider)
@@ -171,15 +227,8 @@ export default function VtpassAirtimeScreen() {
     );
   }, [confirmModalVisible, amount, walletBalance, cashbackBalance]);
 
-  function handlePhoneChange(text: string) {
-    setPhone(normalizeNgMobileDigits(text));
-    if (fieldErrors.phone) setFieldErrors((e) => ({ ...e, phone: undefined }));
-  }
-
   function handleAmountChange(text: string) {
-    const digits = text.replace(/\D/g, "");
-    setAmountStr(digits);
-    if (fieldErrors.amount) setFieldErrors((e) => ({ ...e, amount: undefined }));
+    amountInput.setValue(text.replace(/\D/g, ""));
   }
 
   function handleOpenConfirmModal() {
@@ -191,6 +240,7 @@ export default function VtpassAirtimeScreen() {
         ...e,
         phone: "Enter a 10 or 11-digit phone number",
       }));
+      setActiveField("phone");
       return;
     }
     if (amount < amountMin || amount > amountMax) {
@@ -198,9 +248,11 @@ export default function VtpassAirtimeScreen() {
         ...e,
         amount: `Amount must be between ₦${amountMin} and ₦${amountMax.toLocaleString()}`,
       }));
+      setActiveField("amount");
       return;
     }
 
+    dismissKeypad();
     setFieldErrors({});
     setConfirmModalVisible(true);
     void refreshConfirmBalances();
@@ -243,7 +295,7 @@ export default function VtpassAirtimeScreen() {
             void logPurchaseSuccess("airtime", amount, selectedProvider.name);
           }
 
-          setAmountStr("");
+          amountInput.clear();
           fetchHomepage();
 
           const txId = res.data.id;
@@ -286,9 +338,10 @@ export default function VtpassAirtimeScreen() {
   function handleSelectRecent(entry: { phone: string; serviceID: string }) {
     const provider = providers.find((p) => p.serviceID === entry.serviceID);
     if (provider) setSelectedProvider(provider);
-    setPhone(
+    phoneInput.setValue(
       normalizeNgMobileDigits(getRecentEntryDisplay(entry).replace(/\D/g, "")),
     );
+    dismissKeypad();
     if (fieldErrors.phone) setFieldErrors((e) => ({ ...e, phone: undefined }));
   }
 
@@ -307,17 +360,27 @@ export default function VtpassAirtimeScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <AirtimeHeader />
 
-      <KeyboardAwareScrollView
-        className="flex-1"
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerClassName="px-5 pb-10"
-      >
-        <WalletBalanceCard
-          walletBalance={walletBalance}
-          cashbackBalance={cashbackBalance}
-          hasCashback={!!hasCashback}
-        />
+      <View className="flex-1">
+        <ScrollView
+          ref={scrollRef}
+          className="flex-1"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={onKeypadScroll}
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            paddingBottom: scrollPaddingBottom,
+          }}
+          onScrollBeginDrag={dismissKeypad}
+        >
+        <Pressable onPress={dismissKeypad}>
+          <WalletBalanceCard
+            walletBalance={walletBalance}
+            cashbackBalance={cashbackBalance}
+            hasCashback={!!hasCashback}
+          />
+        </Pressable>
 
         <Animated.View
           entering={FadeInDown.delay(50).duration(220)}
@@ -330,47 +393,81 @@ export default function VtpassAirtimeScreen() {
               setShowContactMatchDisclaimer(false);
               setSelectedProvider(p);
             }}
-            phone={phone}
+            phone={phoneInput.value}
             onPhoneChange={(digits) => {
               setShowContactMatchDisclaimer(false);
-              handlePhoneChange(digits);
+              phoneInput.setValue(normalizeNgMobileDigits(digits));
             }}
-            onClearPhone={() => handlePhoneChange("")}
+            onClearPhone={() => phoneInput.clear()}
             onProviderAutoSelectedFromContact={() => setShowContactMatchDisclaimer(true)}
             showContactMatchDisclaimer={showContactMatchDisclaimer}
             phoneError={fieldErrors.phone}
             providerError={providerError}
             onRetryProviders={() => fetchAirtimeProviders(true)}
+            phoneFocused={activeField === "phone"}
+            onPhoneFocus={() => setActiveField("phone")}
+            onPickerOpen={dismissKeypad}
+            phoneInputAnchorRef={phoneFieldRef}
           />
         </Animated.View>
 
-        <AmountSection
-          amountStr={amountStr}
-          amountMin={amountMin}
-          amountMax={amountMax}
-          maxAffordable={maxPayable}
-          error={
-            fieldErrors.amount ??
-            (insufficientBalance
-              ? "Insufficient balance. Fund your wallet or reduce the amount."
-              : undefined)
-          }
-          onAmountChange={handleAmountChange}
-          onClearAmountError={() =>
-            setFieldErrors((e) => ({ ...e, amount: undefined }))
-          }
-          cashbackRates={homepageData?.cashback_rates}
-          rewardBanners={homepageData?.reward_banners}
-          onPay={handleOpenConfirmModal}
-          canSubmit={!!canSubmit}
-        />
+        <View>
+          <AmountSection
+            amountStr={amountStr}
+            amountMin={amountMin}
+            amountMax={amountMax}
+            maxAffordable={maxPayable}
+            error={
+              fieldErrors.amount ??
+              (insufficientBalance
+                ? "Insufficient balance. Fund your wallet or reduce the amount."
+                : undefined)
+            }
+            onAmountChange={handleAmountChange}
+            onClearAmountError={() =>
+              setFieldErrors((e) => ({ ...e, amount: undefined }))
+            }
+            cashbackRates={homepageData?.cashback_rates}
+            rewardBanners={homepageData?.reward_banners}
+            onPay={handleOpenConfirmModal}
+            canSubmit={!!canSubmit}
+            amountFocused={activeField === "amount"}
+            onAmountFocus={() => setActiveField("amount")}
+            amountInputAnchorRef={amountFieldRef}
+          />
+        </View>
 
-        <RecentAirtimeList
-          entries={recentList}
-          providers={providers}
-          onSelect={handleSelectRecent}
-        />
-      </KeyboardAwareScrollView>
+        {activeField !== "amount" ? (
+          <RecentAirtimeList
+            entries={recentList}
+            providers={providers}
+            onSelect={handleSelectRecent}
+          />
+        ) : null}
+        </ScrollView>
+
+        {showKeypad ? (
+          <View
+            pointerEvents="box-none"
+            style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}
+          >
+            <KeypadDock
+              secure
+              title="SmiPay Secure Keypad"
+              animated
+              onDone={dismissKeypad}
+              doneLabel="Done"
+              bottomPadding={compact ? 4 : 8}
+            >
+              <Keypad
+                controller={activeController}
+                backspaceBehavior="repeat"
+                metrics={metricsOptions}
+              />
+            </KeypadDock>
+          </View>
+        ) : null}
+      </View>
 
       <ConfirmBuyAirtimeModal
         visible={

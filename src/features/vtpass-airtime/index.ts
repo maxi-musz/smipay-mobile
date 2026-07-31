@@ -14,6 +14,7 @@ export {
   parseMinMax,
   parseBalanceToNumber,
   formatPhoneFromContact,
+  formatNgPhoneDisplay,
   normalizeNgMobileDigits,
   getAirtimeCashbackRate,
   computeCashbackToEarn,

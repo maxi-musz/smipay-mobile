@@ -7,12 +7,14 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { Text } from "@/components/ui/text";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { useAppTheme } from "@/hooks/use-app-theme";
+import { useCompactScreen } from "@/hooks/use-compact-screen";
 import { colors } from "@/constants/colors";
 import { useProfileStore } from "@/store";
 import { useToastStore } from "@/components/ui/toast";
 
 export default function ReferralScreen() {
   const { isDark } = useAppTheme();
+  const compact = useCompactScreen();
   const profileData = useProfileStore.use.data();
   const fetchProfile = useProfileStore.use.fetchProfile();
   const isLoading = useProfileStore.use.isLoading();
@@ -53,7 +55,7 @@ export default function ReferralScreen() {
       <>
         <Stack.Screen options={{ headerShown: false }} />
         <View className="flex-1" style={{ backgroundColor: bg }}>
-          <View className="flex-row items-center px-5 pb-3 pt-14">
+          <View className={`flex-row items-center px-5 pb-3 ${compact ? "pt-8" : "pt-14"}`}>
             <Pressable
               onPress={() => router.back()}
               className="h-9 w-9 items-center justify-center rounded-full active:opacity-70"
@@ -72,7 +74,7 @@ export default function ReferralScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-1" style={{ backgroundColor: bg }}>
-        <View className="flex-row items-center justify-between px-5 pb-3 pt-14">
+        <View className={`flex-row items-center justify-between px-5 pb-3 ${compact ? "pt-8" : "pt-14"}`}>
           <Pressable
             onPress={() => router.back()}
             className="h-9 w-9 items-center justify-center rounded-full active:opacity-70"

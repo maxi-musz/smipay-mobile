@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import Animated, {
   Easing,
   runOnJS,
@@ -20,20 +21,30 @@ interface SplashOverlayProps {
   onFinish: () => void;
 }
 
+/**
+ * Branded launch screen — one centered wordmark graphic, no icon tile or shadow.
+ * Native splash (app.json) uses the same asset so the handoff is seamless.
+ */
 export function SplashOverlay({ onFinish }: SplashOverlayProps) {
   const opacity = useSharedValue(1);
-  const iconScale = useSharedValue(0.85);
-  const textOpacity = useSharedValue(0);
+  const logoScale = useSharedValue(0.94);
+  const logoOpacity = useSharedValue(0);
+  const footerOpacity = useSharedValue(0);
 
   useEffect(() => {
-    iconScale.value = withTiming(1, {
-      duration: 500,
-      easing: Easing.out(Easing.back(1.5)),
+    logoOpacity.value = withTiming(1, {
+      duration: 450,
+      easing: Easing.out(Easing.ease),
     });
 
-    textOpacity.value = withDelay(
-      300,
-      withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) }),
+    logoScale.value = withTiming(1, {
+      duration: 550,
+      easing: Easing.out(Easing.cubic),
+    });
+
+    footerOpacity.value = withDelay(
+      420,
+      withTiming(1, { duration: 350, easing: Easing.out(Easing.ease) }),
     );
 
     opacity.value = withDelay(
@@ -51,35 +62,35 @@ export function SplashOverlay({ onFinish }: SplashOverlayProps) {
     opacity: opacity.value,
   }));
 
-  const iconStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: iconScale.value }],
+  const logoStyle = useAnimatedStyle(() => ({
+    opacity: logoOpacity.value,
+    transform: [{ scale: logoScale.value }],
   }));
 
-  const textStyle = useAnimatedStyle(() => ({
-    opacity: textOpacity.value,
+  const footerStyle = useAnimatedStyle(() => ({
+    opacity: footerOpacity.value,
   }));
 
   return (
     <Animated.View style={[styles.container, containerStyle]}>
-      <View style={styles.content}>
-        <Animated.View style={[styles.iconWrapper, iconStyle]}>
-          <Image
-            source={require("@/assets/images/icon.png")}
-            style={styles.icon}
-            resizeMode="contain"
-          />
-        </Animated.View>
+      <LinearGradient
+        colors={["#FFFFFF", colors.orange[50], "#FFFFFF"]}
+        locations={[0, 0.55, 1]}
+        style={StyleSheet.absoluteFill}
+      />
 
-        <Animated.View style={textStyle}>
-          <Text style={styles.brandName}>
-            <Text style={styles.brandSmi}>Smi</Text>
-            <Text style={styles.brandPay}>Pay</Text>
-          </Text>
-          <Text style={styles.tagline}>...Pay with a smile</Text>
+      <View style={styles.content}>
+        <Animated.View style={[styles.logoWrap, logoStyle]}>
+          <Image
+            source={require("@/assets/images/smipay-logo.png")}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="SmiPay — Pay with a smile"
+          />
         </Animated.View>
       </View>
 
-      <Animated.View style={[styles.footer, textStyle]}>
+      <Animated.View style={[styles.footer, footerStyle]}>
         <Text style={styles.footerText}>SmiPay Technologies Ltd</Text>
         {APP_VERSION_LABEL ? (
           <Text style={styles.versionText}>{APP_VERSION_LABEL}</Text>
@@ -92,49 +103,22 @@ export function SplashOverlay({ onFinish }: SplashOverlayProps) {
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.white,
     zIndex: 999,
   },
   content: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 20,
+    paddingHorizontal: 32,
   },
-  iconWrapper: {
-    width: 100,
-    height: 100,
-    borderRadius: 24,
-    overflow: "hidden",
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+  logoWrap: {
+    width: "100%",
+    maxWidth: 300,
+    alignItems: "center",
   },
-  icon: {
-    width: 100,
-    height: 100,
-  },
-  brandName: {
-    textAlign: "center",
-    fontSize: 32,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-  brandSmi: {
-    color: colors.orange[500],
-  },
-  brandPay: {
-    color: colors.green[500],
-  },
-  tagline: {
-    textAlign: "center",
-    marginTop: 4,
-    fontSize: 14,
-    color: colors.gray[400],
-    fontWeight: "500",
-    fontStyle: "italic",
+  logo: {
+    width: "100%",
+    height: 110,
   },
   footer: {
     paddingBottom: 48,
