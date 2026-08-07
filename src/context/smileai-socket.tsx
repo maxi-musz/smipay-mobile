@@ -34,6 +34,10 @@ export type SmileaiSocketHandlers = {
     message_id: string;
     reply_to_message_id?: string;
     reply_to_snippet?: string;
+    /** ISO time a pacing-delayed reply is expected to land (admin-configured). */
+    scheduled_for?: string;
+    /** Seconds of "typing…" to show at the tail of the delay. */
+    typing_lead_seconds?: number;
   }) => void;
   onComplete?: (payload: {
     conversation_id: string;

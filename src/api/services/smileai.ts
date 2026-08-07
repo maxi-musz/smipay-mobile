@@ -3,6 +3,7 @@ import type { ApiResponse } from "@/types";
 import type {
   ConfirmSmileActionPayload,
   SendSmileMessagePayload,
+  SmileBootstrap,
   SmileConversationDetail,
   SmileConversationListItem,
   SmileMessage,
@@ -11,6 +12,18 @@ import type {
 } from "@/types/smileai";
 
 const SMILEAI = "/smileai";
+
+/**
+ * One-call chat config the app fetches when opening Smile: reply pacing,
+ * anti-spam cooldowns + copy, daily-cap usage, availability, and mode. Drives
+ * the client-side behaviour that mirrors what the engine enforces server-side.
+ */
+export async function getSmileBootstrap() {
+  const { data } = await api.get<ApiResponse<SmileBootstrap>>(
+    `${SMILEAI}/bootstrap`,
+  );
+  return data;
+}
 
 export async function startSmileConversation(payload: StartConversationPayload = {}) {
   const { data } = await api.post<

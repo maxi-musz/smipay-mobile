@@ -43,6 +43,7 @@ import type { SmileCitation, SmileMessage, SmileConfirmRequestedPayload } from "
 import type { SupportMessage } from "@/types";
 import { MessageBubble } from "./MessageBubble";
 import { Composer } from "./Composer";
+import { useSmileBehaviour } from "./behaviour";
 import { ConfirmActionCard } from "./ConfirmActionCard";
 import { HandoffBanner } from "./HandoffBanner";
 import { WelcomeCard } from "./WelcomeCard";
@@ -277,6 +278,8 @@ export function ChatScreen({
     replyToMessageId?: string | null;
     snippet?: string | null;
   } | null>(null);
+  // Admin-controlled chat behaviour (pacing / anti-spam) fetched in one call.
+  const behaviour = useSmileBehaviour();
   const composerBottomInset = Math.max(insets.bottom, 12);
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const scrollRef = useRef<ScrollView>(null);
@@ -739,6 +742,14 @@ export function ChatScreen({
       // the user keeps chatting in this same thread.
       if (!trimmed || isClosed) return;
 
+      // 0. Client-side pacing that mirrors the engine's anti-spam throttle:
+      //    if the admin set a minimum gap between messages, block a too-fast
+      //    send locally (and tell the user) rather than round-tripping it.
+      if (!isHandedOff && !behaviour.canSendNow()) {
+        showToast({ variant: "info", title: behaviour.throttleMessage });
+        return;
+      }
+
       // 1. Show the bubble immediately. Until a server id exists, park it in
       //    the shared pending bucket (migrated on conversation creation by the
       //    effect above, which flips the render key at the same time).
@@ -772,6 +783,8 @@ export function ChatScreen({
       //    reconnect — never dropped. Tick to delivered only when it actually
       //    went out; a queued message keeps its clock until the reply lands.
       const delivery = emitSend(convId, clientMessageId, trimmed);
+      // Arm the min-interval cooldown once the message is actually on its way.
+      behaviour.markSent();
       if (delivery === "sent") {
         markMessageSent(convId, clientMessageId);
       } else {
@@ -790,6 +803,7 @@ export function ChatScreen({
       isClosed,
       isHandedOff,
       scrollToBottom,
+      behaviour,
     ],
   );
 

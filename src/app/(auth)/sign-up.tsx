@@ -36,6 +36,7 @@ import {
 } from "@/lib/auth-password";
 import { logSignUpComplete, setAnalyticsUser } from "@/lib/analytics";
 import { handleApiError } from "@/lib/errors";
+import { formatCountdown } from "@/lib/format-countdown";
 import {
   pickFromCamera,
   pickFromFile,
@@ -51,6 +52,7 @@ const STEPS: Step[] = ["email", "otp", "profile"];
 const STEP_LABELS = ["Email", "Verify", "Profile"];
 const EMAIL_RE = /\S+@\S+\.\S+/;
 const TRANSACTION_PIN_DIGITS = 4;
+const REGISTRATION_OTP_RESEND_COOLDOWN_SECONDS = 30;
 
 /**
  * Clamp phone input as the user types. Accepts only digits plus a single leading
@@ -132,7 +134,7 @@ export default function SignUpScreen() {
   // ── Cooldown ──────────────────────────────────────────────────────
 
   function startResendCooldown() {
-    setResendCooldown(60);
+    setResendCooldown(REGISTRATION_OTP_RESEND_COOLDOWN_SECONDS);
     const id = setInterval(() => {
       setResendCooldown((v) => {
         if (v <= 1) {
@@ -321,12 +323,12 @@ export default function SignUpScreen() {
   const resendKey: KeypadKey = {
     type: "action",
     id: "resend",
-    label: resendCooldown > 0 ? `${resendCooldown}s` : "Resend",
+    label: resendCooldown > 0 ? formatCountdown(resendCooldown) : "Resend",
     ghost: true,
     disabled: resendCooldown > 0 || loading,
     accessibilityLabel:
       resendCooldown > 0
-        ? `Resend available in ${resendCooldown} seconds`
+        ? `Resend available in ${formatCountdown(resendCooldown)}`
         : "Resend verification code",
     onPress: () => void handleResendOtp(),
   };
@@ -434,7 +436,9 @@ export default function SignUpScreen() {
                   resendCooldown > 0 ? undefined : () => void handleResendOtp()
                 }
               >
-                {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+                {resendCooldown > 0
+                  ? `Resend in ${formatCountdown(resendCooldown)}`
+                  : "Resend code"}
               </Text>
             </Text>
 

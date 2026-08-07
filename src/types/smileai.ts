@@ -119,3 +119,26 @@ export interface SmilePreferences {
   user_mode: "read_only" | "read_write";
   paused: boolean;
 }
+
+/** Client-facing chat-behaviour knobs returned by GET /smileai/bootstrap. */
+export interface SmileBehaviour {
+  reply_delay_enabled: boolean;
+  typing_indicator_lead_seconds: number;
+  min_seconds_between_messages: number;
+  duplicate_message_cooldown_seconds: number;
+  low_effort_min_chars: number;
+  throttle_message: string;
+  daily_cap_message: string;
+}
+
+export interface SmileBootstrap {
+  assistant: { name: string };
+  available: boolean;
+  effective_mode: "read_only" | "read_write" | "paused";
+  behaviour: SmileBehaviour;
+  usage: {
+    messages_today: number;
+    daily_message_cap: number;
+    remaining_today: number | null;
+  };
+}
