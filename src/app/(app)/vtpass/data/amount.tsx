@@ -46,7 +46,11 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useHomepageStore } from "@/store";
 import { logPurchaseSuccess } from "@/lib/analytics";
-import { getFailedTransactionId, handleApiError } from "@/lib/errors";
+import {
+  classifyError,
+  getFailedTransactionId,
+  handleApiError,
+} from "@/lib/errors";
 
 export default function DataAmountScreen() {
   const compact = useCompactScreen();
@@ -89,8 +93,9 @@ export default function DataAmountScreen() {
   const [recentList, setRecentList] = useState<DataRecentEntry[]>([]);
   const [errorModal, setErrorModal] = useState<{
     visible: boolean;
+    title: string;
     message: string;
-  }>({ visible: false, message: "" });
+  }>({ visible: false, title: "", message: "" });
 
   const phoneInput = useNumericInput({
     maxLength: 11,
@@ -254,6 +259,7 @@ export default function DataAmountScreen() {
         } else {
           setErrorModal({
             visible: true,
+            title: "Purchase Failed",
             message:
               (res as { message?: string }).message ??
               "Purchase failed. Please try again.",
@@ -268,16 +274,17 @@ export default function DataAmountScreen() {
           fetchHomepage();
           router.replace(`/(app)/history/${failedTxId}`);
         } else {
+          // Close the checkout sheet first: iOS cannot reliably stack two RN
+          // Modals, so the error alert renders behind it and is never seen.
+          closeConfirmModal();
           handleApiError(e);
+          const classified = classifyError(e);
           setErrorModal({
             visible: true,
+            title: classified.title,
             message:
-              (e as {
-                response?: { data?: { message?: string } };
-                message?: string;
-              })?.response?.data?.message ??
-              (e as Error).message ??
-              "Purchase failed.",
+              classified.message ||
+              "We couldn't complete this purchase. Please try again.",
           });
         }
       } finally {
@@ -456,19 +463,19 @@ export default function DataAmountScreen() {
       <AlertModal
         visible={errorModal.visible}
         variant="error"
-        title="Error"
+        title={errorModal.title || "Purchase Failed"}
         message={errorModal.message}
         primaryAction={{
           label: "Retry",
           onPress: () => {
-            setErrorModal({ visible: false, message: "" });
+            setErrorModal({ visible: false, title: "", message: "" });
             void handleConfirmPurchase();
           },
         }}
         secondaryAction={{
           label: "Cancel",
           onPress: () => {
-            setErrorModal({ visible: false, message: "" });
+            setErrorModal({ visible: false, title: "", message: "" });
             closeConfirmModal();
             router.replace("/(app)/(tabs)");
           },

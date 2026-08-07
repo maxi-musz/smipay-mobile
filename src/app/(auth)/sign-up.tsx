@@ -133,8 +133,28 @@ export default function SignUpScreen() {
 
   // ── Cooldown ──────────────────────────────────────────────────────
 
-  function startResendCooldown() {
-    setResendCooldown(REGISTRATION_OTP_RESEND_COOLDOWN_SECONDS);
+  /** Seconds the server asked us to wait, if it said so. */
+  function retryAfterSeconds(e: unknown): number | undefined {
+    const data = (
+      e as { response?: { data?: { retry_after_seconds?: number } } }
+    )?.response?.data;
+    return typeof data?.retry_after_seconds === 'number'
+      ? data.retry_after_seconds
+      : undefined;
+  }
+
+
+  /**
+   * `seconds` lets the server drive the wait: a 429 carries
+   * `retry_after_seconds`, so the button re-enables exactly when the backend
+   * will actually accept another request — no guessing, no drift.
+   */
+  function startResendCooldown(seconds?: number) {
+    setResendCooldown(
+      seconds && seconds > 0
+        ? Math.ceil(seconds)
+        : REGISTRATION_OTP_RESEND_COOLDOWN_SECONDS,
+    );
     const id = setInterval(() => {
       setResendCooldown((v) => {
         if (v <= 1) {
@@ -165,6 +185,10 @@ export default function SignUpScreen() {
       setStep("otp");
       startResendCooldown();
     } catch (e) {
+      // Start the cooldown even when the send fails. It used to start only on
+      // success, so a failure left the button enabled — users tapped it once a
+      // second and generated the request storms we saw in production.
+      startResendCooldown(retryAfterSeconds(e));
       handleApiError(e);
     } finally {
       setLoading(false);
@@ -184,6 +208,7 @@ export default function SignUpScreen() {
         message: "A new verification code has been sent.",
       });
     } catch (e) {
+      startResendCooldown(retryAfterSeconds(e));
       handleApiError(e);
     } finally {
       setLoading(false);

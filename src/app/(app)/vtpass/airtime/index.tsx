@@ -139,8 +139,9 @@ export default function VtpassAirtimeScreen() {
 
   const [errorModal, setErrorModal] = useState<{
     visible: boolean;
+    title: string;
     message: string;
-  }>({ visible: false, message: "" });
+  }>({ visible: false, title: "", message: "" });
 
   useEffect(() => {
     fetchAirtimeProviders();
@@ -307,6 +308,7 @@ export default function VtpassAirtimeScreen() {
         } else {
           setErrorModal({
             visible: true,
+            title: "Purchase Failed",
             message:
               (res as { message?: string }).message ??
               "Purchase failed. Please try again.",
@@ -321,9 +323,13 @@ export default function VtpassAirtimeScreen() {
           fetchHomepage();
           router.replace(`/(app)/history/${failedTxId}`);
         } else {
+          // Close the checkout sheet first: iOS cannot reliably stack two RN
+          // Modals, so the error alert renders behind it and is never seen.
+          closeConfirmModal();
           const classified = classifyError(e);
           setErrorModal({
             visible: true,
+            title: classified.title,
             message:
               classified.message ||
               "We couldn't complete this purchase. Please try again.",
@@ -503,19 +509,19 @@ export default function VtpassAirtimeScreen() {
       <AlertModal
         visible={errorModal.visible}
         variant="error"
-        title="Purchase Failed"
+        title={errorModal.title || "Purchase Failed"}
         message={errorModal.message}
         primaryAction={{
           label: "Retry",
           onPress: () => {
-            setErrorModal({ visible: false, message: "" });
+            setErrorModal({ visible: false, title: "", message: "" });
             void handleConfirmPurchase();
           },
         }}
         secondaryAction={{
           label: "Cancel",
           onPress: () => {
-            setErrorModal({ visible: false, message: "" });
+            setErrorModal({ visible: false, title: "", message: "" });
             closeConfirmModal();
             router.replace("/(app)/(tabs)");
           },

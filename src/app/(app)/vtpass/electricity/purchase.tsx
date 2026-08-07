@@ -34,7 +34,11 @@ import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useHomepageStore } from "@/store";
 import { logPurchaseSuccess } from "@/lib/analytics";
-import { getFailedTransactionId, handleApiError } from "@/lib/errors";
+import {
+  classifyError,
+  getFailedTransactionId,
+  handleApiError,
+} from "@/lib/errors";
 import { colors } from "@/constants/colors";
 
 const PLACEHOLDER_LIGHT = "rgba(107, 114, 128, 0.38)";
@@ -83,8 +87,9 @@ export default function ElectricityPurchaseScreen() {
 
   const [errorModal, setErrorModal] = useState<{
     visible: boolean;
+    title: string;
     message: string;
-  }>({ visible: false, message: "" });
+  }>({ visible: false, title: "", message: "" });
 
   useEffect(() => {
     if (!selectedProvider || !verifyData) {
@@ -227,6 +232,7 @@ export default function ElectricityPurchaseScreen() {
         } else {
           setErrorModal({
             visible: true,
+            title: "Purchase Failed",
             message:
               (res as { message?: string }).message ??
               "Purchase failed. Please try again.",
@@ -241,16 +247,17 @@ export default function ElectricityPurchaseScreen() {
           fetchHomepage();
           router.replace(`/(app)/history/${failedTxId}`);
         } else {
+          // Close the checkout sheet first: iOS cannot reliably stack two RN
+          // Modals, so the error alert renders behind it and is never seen.
+          closeConfirmModal();
           handleApiError(e);
+          const classified = classifyError(e);
           setErrorModal({
             visible: true,
+            title: classified.title,
             message:
-              (e as {
-                response?: { data?: { message?: string } };
-                message?: string;
-              })?.response?.data?.message ??
-              (e as Error).message ??
-              "Purchase failed.",
+              classified.message ||
+              "We couldn't complete this purchase. Please try again.",
           });
         }
       } finally {
@@ -502,19 +509,19 @@ export default function ElectricityPurchaseScreen() {
       <AlertModal
         visible={errorModal.visible}
         variant="error"
-        title="Error"
+        title={errorModal.title || "Purchase Failed"}
         message={errorModal.message}
         primaryAction={{
           label: "Retry",
           onPress: () => {
-            setErrorModal({ visible: false, message: "" });
+            setErrorModal({ visible: false, title: "", message: "" });
             void handleConfirmPurchase();
           },
         }}
         secondaryAction={{
           label: "Cancel",
           onPress: () => {
-            setErrorModal({ visible: false, message: "" });
+            setErrorModal({ visible: false, title: "", message: "" });
             closeConfirmModal();
             router.replace("/(app)/(tabs)");
           },
