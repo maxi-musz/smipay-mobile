@@ -10,6 +10,20 @@ import type {
 
 const AUTH = "/new-auth";
 
+/**
+ * Step 1 of sign-up: is this number free?
+ *
+ * Phone leads the flow because it is what anchors an account — one number, one
+ * active account. Checking here means a duplicate is caught before we spend an
+ * email OTP on it. Throws with the server's message when the number is taken.
+ */
+export async function checkPhoneAvailability(phoneNumber: string) {
+  const { data } = await api.post<
+    ApiResponse<{ phone_number: string; display: string; available: boolean }>
+  >(`${AUTH}/check-phone-availability`, { phone_number: phoneNumber });
+  return data;
+}
+
 export async function requestEmailVerification(email: string) {
   const { data } = await api.post<ApiResponse>(`${AUTH}/request-email-verification`, { email });
   return data;

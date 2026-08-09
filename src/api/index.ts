@@ -1,4 +1,5 @@
 export {
+  checkPhoneAvailability,
   requestEmailVerification,
   verifyEmailForRegistration,
   register,

@@ -125,7 +125,7 @@ export default function SignUpScreen() {
   const canSubmitProfile =
     firstName.trim().length > 0 &&
     lastName.trim().length > 0 &&
-    phone.trim().length > 0 &&
+    isValidPhone(phone.trim()) &&
     isAuthPasswordValid(password) &&
     transactionPin.length === TRANSACTION_PIN_DIGITS &&
     agreedToTerms &&
@@ -247,10 +247,8 @@ export default function SignUpScreen() {
     const next: Record<string, string> = {};
     if (!firstName.trim()) next.firstName = "Required";
     if (!lastName.trim()) next.lastName = "Required";
-    const trimmedPhone = phone.trim();
-    if (!trimmedPhone) next.phone = "Phone number is required";
-    else if (!isValidPhone(trimmedPhone))
-      next.phone = "Enter a valid phone (e.g. 08012345678 or +2348012345678)";
+    if (!isValidPhone(phone.trim()))
+      next.phone = "Enter a valid Nigerian mobile number (e.g. 08012345678)";
     if (!isAuthPasswordValid(password))
       next.password = `Use exactly ${AUTH_PASSWORD_DIGITS} digits (0–9)`;
     if (transactionPin.length !== TRANSACTION_PIN_DIGITS)
@@ -367,7 +365,7 @@ export default function SignUpScreen() {
 
   const subtitle =
     step === "email"
-      ? "Enter your email to get started."
+      ? "We'll send a verification code to this address."
       : step === "otp"
         ? `We sent a 6-digit code to ${email}.`
         : "A few more details and you're in.";
@@ -574,22 +572,38 @@ export default function SignUpScreen() {
             </View>
           </View>
 
-          <Input
-            ref={phoneRef}
-            label="Phone number"
-            placeholder="08012345678"
-            value={phone}
-            onChangeText={(v) => {
-              setPhone(sanitizePhone(v));
-              clearError("phone");
-            }}
-            error={errors.phone}
-            keyboardType="phone-pad"
-            maxLength={14}
-            autoComplete="tel"
-            returnKeyType="next"
-            onSubmitEditing={() => passwordRef.current?.focus()}
-          />
+          <View>
+            <Input
+              ref={phoneRef}
+              label="Phone number"
+              placeholder="08012345678"
+              value={phone}
+              onChangeText={(v) => {
+                setPhone(sanitizePhone(v));
+                clearError("phone");
+              }}
+              error={errors.phone}
+              keyboardType="phone-pad"
+              maxLength={14}
+              autoComplete="tel"
+              textContentType="telephoneNumber"
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+            />
+            {!errors.phone ? (
+              <Text className="mt-1.5 text-xs text-muted-foreground">
+                One account per phone number.
+              </Text>
+            ) : null}
+          </View>
+
+          {/* Settled at step 1 — confirmation only. */}
+          <View className="flex-row items-center justify-between rounded-xl border border-border bg-muted/40 px-3 py-2.5">
+            <Text className="text-xs text-muted-foreground">Email</Text>
+            <Text className="text-sm font-medium" numberOfLines={1}>
+              {email.trim().toLowerCase()}
+            </Text>
+          </View>
 
           <Input
             ref={passwordRef}

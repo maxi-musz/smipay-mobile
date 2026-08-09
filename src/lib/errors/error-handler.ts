@@ -34,6 +34,51 @@ function isAxiosGenericStatusMessage(msg: string): boolean {
   return /^Request failed with status code \d+$/i.test(msg);
 }
 
+const HTTP_REASON_PHRASES = new Set([
+  "bad request",
+  "unauthorized",
+  "forbidden",
+  "not found",
+  "conflict",
+  "unprocessable entity",
+  "too many requests",
+  "internal server error",
+  "bad gateway",
+  "service unavailable",
+]);
+
+/** A route that doesn't exist: `"Cannot POST /api/v1/typo"`. Never show this. */
+function isRoutingMessage(msg: string): boolean {
+  return /^Cannot (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) \//i.test(msg);
+}
+
+/**
+ * The message the backend wrote for this user, or undefined if it only sent
+ * boilerplate.
+ */
+function authoredMessage(error: ApiClientError): string | undefined {
+  const msg = (error.message ?? "").trim();
+  if (!msg) return undefined;
+  if (isAxiosGenericStatusMessage(msg)) return undefined;
+  if (isRoutingMessage(msg)) return undefined;
+  if (HTTP_REASON_PHRASES.has(msg.toLowerCase())) return undefined;
+  return msg;
+}
+
+
+const SERVER_MESSAGE_CODES: Record<
+  number,
+  { title: string; variant: ErrorVariant }
+> = {
+  400: { title: "Invalid Request", variant: "error" },
+  403: { title: "Can’t continue", variant: "warning" },
+  404: { title: "Not Found", variant: "warning" },
+  409: { title: "Already Exists", variant: "error" },
+  422: { title: "Invalid Request", variant: "error" },
+  429: { title: "Too Many Requests", variant: "warning" },
+  503: { title: "Temporarily Unavailable", variant: "warning" },
+};
+
 const SAFE_MESSAGES: Record<number, { title: string; message: string }> = {
   401: {
     title: "Session Expired",
@@ -69,14 +114,6 @@ const SAFE_MESSAGES: Record<number, { title: string; message: string }> = {
   },
 };
 
-/**
- * When a purchase fails downstream (e.g. the provider declines it), the backend
- * still records a `failed` transaction, refunds the wallet, and attaches that
- * transaction's id to the error response as `transactionId`. Extract it so the
- * app can open the transaction receipt (Opay-style) instead of a dead-end
- * error. Returns undefined for validation/network errors that never produced a
- * transaction — those should keep their inline error handling.
- */
 export function getFailedTransactionId(error: unknown): string | undefined {
   if (error instanceof ApiClientError) {
     const id = error.data?.transactionId;
@@ -98,6 +135,8 @@ export function classifyError(error: unknown): ClassifiedError {
   if (error instanceof ApiClientError && error.statusCode) {
     const code = error.statusCode;
 
+    // 401 stays generic on purpose: the user is about to see the lock screen,
+    // and "your token failed to refresh" is not something they can act on.
     if (code === 401) {
       return {
         ...SAFE_MESSAGES[401],
@@ -107,27 +146,26 @@ export function classifyError(error: unknown): ClassifiedError {
       };
     }
 
-    if (code === 400 || code === 409) {
+    const authored = authoredMessage(error);
+    const serverOwned = SERVER_MESSAGE_CODES[code];
+    if (authored && serverOwned) {
       return {
-        title: code === 409 ? "Already Exists" : "Invalid Request",
-        message: error.message,
-        variant: "error",
+        title: serverOwned.title,
+        message: authored,
+        variant: serverOwned.variant,
         statusCode: code,
         handled: false,
       };
     }
 
-    if (code >= 500) {
-      const msg = (error.message ?? "").trim();
-      if (msg && !isAxiosGenericStatusMessage(msg)) {
-        return {
-          title: code === 503 ? "Temporarily Unavailable" : "Server Error",
-          message: msg,
-          variant: "error",
-          statusCode: code,
-          handled: false,
-        };
-      }
+    if (code >= 500 && authored) {
+      return {
+        title: code === 503 ? "Temporarily Unavailable" : "Server Error",
+        message: authored,
+        variant: "error",
+        statusCode: code,
+        handled: false,
+      };
     }
 
     const safe = SAFE_MESSAGES[code];
