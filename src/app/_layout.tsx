@@ -16,6 +16,9 @@ import { SplashOverlay } from "@/components/splash-overlay";
 import { ToastContainer } from "@/components/ui/toast";
 import { VersionGateModal } from "@/components/version-gate-modal";
 import { VersionGateProvider, useVersionGateContext } from "@/context/version-gate-context";
+// Runtime availability + OTP timings, fetched once at launch. Decorates the UI
+// only — the backend re-checks every rule. See features/app-bootstrap/README.md.
+import { AppBootstrapProvider } from "@/features/app-bootstrap";
 import { SupportSocketProvider } from "@/context/support-socket";
 import { SmileaiSocketProvider } from "@/context/smileai-socket";
 import { ThemeProvider } from "@/context/theme-context";
@@ -224,9 +227,11 @@ export default function RootLayout() {
       <SupportSocketProvider>
         <SmileaiSocketProvider>
           <WebhookEventsSocketProvider>
-            <VersionGateProvider>
-              <InnerLayout />
-            </VersionGateProvider>
+            <AppBootstrapProvider>
+              <VersionGateProvider>
+                <InnerLayout />
+              </VersionGateProvider>
+            </AppBootstrapProvider>
           </WebhookEventsSocketProvider>
         </SmileaiSocketProvider>
       </SupportSocketProvider>
