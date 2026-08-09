@@ -47,15 +47,11 @@ const HTTP_REASON_PHRASES = new Set([
   "service unavailable",
 ]);
 
-/** A route that doesn't exist: `"Cannot POST /api/v1/typo"`. Never show this. */
 function isRoutingMessage(msg: string): boolean {
   return /^Cannot (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) \//i.test(msg);
 }
 
-/**
- * The message the backend wrote for this user, or undefined if it only sent
- * boilerplate.
- */
+/** Prefer the backend message when it's actually useful. */
 function authoredMessage(error: ApiClientError): string | undefined {
   const msg = (error.message ?? "").trim();
   if (!msg) return undefined;
@@ -135,8 +131,7 @@ export function classifyError(error: unknown): ClassifiedError {
   if (error instanceof ApiClientError && error.statusCode) {
     const code = error.statusCode;
 
-    // 401 stays generic on purpose: the user is about to see the lock screen,
-    // and "your token failed to refresh" is not something they can act on.
+    // Lock screen handles 401 — keep the toast generic.
     if (code === 401) {
       return {
         ...SAFE_MESSAGES[401],
