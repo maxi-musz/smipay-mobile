@@ -41,6 +41,11 @@ import {
   useAuthorizePurchase,
   useConfirmWalletSnapshot,
 } from "@/features/payment-authorization";
+import {
+  SmartPastePrompt,
+  useSmartPaste,
+  useSmartPasteKey,
+} from "@/features/smart-paste";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -125,6 +130,22 @@ export default function DataAmountScreen() {
   function dismissKeypad() {
     setPhoneKeypadOpen(false);
   }
+
+  function applyPastedPhone(digits: string) {
+    phoneInput.setValue(normalizeNgMobileDigits(digits));
+    setPhoneError(null);
+    setShowContactMatchDisclaimer(false);
+  }
+
+  const phonePaste = useSmartPaste({
+    surface: "field",
+    accepts: ["phone"],
+    currentValue: phoneInput.value,
+    enabled: !confirmModalVisible && !paymentAuthorizationModalProps.visible,
+    onAccept: (candidate) => applyPastedPhone(candidate.value),
+  });
+
+  const pasteKey = useSmartPasteKey({ paste: phonePaste });
 
   const amount = selectedVariation?.variation_amount
     ? parseFloat(String(selectedVariation.variation_amount))
@@ -367,7 +388,13 @@ export default function DataAmountScreen() {
             phoneError={phoneError ?? undefined}
             phoneFocused={phoneKeypadOpen}
             onPhoneFocus={() => setPhoneKeypadOpen(true)}
+            onPhoneLongPress={() => void phonePaste.pasteFromClipboard()}
             phoneInputAnchorRef={phoneFieldRef}
+          />
+          <SmartPastePrompt
+            paste={phonePaste}
+            title="Buy data for this number?"
+            manualPrompt="Paste a phone number"
           />
         </Animated.View>
 
@@ -421,6 +448,7 @@ export default function DataAmountScreen() {
             >
               <Keypad
                 controller={phoneInput}
+                leftKey={pasteKey}
                 backspaceBehavior="repeat"
                 metrics={metricsOptions}
               />

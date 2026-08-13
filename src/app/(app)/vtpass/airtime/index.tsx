@@ -20,6 +20,7 @@ import {
   AirtimeHeader,
   ConfirmBuyAirtimeModal,
   computeCashbackToEarn,
+  findProviderByServiceId,
   getAirtimeCashbackRate,
   getRecentAirtime,
   getRecentEntryDisplay,
@@ -36,8 +37,14 @@ import {
   useAuthorizePurchase,
   useConfirmWalletSnapshot,
 } from "@/features/payment-authorization";
+import {
+  SmartPastePrompt,
+  useSmartPaste,
+  useSmartPasteKey,
+} from "@/features/smart-paste";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { AlertModal } from "@/components/ui/modals/alert-modal";
+import { getServiceIdFromPhone } from "@/features/vtpass-airtime/phone-network";
 import { useAirtimeStore, useHomepageStore } from "@/store";
 import { logPurchaseSuccess } from "@/lib/analytics";
 import { classifyError, getFailedTransactionId } from "@/lib/errors";
@@ -92,6 +99,8 @@ export default function VtpassAirtimeScreen() {
   const [purchasing, setPurchasing] = useState(false);
   const [hasPreFilled, setHasPreFilled] = useState(false);
   const [showContactMatchDisclaimer, setShowContactMatchDisclaimer] = useState(false);
+  /** A pasted number waiting on the provider list to match its network. */
+  const [pastedPhoneForNetwork, setPastedPhoneForNetwork] = useState<string | null>(null);
 
   const phoneInput = useNumericInput({
     maxLength: 11,
@@ -168,6 +177,21 @@ export default function VtpassAirtimeScreen() {
     };
   }, []);
 
+  // Runs once providers are available, which may be after the paste.
+  useEffect(() => {
+    if (!pastedPhoneForNetwork || providers.length === 0) return;
+
+    const serviceId = getServiceIdFromPhone(pastedPhoneForNetwork);
+    const provider = serviceId
+      ? findProviderByServiceId(providers, serviceId)
+      : null;
+    if (provider) {
+      setSelectedProvider(provider);
+      setShowContactMatchDisclaimer(true);
+    }
+    setPastedPhoneForNetwork(null);
+  }, [pastedPhoneForNetwork, providers]);
+
   useEffect(() => {
     if (hasPreFilled || recentList.length === 0 || providers.length === 0) return;
     const first = recentList[0];
@@ -185,6 +209,44 @@ export default function VtpassAirtimeScreen() {
     ? parseMinMax(selectedProvider)
     : { min: 50, max: 100000 };
   const amount = parseInt(amountStr.replace(/\D/g, ""), 10) || 0;
+
+  /**
+   * Also switches the network to match the prefix, like the contact picker
+   * does, and raises the same advisory since a ported number can lie.
+   * `setHasPreFilled` stops the recents auto-fill from overwriting the paste.
+   */
+  function applyPastedPhone(digits: string) {
+    const normalized = normalizeNgMobileDigits(digits);
+    phoneInput.setValue(normalized);
+    setFieldErrors((e) => ({ ...e, phone: undefined }));
+    setHasPreFilled(true);
+    setPastedPhoneForNetwork(normalized);
+  }
+
+  const phonePaste = useSmartPaste({
+    surface: "field",
+    accepts: ["phone"],
+    currentValue: phoneInput.value,
+    enabled: !confirmModalVisible && !paymentAuthorizationModalProps.visible,
+    onAccept: (candidate) => applyPastedPhone(candidate.value),
+  });
+
+  // Never suggested unprompted; the Paste key still resolves one.
+  const amountPaste = useSmartPaste({
+    surface: "field",
+    accepts: ["amount"],
+    proactive: false,
+    amountBounds: { min: amountMin, max: amountMax },
+    currentValue: amountStr,
+    enabled: !confirmModalVisible && !paymentAuthorizationModalProps.visible,
+    onAccept: (candidate) => {
+      amountInput.setValue(candidate.value);
+      setFieldErrors((e) => ({ ...e, amount: undefined }));
+    },
+  });
+
+  const activePaste = activeField === "amount" ? amountPaste : phonePaste;
+  const pasteKey = useSmartPasteKey({ paste: activePaste });
   const amountValid = amount >= amountMin && amount <= amountMax;
   const phoneNormForValidation = normalizeNgMobileDigits(phone);
   const phoneValid = isAirtimePhoneSubmittable(phoneNormForValidation);
@@ -412,8 +474,14 @@ export default function VtpassAirtimeScreen() {
             onRetryProviders={() => fetchAirtimeProviders(true)}
             phoneFocused={activeField === "phone"}
             onPhoneFocus={() => setActiveField("phone")}
+            onPhoneLongPress={() => void phonePaste.pasteFromClipboard()}
             onPickerOpen={dismissKeypad}
             phoneInputAnchorRef={phoneFieldRef}
+          />
+          <SmartPastePrompt
+            paste={phonePaste}
+            title="Buy airtime for this number?"
+            manualPrompt="Paste a phone number"
           />
         </Animated.View>
 
@@ -439,8 +507,15 @@ export default function VtpassAirtimeScreen() {
             canSubmit={!!canSubmit}
             amountFocused={activeField === "amount"}
             onAmountFocus={() => setActiveField("amount")}
+            onAmountLongPress={() => void amountPaste.pasteFromClipboard()}
             amountInputAnchorRef={amountFieldRef}
           />
+          {activeField === "amount" ? (
+            <SmartPastePrompt
+              paste={amountPaste}
+              manualPrompt="Paste an amount"
+            />
+          ) : null}
         </View>
 
         {activeField !== "amount" ? (
@@ -467,6 +542,7 @@ export default function VtpassAirtimeScreen() {
             >
               <Keypad
                 controller={activeController}
+                leftKey={pasteKey}
                 backspaceBehavior="repeat"
                 metrics={metricsOptions}
               />

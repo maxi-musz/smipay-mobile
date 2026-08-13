@@ -18,7 +18,7 @@ import { isKnownPhoneProviderMismatch, getServiceIdFromPhone } from "../phone-ne
 import { cn } from "@/lib/utils";
 import type { AirtimeServiceItem } from "@/types/vtpass-airtime";
 
-function findProviderByServiceId(
+export function findProviderByServiceId(
   providers: AirtimeServiceItem[],
   serviceId: string,
 ): AirtimeServiceItem | null {
@@ -84,6 +84,8 @@ interface ProviderPhoneRowProps {
   /** Secure keypad: highlight this row as the active field. */
   phoneFocused?: boolean;
   onPhoneFocus?: () => void;
+  /** Long-press to paste. */
+  onPhoneLongPress?: () => void;
   /** Called when the network picker opens — collapse any docked keypad. */
   onPickerOpen?: () => void;
   phoneInputAnchorRef?: RefObject<View | null>;
@@ -103,6 +105,7 @@ export function ProviderPhoneRow({
   onRetryProviders,
   phoneFocused = false,
   onPhoneFocus,
+  onPhoneLongPress,
   onPickerOpen,
   phoneInputAnchorRef,
 }: ProviderPhoneRowProps) {
@@ -186,6 +189,7 @@ export function ProviderPhoneRow({
           <SecureNumericField
             value={phone}
             onPress={() => onPhoneFocus?.()}
+            onLongPress={onPhoneLongPress}
             focused={phoneFocused}
             placeholder="Phone Number"
             formatValue={formatNgPhoneDisplay}

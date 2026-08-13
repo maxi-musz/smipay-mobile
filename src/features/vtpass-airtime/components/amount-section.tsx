@@ -33,6 +33,8 @@ interface AmountSectionProps {
   canSubmit?: boolean;
   amountFocused?: boolean;
   onAmountFocus?: () => void;
+  /** Long-press to paste. */
+  onAmountLongPress?: () => void;
   amountInputAnchorRef?: RefObject<View | null>;
 }
 
@@ -50,6 +52,7 @@ export function AmountSection({
   canSubmit = false,
   amountFocused = false,
   onAmountFocus,
+  onAmountLongPress,
   amountInputAnchorRef,
 }: AmountSectionProps) {
   const { isDark } = useAppTheme();
@@ -179,6 +182,7 @@ export function AmountSection({
             onClearAmountError();
             onAmountFocus?.();
           }}
+          onLongPress={onAmountLongPress}
           focused={amountFocused}
           placeholder="Enter amount"
           error={Boolean(error)}

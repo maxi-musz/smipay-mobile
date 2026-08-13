@@ -16,6 +16,7 @@ import {
   formatNaira,
 } from "@/features/vtpass-cable/lib/constants";
 import { useCableStore } from "@/features/vtpass-cable/lib/store";
+import { SmartPastePrompt, useSmartPaste } from "@/features/smart-paste";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import {
@@ -43,6 +44,25 @@ export default function CableSmartcardScreen() {
       router.replace("/(app)/vtpass/cable");
     }
   }, [selectedProvider, selectedVariation]);
+
+  function applyPastedCode(digits: string) {
+    setBillersCode(digits);
+    setInputError(undefined);
+    if (verifyError) clearVerify();
+  }
+
+  /** Showmax bills a phone number; everyone else a smartcard / IUC. */
+  const billersCodeIsPhone = selectedProvider
+    ? getProviderTraits(selectedProvider.serviceID).billersCodeIsPhone
+    : false;
+
+  const codePaste = useSmartPaste({
+    surface: "field",
+    accepts: billersCodeIsPhone ? ["phone"] : ["smartcard"],
+    currentValue: billersCode,
+    enabled: !verifyData,
+    onAccept: (candidate) => applyPastedCode(candidate.value),
+  });
 
   if (!selectedProvider || !selectedVariation) return null;
 
@@ -146,6 +166,11 @@ export default function CableSmartcardScreen() {
             isVerifying={isVerifying}
             verified={verified}
             error={inputError ?? verifyError ?? undefined}
+          />
+          <SmartPastePrompt
+            paste={codePaste}
+            title={`Use this ${traits.billersCodeLabel.toLowerCase()}?`}
+            manualPrompt={`Paste a ${traits.billersCodeLabel.toLowerCase()}`}
           />
         </Animated.View>
 

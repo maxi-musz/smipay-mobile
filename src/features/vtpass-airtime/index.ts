@@ -3,6 +3,7 @@ export {
   AmountSection,
   AirtimeInputRow,
   ProviderPhoneRow,
+  findProviderByServiceId,
   RecentAirtimeList,
   CashbackToggle,
   ConfirmBuyAirtimeModal,

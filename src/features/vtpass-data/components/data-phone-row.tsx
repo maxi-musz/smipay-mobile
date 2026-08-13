@@ -28,6 +28,8 @@ export interface DataPhoneRowProps {
   phoneError?: string;
   phoneFocused?: boolean;
   onPhoneFocus?: () => void;
+  /** Long-press to paste. */
+  onPhoneLongPress?: () => void;
   phoneInputAnchorRef?: RefObject<View | null>;
 }
 
@@ -41,6 +43,7 @@ export function DataPhoneRow({
   phoneError,
   phoneFocused = false,
   onPhoneFocus,
+  onPhoneLongPress,
   phoneInputAnchorRef,
 }: DataPhoneRowProps) {
   const phoneDigits = phone.replace(/\D/g, "");
@@ -93,6 +96,7 @@ export function DataPhoneRow({
           <SecureNumericField
             value={phone}
             onPress={() => onPhoneFocus?.()}
+            onLongPress={onPhoneLongPress}
             focused={phoneFocused}
             placeholder="801 234 5678"
             formatValue={formatNgPhoneDisplay}

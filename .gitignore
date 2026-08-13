@@ -53,3 +53,7 @@ yarn-error.*
 
 /docs
 docs/
+
+# smart-paste detector verification build
+.verify-out/
+

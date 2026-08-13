@@ -14,6 +14,7 @@ import {
   CustomerInfoCard,
 } from "@/features/vtpass-electricity/components";
 import { useElectricityStore } from "@/features/vtpass-electricity/lib/store";
+import { SmartPastePrompt, useSmartPaste } from "@/features/smart-paste";
 import { useHomepageStore } from "@/store";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,20 @@ export default function ElectricityIndexScreen() {
 
   const [meterNumber, setMeterNumber] = useState("");
   const [inputError, setInputError] = useState<string | undefined>();
+
+  function applyPastedMeter(digits: string) {
+    setMeterNumber(digits);
+    setInputError(undefined);
+    if (verifyError) clearVerify();
+  }
+
+  const meterPaste = useSmartPaste({
+    surface: "field",
+    accepts: ["meter"],
+    currentValue: meterNumber,
+    enabled: !verifyData,
+    onAccept: (candidate) => applyPastedMeter(candidate.value),
+  });
 
   useEffect(() => {
     fetchProviders();
@@ -155,6 +170,11 @@ export default function ElectricityIndexScreen() {
                 isVerifying={isVerifying}
                 verified={verified}
                 error={inputError ?? verifyError ?? undefined}
+              />
+              <SmartPastePrompt
+                paste={meterPaste}
+                title="Use this meter number?"
+                manualPrompt="Paste a meter number"
               />
             </Animated.View>
 

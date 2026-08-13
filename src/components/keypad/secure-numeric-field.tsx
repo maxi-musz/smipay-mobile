@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 export interface SecureNumericFieldProps {
   value: string;
   onPress: () => void;
+  /** Long-press to paste — there is no system keyboard behind this field. */
+  onLongPress?: () => void;
   focused?: boolean;
   placeholder?: string;
   /** e.g. group digits as `080 123 45678` */
@@ -28,6 +30,7 @@ export interface SecureNumericFieldProps {
 export function SecureNumericField({
   value,
   onPress,
+  onLongPress,
   focused = false,
   placeholder,
   formatValue,
@@ -51,6 +54,8 @@ export function SecureNumericField({
     <Pressable
       testID={testID}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={350}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? "Numeric field"}
       accessibilityState={{ selected: focused }}

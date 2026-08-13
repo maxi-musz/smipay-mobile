@@ -9,7 +9,8 @@
     "android": "expo start --go --android",
     "ios": "expo start --go --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "verify:smart-paste": "tsc -p scripts/tsconfig.verify.json && node .verify-out/scripts/verify-smart-paste.js"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
