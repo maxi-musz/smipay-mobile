@@ -24,6 +24,7 @@ import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useCompactScreen } from "@/hooks/use-compact-screen";
 import { ApiClientError } from "@/lib/api";
+import { formatCountdown } from "@/lib/format-countdown";
 import { cn } from "@/lib/utils";
 import { useHomepageStore, useProfileStore } from "@/store";
 
@@ -421,7 +422,9 @@ export default function TransactionPinScreen() {
                           onComplete={() => setResendOnCooldown(false)}
                         >
                           {(secondsLeft) =>
-                            secondsLeft > 0 ? `Resend in ${secondsLeft}s` : "Resend code"
+                            secondsLeft > 0
+                              ? `Resend in ${formatCountdown(secondsLeft)}`
+                              : "Resend code"
                           }
                         </Countdown>
                       ) : (
@@ -536,12 +539,6 @@ export default function TransactionPinScreen() {
       </View>
     </>
   );
-}
-
-function formatCountdown(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 interface CountdownProps {

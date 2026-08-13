@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Keyboard, Pressable, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 
@@ -23,6 +23,8 @@ import {
   isAuthPasswordValid,
 } from "@/lib/auth-password";
 import { handleApiError } from "@/lib/errors";
+import { useOtpTimings } from "@/features/app-bootstrap";
+import { formatCountdown } from "@/lib/format-countdown";
 
 type Step = "email" | "code" | "password";
 
@@ -34,12 +36,15 @@ function looksLikeCodeError(message: string): boolean {
 }
 
 export default function ForgotPasswordScreen() {
+  const { resend_cooldown_seconds: otpResendCooldownSeconds } = useOtpTimings();
   const [step, setStep] = useState<Step>("email");
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [shakeKey, setShakeKey] = useState(0);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const resendEndsAtRef = useRef<number | null>(null);
+  const resendTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const code = useNumericInput({
     length: AUTH_OTP_DIGITS,
@@ -60,18 +65,47 @@ export default function ForgotPasswordScreen() {
 
   const canSubmitEmail = EMAIL_RE.test(email.trim()) && !loading;
 
-  function startResendCooldown() {
-    setResendCooldown(60);
-    const id = setInterval(() => {
-      setResendCooldown((v) => {
-        if (v <= 1) {
-          clearInterval(id);
-          return 0;
-        }
-        return v - 1;
-      });
+  function clearResendTimer() {
+    if (resendTimerRef.current) {
+      clearInterval(resendTimerRef.current);
+      resendTimerRef.current = null;
+    }
+  }
+
+  function retryAfterSeconds(e: unknown): number | undefined {
+    if (e instanceof ApiClientError) {
+      const n = e.data?.retry_after_seconds;
+      if (typeof n === "number" && n > 0) return Math.ceil(n);
+    }
+    return undefined;
+  }
+
+  function startResendCooldown(seconds?: number) {
+    const fallback =
+      otpResendCooldownSeconds > 0 ? otpResendCooldownSeconds : 60;
+    const total = seconds && seconds > 0 ? Math.ceil(seconds) : fallback;
+    resendEndsAtRef.current = Date.now() + total * 1000;
+    setResendCooldown(total);
+    clearResendTimer();
+    resendTimerRef.current = setInterval(() => {
+      const ends = resendEndsAtRef.current;
+      if (!ends) {
+        clearResendTimer();
+        setResendCooldown(0);
+        return;
+      }
+      const left = Math.max(0, Math.ceil((ends - Date.now()) / 1000));
+      if (left <= 0) {
+        clearResendTimer();
+        resendEndsAtRef.current = null;
+        setResendCooldown(0);
+        return;
+      }
+      setResendCooldown(left);
     }, 1000);
   }
+
+  useEffect(() => () => clearResendTimer(), []);
 
   async function handleRequestOtp() {
     const trimmed = email.trim();
@@ -91,6 +125,7 @@ export default function ForgotPasswordScreen() {
       setStep("code");
       startResendCooldown();
     } catch (e) {
+      startResendCooldown(retryAfterSeconds(e));
       handleApiError(e);
     } finally {
       setLoading(false);
@@ -110,6 +145,7 @@ export default function ForgotPasswordScreen() {
         message: "A new reset code has been sent.",
       });
     } catch (e) {
+      startResendCooldown(retryAfterSeconds(e));
       handleApiError(e);
     } finally {
       setLoading(false);
@@ -189,12 +225,12 @@ export default function ForgotPasswordScreen() {
   const resendKey: KeypadKey = {
     type: "action",
     id: "resend",
-    label: resendCooldown > 0 ? `${resendCooldown}s` : "Resend",
+    label: resendCooldown > 0 ? formatCountdown(resendCooldown) : "Resend",
     ghost: true,
     disabled: resendCooldown > 0 || loading,
     accessibilityLabel:
       resendCooldown > 0
-        ? `Resend available in ${resendCooldown} seconds`
+        ? `Resend available in ${formatCountdown(resendCooldown)}`
         : "Resend reset code",
     onPress: () => void handleResendOtp(),
   };
@@ -310,7 +346,7 @@ export default function ForgotPasswordScreen() {
                 }
                 onPress={resendCooldown > 0 ? undefined : () => void handleResendOtp()}
               >
-                {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+                {resendCooldown > 0 ? `Resend in ${formatCountdown(resendCooldown)}` : "Resend code"}
               </Text>
             </Text>
           </View>

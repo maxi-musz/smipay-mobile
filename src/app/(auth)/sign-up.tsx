@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Image, Keyboard, Pressable, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -45,6 +45,8 @@ import {
   type PickedProfileImage,
 } from "@/lib/pick-profile-image";
 import { useAuthStore } from "@/store";
+import { ApiClientError } from "@/lib/api";
+import { useOtpTimings } from "@/features/app-bootstrap";
 
 type Step = "email" | "otp" | "profile";
 
@@ -52,7 +54,6 @@ const STEPS: Step[] = ["email", "otp", "profile"];
 const STEP_LABELS = ["Email", "Verify", "Profile"];
 const EMAIL_RE = /\S+@\S+\.\S+/;
 const TRANSACTION_PIN_DIGITS = 4;
-const REGISTRATION_OTP_RESEND_COOLDOWN_SECONDS = 30;
 
 /**
  * Clamp phone input as the user types. Accepts only digits plus a single leading
@@ -75,6 +76,7 @@ export default function SignUpScreen() {
   const { isDark } = useAppTheme();
   const login = useAuthStore.use.login();
   const storeCredentials = useAuthStore.use.storeCredentials();
+  const { resend_cooldown_seconds: otpResendCooldownSeconds } = useOtpTimings();
 
   const [step, setStep] = useState<Step>("email");
   const [loading, setLoading] = useState(false);
@@ -83,6 +85,8 @@ export default function SignUpScreen() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [otpError, setOtpError] = useState("");
   const [otpShakeKey, setOtpShakeKey] = useState(0);
+  const resendEndsAtRef = useRef<number | null>(null);
+  const resendTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -133,38 +137,53 @@ export default function SignUpScreen() {
 
   // ── Cooldown ──────────────────────────────────────────────────────
 
-  /** Seconds the server asked us to wait, if it said so. */
+  function clearResendTimer() {
+    if (resendTimerRef.current) {
+      clearInterval(resendTimerRef.current);
+      resendTimerRef.current = null;
+    }
+  }
+
   function retryAfterSeconds(e: unknown): number | undefined {
+    if (e instanceof ApiClientError) {
+      const n = e.data?.retry_after_seconds;
+      if (typeof n === "number" && n > 0) return Math.ceil(n);
+    }
     const data = (
       e as { response?: { data?: { retry_after_seconds?: number } } }
     )?.response?.data;
-    return typeof data?.retry_after_seconds === 'number'
-      ? data.retry_after_seconds
+    return typeof data?.retry_after_seconds === "number" &&
+      data.retry_after_seconds > 0
+      ? Math.ceil(data.retry_after_seconds)
       : undefined;
   }
 
-
-  /**
-   * `seconds` lets the server drive the wait: a 429 carries
-   * `retry_after_seconds`, so the button re-enables exactly when the backend
-   * will actually accept another request — no guessing, no drift.
-   */
   function startResendCooldown(seconds?: number) {
-    setResendCooldown(
-      seconds && seconds > 0
-        ? Math.ceil(seconds)
-        : REGISTRATION_OTP_RESEND_COOLDOWN_SECONDS,
-    );
-    const id = setInterval(() => {
-      setResendCooldown((v) => {
-        if (v <= 1) {
-          clearInterval(id);
-          return 0;
-        }
-        return v - 1;
-      });
+    const fallback =
+      otpResendCooldownSeconds > 0 ? otpResendCooldownSeconds : 60;
+    const total = seconds && seconds > 0 ? Math.ceil(seconds) : fallback;
+    resendEndsAtRef.current = Date.now() + total * 1000;
+    setResendCooldown(total);
+    clearResendTimer();
+    resendTimerRef.current = setInterval(() => {
+      const ends = resendEndsAtRef.current;
+      if (!ends) {
+        clearResendTimer();
+        setResendCooldown(0);
+        return;
+      }
+      const left = Math.max(0, Math.ceil((ends - Date.now()) / 1000));
+      if (left <= 0) {
+        clearResendTimer();
+        resendEndsAtRef.current = null;
+        setResendCooldown(0);
+        return;
+      }
+      setResendCooldown(left);
     }, 1000);
   }
+
+  useEffect(() => () => clearResendTimer(), []);
 
   // ── Handlers ──────────────────────────────────────────────────────
 

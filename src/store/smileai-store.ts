@@ -257,10 +257,13 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
 
       setMessages: (conversationId, messages) =>
         set((s) => {
+          const visible = messages.filter(
+            (m) => m.role !== "assistant" || m.content.trim().length > 0,
+          );
           const prev = s.messagesByConversation[conversationId] ?? [];
-          const serverIds = new Set(messages.map((m) => m.id));
+          const serverIds = new Set(visible.map((m) => m.id));
           const serverUserText = new Set(
-            messages
+            visible
               .filter((m) => m.role === "user")
               .map((m) => m.content.trim()),
           );
@@ -275,7 +278,7 @@ const useSmileaiStoreBase = create<SmileaiStore>()(
               !serverUserText.has(m.content.trim()),
           );
           const merged = dedupeSmileMessages([
-            ...messages,
+            ...visible,
             ...survivingOptimistic,
           ]);
           return {

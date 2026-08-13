@@ -408,6 +408,14 @@ export function ChatScreen({
     );
   }, [messages, agentMessages]);
 
+  const allowMultipleBeforeReply =
+    behaviour.bootstrap?.behaviour.allow_multiple_messages_before_reply !==
+    false;
+  const lastVisible = displayMessages[displayMessages.length - 1];
+  const awaitingReply =
+    !allowMultipleBeforeReply && lastVisible?.role === "user";
+  const composerLocked = awaitingReply;
+
   // Keep the latest messages visible when the composer rides the keyboard.
   useEffect(() => {
     if (!keyboardVisible) return;
@@ -574,13 +582,19 @@ export function ChatScreen({
         message_id,
         reply_to_message_id,
         reply_to_snippet,
+        scheduled_for,
       }) => {
         if (conversation_id !== conversationId) return;
-        setIsStreaming(true);
-        // The assistant row exists now — promote pending user bubbles to
-        // delivered and remember which message this turn is answering so the
-        // quote can show as the reply streams in.
         markPendingUserMessagesSent(conversation_id);
+        const delayMs = scheduled_for
+          ? new Date(scheduled_for).getTime() - Date.now()
+          : 0;
+        if (Number.isFinite(delayMs) && delayMs > 8_000) {
+          setIsStreaming(false);
+          setStreamingReply(null);
+          return;
+        }
+        setIsStreaming(true);
         setStreamingReply({
           messageId: message_id,
           replyToMessageId: reply_to_message_id ?? null,
@@ -736,15 +750,12 @@ export function ChatScreen({
   const sendUserText = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      // Never lock on a streaming reply — the user can keep firing messages and
-      // the backend coalesces them. Block only closed chats; when handed off the
-      // backend bridges the message to the specialist (no Smiley turn runs), so
-      // the user keeps chatting in this same thread.
       if (!trimmed || isClosed) return;
+      if (composerLocked) {
+        showToast({ variant: "info", title: behaviour.throttleMessage });
+        return;
+      }
 
-      // 0. Client-side pacing that mirrors the engine's anti-spam throttle:
-      //    if the admin set a minimum gap between messages, block a too-fast
-      //    send locally (and tell the user) rather than round-tripping it.
       if (!isHandedOff && !behaviour.canSendNow()) {
         showToast({ variant: "info", title: behaviour.throttleMessage });
         return;
@@ -804,6 +815,7 @@ export function ChatScreen({
       isHandedOff,
       scrollToBottom,
       behaviour,
+      composerLocked,
     ],
   );
 
@@ -1030,7 +1042,7 @@ export function ChatScreen({
           <WelcomeCard
             firstName={user?.first_name ?? undefined}
             onChipPress={sendUserText}
-            disabled={isSmileBusy}
+            disabled={isSmileBusy || composerLocked}
           />
         ) : null}
 
@@ -1153,7 +1165,7 @@ export function ChatScreen({
                   <QuickReplyBar
                     suggestions={suggestions}
                     onSelect={sendUserText}
-                    disabled={false}
+                    disabled={composerLocked}
                   />
                 ) : null}
 
@@ -1161,12 +1173,15 @@ export function ChatScreen({
                   value={draftText}
                   onChange={setDraftText}
                   onSend={() => sendUserText(draftText)}
+                  disabled={composerLocked}
                   placeholder={
-                    isHandedOff
-                      ? effectiveAgentName
-                        ? `Message ${firstWord(effectiveAgentName)}…`
-                        : "Message the specialist…"
-                      : `Message ${SMILEY_ASSISTANT_NAME}…`
+                    composerLocked
+                      ? "Waiting for a reply…"
+                      : isHandedOff
+                        ? effectiveAgentName
+                          ? `Message ${firstWord(effectiveAgentName)}…`
+                          : "Message the specialist…"
+                        : `Message ${SMILEY_ASSISTANT_NAME}…`
                   }
                 />
               </>

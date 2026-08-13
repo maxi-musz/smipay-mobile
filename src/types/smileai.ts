@@ -120,8 +120,9 @@ export interface SmilePreferences {
   paused: boolean;
 }
 
-/** Client-facing chat-behaviour knobs returned by GET /smileai/bootstrap. */
+/** Client-facing chat-behaviour knobs from GET /smileai/bootstrap. */
 export interface SmileBehaviour {
+  allow_multiple_messages_before_reply: boolean;
   reply_delay_enabled: boolean;
   typing_indicator_lead_seconds: number;
   min_seconds_between_messages: number;

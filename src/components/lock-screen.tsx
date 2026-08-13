@@ -6,7 +6,6 @@ import {
   Keyboard,
   Platform,
   Pressable,
-  TextInput,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,7 +25,6 @@ import {
   type KeypadKey,
 } from "@/components/keypad";
 import { ArrowButton } from "@/components/ui/arrow-button";
-import { Input } from "@/components/ui/input";
 import { FullPageLoader } from "@/components/ui/loaders";
 import { Text } from "@/components/ui/text";
 import { useToastStore } from "@/components/ui/toast";
@@ -48,9 +46,6 @@ function maskEmail(email: string): string {
   return `${visible}${"•".repeat(Math.max(local.length - 2, 3))}@${domain}`;
 }
 
-/** Passwords are 6 digits now; `keyboard` mode keeps legacy accounts usable. */
-type PasswordMode = "keypad" | "keyboard";
-
 export function LockScreen() {
   const { isDark } = useAppTheme();
   const user = useAuthStore.use.user();
@@ -60,8 +55,6 @@ export function LockScreen() {
   const logout = useAuthStore.use.logout();
   const biometricsEnabled = useAppStore.use.biometricsEnabled();
 
-  const [passwordMode, setPasswordMode] = useState<PasswordMode>("keypad");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [shakeKey, setShakeKey] = useState(0);
@@ -78,8 +71,6 @@ export function LockScreen() {
    * auto biometric indefinitely. Suppress until the user taps the biometric control.
    */
   const suppressAutoBiometricRef = useRef(false);
-
-  const passwordRef = useRef<TextInput>(null);
 
   const pin = useNumericInput({
     length: AUTH_PASSWORD_DIGITS,
@@ -99,8 +90,7 @@ export function LockScreen() {
       ?? null,
   );
   const showProfileAvatar = profileImageUrl !== null && !avatarLoadFailed;
-  const currentPassword = passwordMode === "keypad" ? pin.value : password;
-  const canSubmit = currentPassword.length > 0 && !loading;
+  const canSubmit = pin.value.length > 0 && !loading;
 
   useEffect(() => {
     setAvatarLoadFailed(false);
@@ -112,12 +102,6 @@ export function LockScreen() {
       setBiometricLabel(getBiometricLabel(a));
     });
   }, []);
-
-  useEffect(() => {
-    if (passwordMode !== "keyboard") return;
-    const id = setTimeout(() => passwordRef.current?.focus(), 260);
-    return () => clearTimeout(id);
-  }, [passwordMode]);
 
   // Auto-trigger biometrics only when the app is fully active (foreground).
   // On iOS, Face ID fails without showing the prompt if called before the app has
@@ -159,18 +143,7 @@ export function LockScreen() {
     };
   }, [biometricsAvailable, biometricsEnabled]);
 
-  function switchPasswordMode(next: PasswordMode) {
-    setPasswordMode(next);
-    setError("");
-    if (next === "keyboard") {
-      setPassword(pin.value);
-    } else {
-      Keyboard.dismiss();
-      pin.setValue(password.replace(/\D/g, "").slice(0, AUTH_PASSWORD_DIGITS));
-    }
-  }
-
-  async function handleUnlock(value: string = currentPassword) {
+  async function handleUnlock(value: string = pin.value) {
     if (!value || loading) return;
     Keyboard.dismiss();
     setError("");
@@ -189,12 +162,10 @@ export function LockScreen() {
       serverFailedRef.current = false;
       resetInactivityTimer();
       pin.clear();
-      setPassword("");
     } catch {
       setUnlocking(false);
       // Clear first — clearing runs `onChange`, which resets `error`.
       pin.clear();
-      setPassword("");
       setError("Incorrect password. Please try again.");
       setShakeKey((k) => k + 1);
     } finally {
@@ -322,7 +293,7 @@ export function LockScreen() {
         title={firstName ? `Hi ${firstName}` : "Welcome back"}
         subtitle={email ? `Unlock as ${maskEmail(email)}` : "Enter your password to continue"}
         showBrand={false}
-        showVersion={passwordMode === "keyboard"}
+        showVersion={false}
         headerRight={
           showProfileAvatar && profileImageUrl ? (
             <Image
@@ -342,84 +313,44 @@ export function LockScreen() {
           )
         }
         bottom={
-          passwordMode === "keypad" ? (
-            <KeypadDock secure title="SmiPay Secure Keypad">
-              <Keypad
-                controller={pin}
-                disabled={loading}
-                leftKey={biometricKey}
-                backspaceBehavior="clear"
-              />
-            </KeypadDock>
-          ) : undefined
+          <KeypadDock secure title="SmiPay Secure Keypad">
+            <Keypad
+              controller={pin}
+              disabled={loading}
+              leftKey={biometricKey}
+              backspaceBehavior="clear"
+            />
+          </KeypadDock>
         }
       >
         <View className="mt-9">
-          {passwordMode === "keypad" ? (
-            <>
-              <Text className="text-[13px] font-medium text-muted-foreground">
-                {AUTH_PASSWORD_DIGITS}-digit password
-              </Text>
-              <PinDots
-                value={pin.value}
-                length={AUTH_PASSWORD_DIGITS}
-                error={Boolean(error)}
-                shakeKey={shakeKey}
-                style={{ justifyContent: "flex-start", marginTop: 18 }}
-              />
-              {error ? (
-                <Text className="mt-4 text-sm font-medium text-destructive">
-                  {error}
-                </Text>
-              ) : null}
-            </>
-          ) : (
-            <Input
-              ref={passwordRef}
-              label="Password"
-              placeholder="Enter your password"
-              value={password}
-              onChangeText={(v) => {
-                setPassword(v);
-                if (error) setError("");
-              }}
-              error={error || undefined}
-              secureTextEntry
-              toggleable
-              autoComplete="password"
-              returnKeyType="done"
-              onSubmitEditing={canSubmit ? () => void handleUnlock() : undefined}
-            />
-          )}
+          <Text className="text-[13px] font-medium text-muted-foreground">
+            {AUTH_PASSWORD_DIGITS}-digit password
+          </Text>
+          <PinDots
+            value={pin.value}
+            length={AUTH_PASSWORD_DIGITS}
+            error={Boolean(error)}
+            shakeKey={shakeKey}
+            style={{ justifyContent: "flex-start", marginTop: 18 }}
+          />
+          {error ? (
+            <Text className="mt-4 text-sm font-medium text-destructive">
+              {error}
+            </Text>
+          ) : null}
 
           <View className="mt-7 flex-row items-center justify-between">
-            <View className="gap-2">
-              <Pressable
-                onPress={() =>
-                  switchPasswordMode(passwordMode === "keypad" ? "keyboard" : "keypad")
-                }
-                hitSlop={10}
-                accessibilityRole="button"
-                className="active:opacity-70"
-              >
-                <Text className="text-sm text-muted-foreground">
-                  {passwordMode === "keypad"
-                    ? "Use letter keyboard"
-                    : "Use number keypad"}
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={handleSignOut}
-                hitSlop={10}
-                accessibilityRole="button"
-                className="active:opacity-70"
-              >
-                <Text className="text-sm font-semibold text-primary">
-                  Switch account
-                </Text>
-              </Pressable>
-            </View>
+            <Pressable
+              onPress={handleSignOut}
+              hitSlop={10}
+              accessibilityRole="button"
+              className="active:opacity-70"
+            >
+              <Text className="text-sm font-semibold text-primary">
+                Switch account
+              </Text>
+            </Pressable>
 
             <ArrowButton
               onPress={() => void handleUnlock()}
@@ -429,24 +360,6 @@ export function LockScreen() {
               testID="lock-screen-unlock"
             />
           </View>
-
-          {/* Biometrics lives on the keypad itself when it's shown; this is the
-              fallback entry point for the letter-keyboard mode. */}
-          {passwordMode === "keyboard" && biometricTappable ? (
-            <Pressable
-              onPress={handleManualBiometricTap}
-              hitSlop={10}
-              accessibilityRole="button"
-              className="mt-8 flex-row items-center gap-2 active:opacity-70"
-            >
-              <Ionicons name="scan-outline" size={22} color={colors.orange[500]} />
-              <Text className="text-sm font-semibold text-primary">
-                {biometricUnlockLoading
-                  ? "Authenticating…"
-                  : `Unlock with ${biometricLabel}`}
-              </Text>
-            </Pressable>
-          ) : null}
         </View>
       </AuthShell>
     </View>

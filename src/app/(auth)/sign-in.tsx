@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, BackHandler, DevSettings, Keyboard, Pressable, TextInput, View } from "react-native";
+import { useCallback, useState } from "react";
+import { Alert, BackHandler, DevSettings, Keyboard, Pressable, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Link, router, useFocusEffect } from "expo-router";
 
@@ -36,11 +36,6 @@ import { useAuthStore, useAppStore, useSmileaiStore } from "@/store";
 type Step = "identifier" | "password";
 /** Phone is the primary sign-in identifier; email is the fallback. */
 type IdentifierMode = "phone" | "email";
-/**
- * Passwords are 6 digits on current accounts, but sign-in still accepts legacy
- * alphanumeric ones — `keyboard` mode exists so those users aren't locked out.
- */
-type PasswordMode = "keypad" | "keyboard";
 
 const PHONE_DIGITS = 11;
 
@@ -51,15 +46,11 @@ export default function SignInScreen() {
 
   const [step, setStep] = useState<Step>("identifier");
   const [identifierMode, setIdentifierMode] = useState<IdentifierMode>("phone");
-  const [passwordMode, setPasswordMode] = useState<PasswordMode>("keypad");
   const [identifier, setIdentifier] = useState("");
   const [maskedIdentifier, setMaskedIdentifier] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ identifier?: string; password?: string }>({});
   const [shakeKey, setShakeKey] = useState(0);
-
-  const passwordRef = useRef<TextInput>(null);
 
   const phone = useNumericInput({
     maxLength: PHONE_DIGITS,
@@ -78,14 +69,7 @@ export default function SignInScreen() {
   });
 
   const canProceed = isValidAuthIdentifier(identifier) && !loading;
-  const currentPassword = passwordMode === "keypad" ? pin.value : password;
-  const canSubmit = currentPassword.length > 0 && !loading;
-
-  useEffect(() => {
-    if (step !== "password" || passwordMode !== "keyboard") return;
-    const id = setTimeout(() => passwordRef.current?.focus(), 280);
-    return () => clearTimeout(id);
-  }, [step, passwordMode]);
+  const canSubmit = pin.value.length > 0 && !loading;
 
   function clearError(key: keyof typeof errors) {
     setErrors((p) => (p[key] ? { ...p, [key]: undefined } : p));
@@ -102,17 +86,6 @@ export default function SignInScreen() {
       setIdentifier(digits);
     } else {
       setIdentifier(phone.value);
-    }
-  }
-
-  function switchPasswordMode(next: PasswordMode) {
-    setPasswordMode(next);
-    clearError("password");
-    if (next === "keyboard") {
-      setPassword(pin.value);
-    } else {
-      Keyboard.dismiss();
-      pin.setValue(password.replace(/\D/g, "").slice(0, AUTH_PASSWORD_DIGITS));
     }
   }
 
@@ -151,9 +124,7 @@ export default function SignInScreen() {
     setMaskedIdentifier(maskAuthIdentifier(normalized));
     setIdentifier("");
     phone.clear();
-    setPassword("");
     pin.clear();
-    setPasswordMode("keypad");
     setErrors({});
     setStep("password");
   }
@@ -173,7 +144,6 @@ export default function SignInScreen() {
       }
     }
     await secureStorage.remove(SECURE_KEYS.SIGN_IN_IDENTIFIER);
-    setPassword("");
     pin.clear();
     setMaskedIdentifier("");
     setErrors({});
@@ -194,7 +164,7 @@ export default function SignInScreen() {
     }, [step]),
   );
 
-  async function handleSignIn(value: string = currentPassword) {
+  async function handleSignIn(value: string = pin.value) {
     if (!value) {
       setErrors({ password: "Password is required" });
       setShakeKey((k) => k + 1);
@@ -265,7 +235,6 @@ export default function SignInScreen() {
     } catch (e) {
       // Wipe the entry so a rejected attempt starts fresh instead of being edited.
       pin.clear();
-      setPassword("");
       setShakeKey((k) => k + 1);
       if (e instanceof ApiClientError && e.statusCode === 401) {
         setErrors({ password: e.message || "Incorrect password. Please try again." });
@@ -278,7 +247,7 @@ export default function SignInScreen() {
   }
 
   const showIdentifierKeypad = step === "identifier" && identifierMode === "phone";
-  const showPasswordKeypad = step === "password" && passwordMode === "keypad";
+  const showPasswordKeypad = step === "password";
 
   const emailSwitchKey: KeypadKey = {
     type: "action",
@@ -287,15 +256,6 @@ export default function SignInScreen() {
     ghost: true,
     accessibilityLabel: "Sign in with email instead",
     onPress: () => switchIdentifierMode("email"),
-  };
-
-  const keyboardSwitchKey: KeypadKey = {
-    type: "action",
-    id: "abc-mode",
-    label: "ABC",
-    ghost: true,
-    accessibilityLabel: "Switch to the letter keyboard",
-    onPress: () => switchPasswordMode("keyboard"),
   };
 
   return (
@@ -340,7 +300,6 @@ export default function SignInScreen() {
             <Keypad
               controller={pin}
               disabled={loading}
-              leftKey={keyboardSwitchKey}
               backspaceBehavior="clear"
             />
           </KeypadDock>
@@ -409,66 +368,28 @@ export default function SignInScreen() {
         </View>
       ) : (
         <View className="mt-9">
-          {passwordMode === "keypad" ? (
-            <>
-              <Text className="text-[13px] font-medium text-muted-foreground">
-                {AUTH_PASSWORD_DIGITS}-digit password
-              </Text>
-              <PinDots
-                value={pin.value}
-                length={AUTH_PASSWORD_DIGITS}
-                error={Boolean(errors.password)}
-                shakeKey={shakeKey}
-                style={{ justifyContent: "flex-start", marginTop: 18 }}
-              />
-              {errors.password ? (
-                <Text className="mt-4 text-sm font-medium text-destructive">
-                  {errors.password}
-                </Text>
-              ) : null}
-            </>
-          ) : (
-            <Input
-              ref={passwordRef}
-              label="Password"
-              placeholder="Enter your password"
-              value={password}
-              onChangeText={(v) => {
-                setPassword(v);
-                clearError("password");
-              }}
-              error={errors.password}
-              secureTextEntry
-              toggleable
-              autoComplete="password"
-              textContentType="password"
-              returnKeyType="done"
-              onSubmitEditing={canSubmit ? () => void handleSignIn() : undefined}
-            />
-          )}
+          <Text className="text-[13px] font-medium text-muted-foreground">
+            {AUTH_PASSWORD_DIGITS}-digit password
+          </Text>
+          <PinDots
+            value={pin.value}
+            length={AUTH_PASSWORD_DIGITS}
+            error={Boolean(errors.password)}
+            shakeKey={shakeKey}
+            style={{ justifyContent: "flex-start", marginTop: 18 }}
+          />
+          {errors.password ? (
+            <Text className="mt-4 text-sm font-medium text-destructive">
+              {errors.password}
+            </Text>
+          ) : null}
 
           <View className="mt-7 flex-row items-center justify-between">
-            <View className="gap-2">
-              <Link href="/(auth)/forgot-password" asChild>
-                <Text className="text-sm font-semibold text-primary">
-                  Forgot password?
-                </Text>
-              </Link>
-              <Pressable
-                onPress={() =>
-                  switchPasswordMode(passwordMode === "keypad" ? "keyboard" : "keypad")
-                }
-                hitSlop={10}
-                accessibilityRole="button"
-                className="active:opacity-70"
-              >
-                <Text className="text-sm text-muted-foreground">
-                  {passwordMode === "keypad"
-                    ? "Use letter keyboard"
-                    : "Use number keypad"}
-                </Text>
-              </Pressable>
-            </View>
+            <Link href="/(auth)/forgot-password" asChild>
+              <Text className="text-sm font-semibold text-primary">
+                Forgot password?
+              </Text>
+            </Link>
 
             <ArrowButton
               onPress={() => void handleSignIn()}
