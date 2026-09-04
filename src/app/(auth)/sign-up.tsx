@@ -8,7 +8,9 @@ import {
   register,
   registerWithProfilePicture,
   requestEmailVerification,
+  requestPhoneVerification,
   verifyEmailForRegistration,
+  verifyPhoneForRegistration,
 } from "@/api";
 import {
   ProfilePhotoPickMode,
@@ -48,10 +50,10 @@ import { useAuthStore } from "@/store";
 import { ApiClientError } from "@/lib/api";
 import { useOtpTimings } from "@/features/app-bootstrap";
 
-type Step = "email" | "otp" | "profile";
+type Step = "phone" | "otp" | "profile";
 
-const STEPS: Step[] = ["email", "otp", "profile"];
-const STEP_LABELS = ["Email", "Verify", "Profile"];
+const STEPS: Step[] = ["phone", "otp", "profile"];
+const STEP_LABELS = ["Phone", "Verify", "Profile"];
 const EMAIL_RE = /\S+@\S+\.\S+/;
 const TRANSACTION_PIN_DIGITS = 4;
 
@@ -78,10 +80,19 @@ export default function SignUpScreen() {
   const storeCredentials = useAuthStore.use.storeCredentials();
   const { resend_cooldown_seconds: otpResendCooldownSeconds } = useOtpTimings();
 
-  const [step, setStep] = useState<Step>("email");
+  const [step, setStep] = useState<Step>("phone");
   const [loading, setLoading] = useState(false);
 
   const [email, setEmail] = useState("");
+  // Inline email verification on the profile step.
+  const [emailStage, setEmailStage] = useState<
+    "unverified" | "code_sent" | "verified"
+  >("unverified");
+  const [emailCode, setEmailCode] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  // Number verified this session — lets Continue skip a paid re-send when the
+  // user goes back and forward without changing it.
+  const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [otpError, setOtpError] = useState("");
   const [otpShakeKey, setOtpShakeKey] = useState(0);
@@ -104,7 +115,6 @@ export default function SignUpScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const lastNameRef = useRef<TextInput>(null);
-  const phoneRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const transactionPinRef = useRef<TextInput>(null);
 
@@ -125,11 +135,11 @@ export default function SignUpScreen() {
       });
   }
 
-  const canSubmitEmail = EMAIL_RE.test(email.trim()) && !loading;
+  const canSubmitPhone = isValidPhone(phone.trim()) && !loading;
   const canSubmitProfile =
     firstName.trim().length > 0 &&
     lastName.trim().length > 0 &&
-    isValidPhone(phone.trim()) &&
+    emailStage === "verified" &&
     isAuthPasswordValid(password) &&
     transactionPin.length === TRANSACTION_PIN_DIGITS &&
     agreedToTerms &&
@@ -187,22 +197,39 @@ export default function SignUpScreen() {
 
   // ── Handlers ──────────────────────────────────────────────────────
 
-  async function handleVerifyEmail() {
-    const trimmed = email.trim();
-    if (!EMAIL_RE.test(trimmed)) {
-      setErrors({ email: "Enter a valid email" });
+  /** Pull `resend_cooldown_seconds` out of a successful send response. */
+  function cooldownFromResponse(res: unknown): number | undefined {
+    const n = (res as { data?: { resend_cooldown_seconds?: number } })?.data
+      ?.resend_cooldown_seconds;
+    return typeof n === "number" && n > 0 ? Math.ceil(n) : undefined;
+  }
+
+  async function handleSendPhoneOtp() {
+    const trimmed = phone.trim();
+    if (!isValidPhone(trimmed)) {
+      setErrors({
+        phone: "Enter a valid Nigerian mobile number (e.g. 08012345678)",
+      });
       return;
     }
 
     Keyboard.dismiss();
     setErrors({});
+
+    // Already verified this exact number this session — don't spend another SMS.
+    if (verifiedPhone === trimmed) {
+      setStep("profile");
+      return;
+    }
+
     setLoading(true);
     try {
-      await requestEmailVerification(trimmed.toLowerCase());
+      const res = await requestPhoneVerification(trimmed);
       otp.clear();
       setOtpError("");
+      // Only advance when the SMS actually went out — the API fails otherwise.
       setStep("otp");
-      startResendCooldown();
+      startResendCooldown(cooldownFromResponse(res));
     } catch (e) {
       // Start the cooldown even when the send fails. It used to start only on
       // success, so a failure left the button enabled — users tapped it once a
@@ -218,13 +245,13 @@ export default function SignUpScreen() {
     if (resendCooldown > 0 || loading) return;
     setLoading(true);
     try {
-      await requestEmailVerification(email.trim().toLowerCase());
+      const res = await requestPhoneVerification(phone.trim());
       otp.clear();
-      startResendCooldown();
+      startResendCooldown(cooldownFromResponse(res));
       useToastStore.getState().show({
         variant: "success",
         title: "Code Sent",
-        message: "A new verification code has been sent.",
+        message: "A new verification code has been sent by SMS.",
       });
     } catch (e) {
       startResendCooldown(retryAfterSeconds(e));
@@ -246,7 +273,12 @@ export default function SignUpScreen() {
     setOtpError("");
     setLoading(true);
     try {
-      await verifyEmailForRegistration(email.trim().toLowerCase(), value);
+      await verifyPhoneForRegistration(phone.trim(), value);
+      setVerifiedPhone(phone.trim());
+      // The SMS cooldown must not gate the email Verify button on the next step.
+      clearResendTimer();
+      resendEndsAtRef.current = null;
+      setResendCooldown(0);
       setStep("profile");
     } catch (e) {
       // Clear so the next attempt starts fresh rather than editing a rejected code.
@@ -262,12 +294,58 @@ export default function SignUpScreen() {
     }
   }
 
+  // ── Inline email verification (profile step) ─────────────────────
+
+  async function handleSendEmailCode() {
+    const trimmed = email.trim().toLowerCase();
+    if (!EMAIL_RE.test(trimmed)) {
+      setErrors((p) => ({ ...p, email: "Enter a valid email" }));
+      return;
+    }
+    if (resendCooldown > 0 || emailBusy) return;
+    clearError("email");
+    setEmailBusy(true);
+    try {
+      await requestEmailVerification(trimmed);
+      setEmailCode("");
+      setEmailStage("code_sent");
+      startResendCooldown();
+      useToastStore.getState().show({
+        variant: "success",
+        title: "Code Sent",
+        message: `We emailed a verification code to ${trimmed}.`,
+      });
+    } catch (e) {
+      startResendCooldown(retryAfterSeconds(e));
+      handleApiError(e);
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  async function handleConfirmEmailCode() {
+    if (emailCode.length !== AUTH_OTP_DIGITS || emailBusy) return;
+    Keyboard.dismiss();
+    setEmailBusy(true);
+    try {
+      await verifyEmailForRegistration(email.trim().toLowerCase(), emailCode);
+      setEmailStage("verified");
+      clearError("email");
+    } catch (e) {
+      setEmailCode("");
+      handleApiError(e);
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
   function validateProfile() {
     const next: Record<string, string> = {};
     if (!firstName.trim()) next.firstName = "Required";
     if (!lastName.trim()) next.lastName = "Required";
-    if (!isValidPhone(phone.trim()))
-      next.phone = "Enter a valid Nigerian mobile number (e.g. 08012345678)";
+    if (!EMAIL_RE.test(email.trim())) next.email = "Enter a valid email";
+    else if (emailStage !== "verified")
+      next.email = "Verify your email to continue";
     if (!isAuthPasswordValid(password))
       next.password = `Use exactly ${AUTH_PASSWORD_DIGITS} digits (0–9)`;
     if (transactionPin.length !== TRANSACTION_PIN_DIGITS)
@@ -338,9 +416,11 @@ export default function SignUpScreen() {
 
   function handleBack() {
     if (step === "otp") {
-      setStep("email");
+      setStep("phone");
     } else if (step === "profile") {
-      setStep("otp");
+      // Straight back to the phone step — the number is already verified, and
+      // re-entering the code screen would show a stale code entry.
+      setStep("phone");
     } else {
       router.back();
     }
@@ -376,24 +456,24 @@ export default function SignUpScreen() {
   };
 
   const title =
-    step === "email"
+    step === "phone"
       ? "Create your account"
       : step === "otp"
-        ? "Verify your email"
+        ? "Verify your number"
         : "Complete your profile";
 
   const subtitle =
-    step === "email"
-      ? "We'll send a verification code to this address."
+    step === "phone"
+      ? "We'll text a verification code to this number."
       : step === "otp"
-        ? `We sent a 6-digit code to ${email}.`
+        ? `We sent a 6-digit code by SMS to ${phone}.`
         : "A few more details and you're in.";
 
   return (
     <AuthShell
       title={title}
       subtitle={subtitle}
-      showVersion={step === "email"}
+      showVersion={step === "phone"}
       bottom={
         step === "otp" ? (
           <KeypadDock secure title="SmiPay Secure Keypad">
@@ -409,25 +489,30 @@ export default function SignUpScreen() {
     >
       <StepDots currentIdx={currentIdx} />
 
-      {step === "email" ? (
+      {step === "phone" ? (
         <View className="mt-8">
           <Input
-            label="Email address"
-            placeholder="you@example.com"
-            value={email}
+            label="Phone number"
+            placeholder="08012345678"
+            value={phone}
             onChangeText={(v) => {
-              setEmail(v);
-              clearError("email");
+              setPhone(sanitizePhone(v));
+              clearError("phone");
             }}
-            error={errors.email}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-            textContentType="emailAddress"
+            error={errors.phone}
+            keyboardType="phone-pad"
+            maxLength={14}
+            autoComplete="tel"
+            textContentType="telephoneNumber"
             autoFocus
             returnKeyType="done"
-            onSubmitEditing={canSubmitEmail ? handleVerifyEmail : undefined}
+            onSubmitEditing={canSubmitPhone ? handleSendPhoneOtp : undefined}
           />
+          {!errors.phone ? (
+            <Text className="mt-1.5 text-xs text-muted-foreground">
+              One account per phone number. Standard SMS rates may apply.
+            </Text>
+          ) : null}
 
           <View className="mt-7 flex-row items-center justify-between">
             <View className="flex-row items-center gap-1">
@@ -438,11 +523,11 @@ export default function SignUpScreen() {
             </View>
 
             <ArrowButton
-              onPress={handleVerifyEmail}
-              disabled={!canSubmitEmail}
+              onPress={handleSendPhoneOtp}
+              disabled={!canSubmitPhone}
               loading={loading}
               accessibilityLabel="Continue"
-              testID="sign-up-email-continue"
+              testID="sign-up-phone-continue"
             />
           </View>
         </View>
@@ -456,7 +541,7 @@ export default function SignUpScreen() {
             error={Boolean(otpError)}
             shakeKey={otpShakeKey}
             slotHeight={54}
-            accessibilityLabel="Email verification code"
+            accessibilityLabel="SMS verification code"
           />
 
           {otpError ? (
@@ -586,42 +671,145 @@ export default function SignUpScreen() {
                 autoComplete="family-name"
                 autoCapitalize="words"
                 returnKeyType="next"
-                onSubmitEditing={() => phoneRef.current?.focus()}
+                onSubmitEditing={() => passwordRef.current?.focus()}
               />
             </View>
           </View>
 
-          <View>
-            <Input
-              ref={phoneRef}
-              label="Phone number"
-              placeholder="08012345678"
-              value={phone}
-              onChangeText={(v) => {
-                setPhone(sanitizePhone(v));
-                clearError("phone");
-              }}
-              error={errors.phone}
-              keyboardType="phone-pad"
-              maxLength={14}
-              autoComplete="tel"
-              textContentType="telephoneNumber"
-              returnKeyType="next"
-              onSubmitEditing={() => passwordRef.current?.focus()}
-            />
-            {!errors.phone ? (
-              <Text className="mt-1.5 text-xs text-muted-foreground">
-                One account per phone number.
-              </Text>
-            ) : null}
-          </View>
-
           {/* Settled at step 1 — confirmation only. */}
           <View className="flex-row items-center justify-between rounded-xl border border-border bg-muted/40 px-3 py-2.5">
-            <Text className="text-xs text-muted-foreground">Email</Text>
+            <View className="flex-row items-center gap-1.5">
+              <Ionicons
+                name="checkmark-circle"
+                size={16}
+                color={colors.orange[500]}
+              />
+              <Text className="text-xs text-muted-foreground">Phone</Text>
+            </View>
             <Text className="text-sm font-medium" numberOfLines={1}>
-              {email.trim().toLowerCase()}
+              {phone.trim()}
             </Text>
+          </View>
+
+          {/* Email + inline verification */}
+          <View>
+            <View className="flex-row items-end gap-3">
+              <View className="flex-1">
+                <Input
+                  label="Email address"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChangeText={(v) => {
+                    setEmail(v);
+                    clearError("email");
+                    // Changing the address invalidates any prior verification.
+                    if (emailStage !== "unverified") {
+                      setEmailStage("unverified");
+                      setEmailCode("");
+                    }
+                  }}
+                  error={errors.email}
+                  editable={emailStage !== "verified"}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  textContentType="emailAddress"
+                  returnKeyType="done"
+                />
+              </View>
+              {emailStage === "verified" ? (
+                <View className="mb-1 flex-row items-center gap-1 rounded-full bg-muted px-2.5 py-1.5">
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={15}
+                    color={colors.orange[500]}
+                  />
+                  <Text className="text-xs font-semibold text-primary">
+                    Verified
+                  </Text>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={() => void handleSendEmailCode()}
+                  disabled={
+                    emailBusy ||
+                    resendCooldown > 0 ||
+                    !EMAIL_RE.test(email.trim())
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel="Verify email"
+                  className={`mb-1 rounded-full px-3.5 py-2 ${
+                    emailBusy ||
+                    resendCooldown > 0 ||
+                    !EMAIL_RE.test(email.trim())
+                      ? "bg-muted"
+                      : "bg-primary"
+                  }`}
+                >
+                  <Text
+                    className={`text-xs font-semibold ${
+                      emailBusy ||
+                      resendCooldown > 0 ||
+                      !EMAIL_RE.test(email.trim())
+                        ? "text-muted-foreground"
+                        : "text-primary-foreground"
+                    }`}
+                  >
+                    {resendCooldown > 0
+                      ? formatCountdown(resendCooldown)
+                      : emailStage === "code_sent"
+                        ? "Resend"
+                        : "Verify"}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+
+            {emailStage === "code_sent" ? (
+              <View className="mt-3 flex-row items-end gap-3">
+                <View className="flex-1">
+                  <Input
+                    label="Email code"
+                    placeholder={`${AUTH_OTP_DIGITS}-digit code`}
+                    value={emailCode}
+                    onChangeText={(v) =>
+                      setEmailCode(v.replace(/\D/g, "").slice(0, AUTH_OTP_DIGITS))
+                    }
+                    keyboardType="number-pad"
+                    maxLength={AUTH_OTP_DIGITS}
+                    returnKeyType="done"
+                    onSubmitEditing={() => void handleConfirmEmailCode()}
+                  />
+                </View>
+                <Pressable
+                  onPress={() => void handleConfirmEmailCode()}
+                  disabled={emailCode.length !== AUTH_OTP_DIGITS || emailBusy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Confirm email code"
+                  className={`mb-1 rounded-full px-3.5 py-2 ${
+                    emailCode.length !== AUTH_OTP_DIGITS || emailBusy
+                      ? "bg-muted"
+                      : "bg-primary"
+                  }`}
+                >
+                  <Text
+                    className={`text-xs font-semibold ${
+                      emailCode.length !== AUTH_OTP_DIGITS || emailBusy
+                        ? "text-muted-foreground"
+                        : "text-primary-foreground"
+                    }`}
+                  >
+                    Confirm
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {emailStage !== "verified" && !errors.email ? (
+              <Text className="mt-1.5 text-xs text-muted-foreground">
+                We&apos;ll email you a code to confirm this address.
+              </Text>
+            ) : null}
           </View>
 
           <Input

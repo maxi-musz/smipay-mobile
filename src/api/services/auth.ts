@@ -24,6 +24,34 @@ export async function checkPhoneAvailability(phoneNumber: string) {
   return data;
 }
 
+/**
+ * Phone-first registration, step 1. Resolves only when the SMS was actually
+ * handed off — the caller must not advance to the code screen on failure.
+ * Response data carries `resend_cooldown_seconds` for the resend timer.
+ */
+export async function requestPhoneVerification(phone_number: string) {
+  const { data } = await api.post<
+    ApiResponse<{
+      resend_cooldown_seconds?: number;
+      expires_in_seconds?: number;
+      reused_existing_otp?: boolean;
+    }>
+  >(`${AUTH}/request-phone-verification`, { phone_number });
+  return data;
+}
+
+/** Phone-first registration, step 2: confirm the SMS code. */
+export async function verifyPhoneForRegistration(
+  phone_number: string,
+  otp: string,
+) {
+  const { data } = await api.post<ApiResponse>(
+    `${AUTH}/verify-phone-for-registration`,
+    { phone_number, otp },
+  );
+  return data;
+}
+
 export async function requestEmailVerification(email: string) {
   const { data } = await api.post<ApiResponse>(`${AUTH}/request-email-verification`, { email });
   return data;
