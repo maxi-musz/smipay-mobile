@@ -1,13 +1,22 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, BackHandler, DevSettings, Keyboard, Pressable, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Link, router, useFocusEffect } from "expo-router";
 
-import { signIn } from "@/api";
+import {
+  resendAdminLoginOtp,
+  resendDeviceLoginOtp,
+  signIn,
+  verifyAdminLoginOtp,
+  verifyDeviceLoginOtp,
+  type LoginOtpChallenge,
+} from "@/api";
+import type { AuthResponse } from "@/types";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { PhoneNumberDisplay } from "@/components/auth/phone-number-display";
 import {
+  CodeSlots,
   Keypad,
   KeypadDock,
   PinDots,
@@ -17,6 +26,8 @@ import {
 import { ArrowButton, ArrowButtonRow } from "@/components/ui/arrow-button";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
+import { useToastStore } from "@/components/ui/toast";
+import { formatCountdown } from "@/lib/format-countdown";
 import {
   isValidAuthIdentifier,
   isValidPhoneIdentifier,
@@ -25,7 +36,7 @@ import {
   sanitizeAuthIdentifier,
   toSignInIdentifier,
 } from "@/lib/auth-identifier";
-import { AUTH_PASSWORD_DIGITS } from "@/lib/auth-password";
+import { AUTH_OTP_DIGITS, AUTH_PASSWORD_DIGITS } from "@/lib/auth-password";
 import { authenticate, getBiometricsAvailability, getBiometricLabel } from "@/lib/biometrics";
 import { ApiClientError } from "@/lib/api";
 import { handleApiError } from "@/lib/errors";
@@ -33,7 +44,7 @@ import { logSignIn, setAnalyticsUser } from "@/lib/analytics";
 import { canUseRequireAuthentication, secureStorage, SECURE_KEYS } from "@/lib/secure-storage";
 import { useAuthStore, useAppStore, useSmileaiStore } from "@/store";
 
-type Step = "identifier" | "password";
+type Step = "identifier" | "password" | "otp";
 /** Phone is the primary sign-in identifier; email is the fallback. */
 type IdentifierMode = "phone" | "email";
 
@@ -52,6 +63,18 @@ export default function SignInScreen() {
   const [errors, setErrors] = useState<{ identifier?: string; password?: string }>({});
   const [shakeKey, setShakeKey] = useState(0);
 
+  // Email-OTP challenge (new device, or admin sign-in).
+  const [otpChallenge, setOtpChallenge] = useState<{
+    id: string;
+    kind: "device" | "admin";
+    emailHint: string;
+  } | null>(null);
+  const [otpError, setOtpError] = useState("");
+  const [pendingPassword, setPendingPassword] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const resendEndsAtRef = useRef<number | null>(null);
+  const resendTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const phone = useNumericInput({
     maxLength: PHONE_DIGITS,
     onChange: (value) => {
@@ -68,12 +91,46 @@ export default function SignInScreen() {
     onChange: () => clearError("password"),
   });
 
+  const otp = useNumericInput({
+    length: AUTH_OTP_DIGITS,
+    onComplete: (value) => {
+      void handleVerifyLoginOtp(value);
+    },
+    onChange: () => setOtpError(""),
+  });
+
   const canProceed = isValidAuthIdentifier(identifier) && !loading;
   const canSubmit = pin.value.length > 0 && !loading;
 
   function clearError(key: keyof typeof errors) {
     setErrors((p) => (p[key] ? { ...p, [key]: undefined } : p));
   }
+
+  function clearResendTimer() {
+    if (resendTimerRef.current) {
+      clearInterval(resendTimerRef.current);
+      resendTimerRef.current = null;
+    }
+  }
+
+  function startResendCooldown(availableAt?: string) {
+    const parsed = availableAt ? new Date(availableAt).getTime() : NaN;
+    const ends = Number.isFinite(parsed) ? parsed : Date.now() + 60_000;
+    resendEndsAtRef.current = ends;
+    setResendCooldown(Math.max(0, Math.ceil((ends - Date.now()) / 1000)));
+    clearResendTimer();
+    resendTimerRef.current = setInterval(() => {
+      const target = resendEndsAtRef.current;
+      const left = target ? Math.max(0, Math.ceil((target - Date.now()) / 1000)) : 0;
+      setResendCooldown(left);
+      if (left <= 0) {
+        clearResendTimer();
+        resendEndsAtRef.current = null;
+      }
+    }, 1000);
+  }
+
+  useEffect(() => () => clearResendTimer(), []);
 
   /** Carries the typed value across so switching modes never costs input. */
   function switchIdentifierMode(next: IdentifierMode) {
@@ -131,6 +188,17 @@ export default function SignInScreen() {
 
   async function handleBack() {
     Keyboard.dismiss();
+    if (step === "otp") {
+      clearResendTimer();
+      setResendCooldown(0);
+      setOtpChallenge(null);
+      setPendingPassword("");
+      otp.clear();
+      setOtpError("");
+      pin.clear();
+      setStep("password");
+      return;
+    }
     const stored = await secureStorage.get<string>(SECURE_KEYS.SIGN_IN_IDENTIFIER);
     if (stored) {
       // Restore into whichever field can actually hold the value.
@@ -152,7 +220,7 @@ export default function SignInScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (step !== "password") return;
+      if (step === "identifier") return;
 
       const onHardwareBack = () => {
         void handleBack();
@@ -184,54 +252,26 @@ export default function SignInScreen() {
     try {
       const signInIdentifier = toSignInIdentifier(storedIdentifier);
       const res = await signIn({ email: signInIdentifier, password: value });
-      const accountEmail = res.data.user.email?.trim().toLowerCase() ?? signInIdentifier;
 
-      await login(
-        res.data.user,
-        {
-          accessToken: res.data.access_token,
-          refreshToken: res.data.refresh_token,
-        },
-      );
-      await storeCredentials(accountEmail, value);
-      await secureStorage.remove(SECURE_KEYS.SIGN_IN_IDENTIFIER);
-      void logSignIn();
-      void setAnalyticsUser(res.data.user.id);
-
-      const availability = await getBiometricsAvailability();
-      if (!availability.available) {
-        router.replace("/(app)/(tabs)");
+      const challenge = res.data as unknown as LoginOtpChallenge;
+      if (
+        (challenge.requires_device_otp || challenge.requires_admin_otp) &&
+        challenge.challenge_id
+      ) {
+        setOtpChallenge({
+          id: challenge.challenge_id,
+          kind: challenge.requires_admin_otp ? "admin" : "device",
+          emailHint: challenge.email_hint ?? "your email",
+        });
+        setPendingPassword(value);
+        otp.clear();
+        setOtpError("");
+        startResendCooldown(challenge.resend_available_at);
+        setStep("otp");
         return;
       }
 
-      const label = getBiometricLabel(availability);
-      Alert.alert(
-        "Unlock with " + label + "?",
-        "Use " + label + " to unlock SmiPay next time you open the app.",
-        [
-          {
-            text: "Not now",
-            style: "cancel",
-            onPress: () => router.replace("/(app)/(tabs)"),
-          },
-          {
-            text: "Yes",
-            onPress: async () => {
-              const result = await authenticate({
-                promptMessage: "Use " + label + " to unlock SmiPay",
-                disableDeviceFallback: true,
-              });
-              if (result.success) {
-                await storeCredentials(accountEmail, value, canUseRequireAuthentication()
-                  ? { requireAuthentication: true }
-                  : undefined);
-                setBiometricsEnabled(true);
-              }
-              router.replace("/(app)/(tabs)");
-            },
-          },
-        ],
-      );
+      await finishSignIn(res.data as AuthResponse, value, signInIdentifier);
     } catch (e) {
       // Wipe the entry so a rejected attempt starts fresh instead of being edited.
       pin.clear();
@@ -246,8 +286,116 @@ export default function SignInScreen() {
     }
   }
 
+  async function finishSignIn(
+    data: AuthResponse,
+    passwordValue: string,
+    fallbackEmail?: string,
+  ) {
+    const accountEmail =
+      data.user.email?.trim().toLowerCase() ?? fallbackEmail ?? "";
+
+    await login(data.user, {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+    });
+    await storeCredentials(accountEmail, passwordValue);
+    await secureStorage.remove(SECURE_KEYS.SIGN_IN_IDENTIFIER);
+    void logSignIn();
+    void setAnalyticsUser(data.user.id);
+
+    const availability = await getBiometricsAvailability();
+    if (!availability.available) {
+      router.replace("/(app)/(tabs)");
+      return;
+    }
+
+    const label = getBiometricLabel(availability);
+    Alert.alert(
+      "Unlock with " + label + "?",
+      "Use " + label + " to unlock SmiPay next time you open the app.",
+      [
+        {
+          text: "Not now",
+          style: "cancel",
+          onPress: () => router.replace("/(app)/(tabs)"),
+        },
+        {
+          text: "Yes",
+          onPress: async () => {
+            const result = await authenticate({
+              promptMessage: "Use " + label + " to unlock SmiPay",
+              disableDeviceFallback: true,
+            });
+            if (result.success) {
+              await storeCredentials(accountEmail, passwordValue, canUseRequireAuthentication()
+                ? { requireAuthentication: true }
+                : undefined);
+              setBiometricsEnabled(true);
+            }
+            router.replace("/(app)/(tabs)");
+          },
+        },
+      ],
+    );
+  }
+
+  async function handleVerifyLoginOtp(value: string = otp.value) {
+    if (!otpChallenge || loading) return;
+    if (value.length !== AUTH_OTP_DIGITS) {
+      setOtpError(`Enter the ${AUTH_OTP_DIGITS}-digit code`);
+      setShakeKey((k) => k + 1);
+      return;
+    }
+
+    Keyboard.dismiss();
+    setOtpError("");
+    setLoading(true);
+    try {
+      const res =
+        otpChallenge.kind === "admin"
+          ? await verifyAdminLoginOtp(otpChallenge.id, value)
+          : await verifyDeviceLoginOtp(otpChallenge.id, value);
+      clearResendTimer();
+      await finishSignIn(res.data as AuthResponse, pendingPassword);
+    } catch (e) {
+      otp.clear();
+      setShakeKey((k) => k + 1);
+      setOtpError(
+        e instanceof Error && e.message
+          ? e.message
+          : "That code didn't work. Please try again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResendLoginOtp() {
+    if (!otpChallenge || resendCooldown > 0 || loading) return;
+    setLoading(true);
+    try {
+      const res =
+        otpChallenge.kind === "admin"
+          ? await resendAdminLoginOtp(otpChallenge.id)
+          : await resendDeviceLoginOtp(otpChallenge.id);
+      otp.clear();
+      startResendCooldown(res.data?.resend_available_at);
+      useToastStore.getState().show({
+        variant: "success",
+        title: "Code Sent",
+        message: "Check your email for the verification code.",
+      });
+    } catch (e) {
+      startResendCooldown();
+      handleApiError(e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const showIdentifierKeypad = step === "identifier" && identifierMode === "phone";
   const showPasswordKeypad = step === "password";
+  const showOtpKeypad = step === "otp";
 
   const emailSwitchKey: KeypadKey = {
     type: "action",
@@ -258,20 +406,41 @@ export default function SignInScreen() {
     onPress: () => switchIdentifierMode("email"),
   };
 
+  const resendKey: KeypadKey = {
+    type: "action",
+    id: "resend",
+    label: resendCooldown > 0 ? formatCountdown(resendCooldown) : "Resend",
+    ghost: true,
+    disabled: resendCooldown > 0 || loading,
+    accessibilityLabel:
+      resendCooldown > 0
+        ? `Resend available in ${formatCountdown(resendCooldown)}`
+        : "Resend verification code",
+    onPress: () => void handleResendLoginOtp(),
+  };
+
   return (
     <AuthShell
-      title={step === "identifier" ? "Welcome back" : "Enter your password"}
+      title={
+        step === "identifier"
+          ? "Welcome back"
+          : step === "password"
+            ? "Enter your password"
+            : "Check your email"
+      }
       subtitle={
         step === "identifier"
           ? identifierMode === "phone"
             ? "Sign in with the phone number on your SmiPay account."
             : "Sign in with the email on your SmiPay account."
-          : maskedIdentifier
-            ? `Signing in as ${maskedIdentifier}`
-            : undefined
+          : step === "password"
+            ? maskedIdentifier
+              ? `Signing in as ${maskedIdentifier}`
+              : undefined
+            : `This is a new device, so we sent a 6-digit code to ${otpChallenge?.emailHint ?? "your email"}.`
       }
       headerRight={step === "identifier" ? <ThemeToggle /> : undefined}
-      showVersion={!showIdentifierKeypad && !showPasswordKeypad}
+      showVersion={!showIdentifierKeypad && !showPasswordKeypad && !showOtpKeypad}
       footer={
         step === "identifier" ? (
           <View className="items-center gap-3 pb-1">
@@ -300,6 +469,15 @@ export default function SignInScreen() {
             <Keypad
               controller={pin}
               disabled={loading}
+              backspaceBehavior="clear"
+            />
+          </KeypadDock>
+        ) : showOtpKeypad ? (
+          <KeypadDock secure title="SmiPay Secure Keypad">
+            <Keypad
+              controller={otp}
+              disabled={loading}
+              leftKey={resendKey}
               backspaceBehavior="clear"
             />
           </KeypadDock>
@@ -366,7 +544,7 @@ export default function SignInScreen() {
             </View>
           )}
         </View>
-      ) : (
+      ) : step === "password" ? (
         <View className="mt-9">
           <Text className="text-[13px] font-medium text-muted-foreground">
             {AUTH_PASSWORD_DIGITS}-digit password
@@ -397,6 +575,64 @@ export default function SignInScreen() {
               loading={loading}
               accessibilityLabel="Sign in"
               testID="sign-in-submit"
+            />
+          </View>
+        </View>
+      ) : (
+        <View className="mt-9">
+          <CodeSlots
+            value={otp.value}
+            length={AUTH_OTP_DIGITS}
+            variant="underline"
+            focused={!loading}
+            error={Boolean(otpError)}
+            shakeKey={shakeKey}
+            slotHeight={54}
+            accessibilityLabel="Sign-in verification code"
+          />
+
+          {otpError ? (
+            <Text className="mt-4 text-sm font-medium text-destructive">
+              {otpError}
+            </Text>
+          ) : null}
+
+          <View className="mt-7 flex-row items-center justify-between">
+            <View>
+              <Text className="text-sm text-muted-foreground">
+                Didn&apos;t get it?{" "}
+                <Text
+                  className={
+                    resendCooldown > 0
+                      ? "text-sm text-muted-foreground"
+                      : "text-sm font-semibold text-primary"
+                  }
+                  onPress={
+                    resendCooldown > 0
+                      ? undefined
+                      : () => void handleResendLoginOtp()
+                  }
+                >
+                  {resendCooldown > 0
+                    ? `Resend in ${formatCountdown(resendCooldown)}`
+                    : "Resend code"}
+                </Text>
+              </Text>
+              <Pressable
+                onPress={() => void handleBack()}
+                hitSlop={8}
+                className="mt-2 active:opacity-70"
+              >
+                <Text className="text-sm text-muted-foreground">Go back</Text>
+              </Pressable>
+            </View>
+
+            <ArrowButton
+              onPress={() => void handleVerifyLoginOtp()}
+              disabled={otp.value.length !== AUTH_OTP_DIGITS || loading}
+              loading={loading}
+              accessibilityLabel="Verify code"
+              testID="sign-in-verify-otp"
             />
           </View>
         </View>

@@ -84,14 +84,11 @@ export default function SignUpScreen() {
   const [loading, setLoading] = useState(false);
 
   const [email, setEmail] = useState("");
-  // Inline email verification on the profile step.
   const [emailStage, setEmailStage] = useState<
     "unverified" | "code_sent" | "verified"
   >("unverified");
   const [emailCode, setEmailCode] = useState("");
   const [emailBusy, setEmailBusy] = useState(false);
-  // Number verified this session — lets Continue skip a paid re-send when the
-  // user goes back and forward without changing it.
   const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [otpError, setOtpError] = useState("");
@@ -197,7 +194,6 @@ export default function SignUpScreen() {
 
   // ── Handlers ──────────────────────────────────────────────────────
 
-  /** Pull `resend_cooldown_seconds` out of a successful send response. */
   function cooldownFromResponse(res: unknown): number | undefined {
     const n = (res as { data?: { resend_cooldown_seconds?: number } })?.data
       ?.resend_cooldown_seconds;
@@ -216,7 +212,6 @@ export default function SignUpScreen() {
     Keyboard.dismiss();
     setErrors({});
 
-    // Already verified this exact number this session — don't spend another SMS.
     if (verifiedPhone === trimmed) {
       setStep("profile");
       return;
@@ -225,9 +220,13 @@ export default function SignUpScreen() {
     setLoading(true);
     try {
       const res = await requestPhoneVerification(trimmed);
+      if (res.data?.already_verified) {
+        setVerifiedPhone(trimmed);
+        setStep("profile");
+        return;
+      }
       otp.clear();
       setOtpError("");
-      // Only advance when the SMS actually went out — the API fails otherwise.
       setStep("otp");
       startResendCooldown(cooldownFromResponse(res));
     } catch (e) {
@@ -246,6 +245,11 @@ export default function SignUpScreen() {
     setLoading(true);
     try {
       const res = await requestPhoneVerification(phone.trim());
+      if (res.data?.already_verified) {
+        setVerifiedPhone(phone.trim());
+        setStep("profile");
+        return;
+      }
       otp.clear();
       startResendCooldown(cooldownFromResponse(res));
       useToastStore.getState().show({
@@ -418,8 +422,7 @@ export default function SignUpScreen() {
     if (step === "otp") {
       setStep("phone");
     } else if (step === "profile") {
-      // Straight back to the phone step — the number is already verified, and
-      // re-entering the code screen would show a stale code entry.
+      // Skip the code screen — the number is already verified.
       setStep("phone");
     } else {
       router.back();
@@ -702,7 +705,6 @@ export default function SignUpScreen() {
                   onChangeText={(v) => {
                     setEmail(v);
                     clearError("email");
-                    // Changing the address invalidates any prior verification.
                     if (emailStage !== "unverified") {
                       setEmailStage("unverified");
                       setEmailCode("");

@@ -915,7 +915,7 @@ export function ChatScreen({
           : toolBadge
             ? "Awaiting support response"
             : isConnected
-              ? (conversationTitle ?? "Customer support")
+              ? (conversationTitle ?? "We're here to help")
               : "Reconnecting…";
 
   return (
@@ -1043,6 +1043,9 @@ export function ChatScreen({
             firstName={user?.first_name ?? undefined}
             onChipPress={sendUserText}
             disabled={isSmileBusy || composerLocked}
+            aiAvailable={
+              behaviour.bootstrap ? behaviour.bootstrap.available !== false : undefined
+            }
           />
         ) : null}
 
@@ -1181,7 +1184,7 @@ export function ChatScreen({
                         ? effectiveAgentName
                           ? `Message ${firstWord(effectiveAgentName)}…`
                           : "Message the specialist…"
-                        : `Message ${SMILEY_ASSISTANT_NAME}…`
+                        : "Message Support…"
                   }
                 />
               </>

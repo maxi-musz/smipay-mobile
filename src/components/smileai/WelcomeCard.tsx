@@ -32,13 +32,24 @@ type Props = {
   firstName?: string;
   onChipPress: (text: string) => void;
   disabled?: boolean;
+  /**
+   * False = AI switched off (plain human support chat); undefined = not known
+   * yet, so neither variant's extras render — prevents the AI layout flashing
+   * before the bootstrap resolves.
+   */
+  aiAvailable?: boolean;
 };
 
-export function WelcomeCard({ firstName, onChipPress, disabled }: Props) {
+export function WelcomeCard({
+  firstName,
+  onChipPress,
+  disabled,
+  aiAvailable,
+}: Props) {
   const { isDark } = useAppTheme();
   const greeting = firstName?.trim()
-    ? `Hi ${firstName.trim()}, I'm ${SMILEY_ASSISTANT_NAME}`
-    : `Hi, I'm ${SMILEY_ASSISTANT_NAME}`;
+    ? `Hi ${firstName.trim()}, welcome to ${SMILEY_ASSISTANT_NAME}`
+    : `Welcome to ${SMILEY_ASSISTANT_NAME}`;
 
   const brand = isDark ? "#FB923C" : "#C2520A";
   const bubble = isDark ? "rgba(245,130,32,0.15)" : "#FFF7ED";
@@ -54,8 +65,11 @@ export function WelcomeCard({ firstName, onChipPress, disabled }: Props) {
           className="mt-2 px-2 text-center text-muted-foreground"
           style={{ fontSize: 15, lineHeight: 21 }}
         >
-          Your SmiPay assistant for airtime, data, bills, transactions and
-          cashback. Ask me anything — or tap a suggestion to start.
+          {aiAvailable === false
+            ? "Tell us what you need help with — airtime, data, bills, transactions or cashback — and we'll take it from there."
+            : aiAvailable === true
+              ? "Here to help with airtime, data, bills, transactions and cashback. Ask us anything — or tap a suggestion to start."
+              : "Here to help with airtime, data, bills, transactions and cashback."}
         </Text>
         <View
           className="mt-3 flex-row items-center rounded-full px-3 py-1"
@@ -71,57 +85,61 @@ export function WelcomeCard({ firstName, onChipPress, disabled }: Props) {
         </View>
       </View>
 
-      {/* Starter prompts */}
-      <Text className="mb-2 mt-8 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Try asking
-      </Text>
-      <View
-        className="gap-2"
-        pointerEvents={disabled ? "none" : "auto"}
-        style={disabled ? { opacity: 0.45 } : undefined}
-      >
-        {SUGGESTIONS.map((s) => (
-          <Pressable
-            key={s.text}
-            onPress={() => onChipPress(s.text)}
-            disabled={disabled}
-            accessibilityRole="button"
-            accessibilityLabel={`Suggestion: ${s.text}`}
-            accessibilityState={{ disabled: !!disabled }}
-            className="flex-row items-center rounded-2xl border border-border bg-card px-3 active:opacity-80"
-            style={{ minHeight: 56 }}
+      {aiAvailable === true ? (
+        <>
+          {/* Starter prompts */}
+          <Text className="mb-2 mt-8 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Try asking
+          </Text>
+          <View
+            className="gap-2"
+            pointerEvents={disabled ? "none" : "auto"}
+            style={disabled ? { opacity: 0.45 } : undefined}
           >
-            <View
-              className="items-center justify-center rounded-full"
-              style={{ width: 36, height: 36, backgroundColor: bubble }}
-            >
-              <Ionicons name={s.icon} size={18} color={brand} />
-            </View>
-            <Text className="ml-3 flex-1 text-[15px]">{s.text}</Text>
-            <Ionicons name="arrow-forward" size={16} color={muted} />
-          </Pressable>
-        ))}
-      </View>
+            {SUGGESTIONS.map((s) => (
+              <Pressable
+                key={s.text}
+                onPress={() => onChipPress(s.text)}
+                disabled={disabled}
+                accessibilityRole="button"
+                accessibilityLabel={`Suggestion: ${s.text}`}
+                accessibilityState={{ disabled: !!disabled }}
+                className="flex-row items-center rounded-2xl border border-border bg-card px-3 active:opacity-80"
+                style={{ minHeight: 56 }}
+              >
+                <View
+                  className="items-center justify-center rounded-full"
+                  style={{ width: 36, height: 36, backgroundColor: bubble }}
+                >
+                  <Ionicons name={s.icon} size={18} color={brand} />
+                </View>
+                <Text className="ml-3 flex-1 text-[15px]">{s.text}</Text>
+                <Ionicons name="arrow-forward" size={16} color={muted} />
+              </Pressable>
+            ))}
+          </View>
 
-      {/* Capabilities */}
-      <View className="mt-6 rounded-2xl bg-card p-4">
-        <Text className="font-semibold">What I can do</Text>
-        <View className="mt-3 gap-2">
-          {CAPABILITIES.map((c) => (
-            <View key={c} className="flex-row items-center">
-              <Ionicons
-                name="checkmark-circle"
-                size={16}
-                color={brand}
-                style={{ marginRight: 8 }}
-              />
-              <Text className="flex-1 text-sm text-muted-foreground">{c}</Text>
+          {/* Capabilities */}
+          <View className="mt-6 rounded-2xl bg-card p-4">
+            <Text className="font-semibold">What we can do</Text>
+            <View className="mt-3 gap-2">
+              {CAPABILITIES.map((c) => (
+                <View key={c} className="flex-row items-center">
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={16}
+                    color={brand}
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text className="flex-1 text-sm text-muted-foreground">{c}</Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
-      </View>
+          </View>
 
-      <DisclaimerBanner />
+          <DisclaimerBanner />
+        </>
+      ) : null}
     </View>
   );
 }

@@ -1,7 +1,6 @@
 import { Pressable, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { SMILEY_ASSISTANT_NAME } from "@/constants/smiley";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useToastStore } from "@/components/ui/toast";
 
@@ -21,7 +20,7 @@ export function Composer({
   onChange,
   onSend,
   disabled,
-  placeholder = `Message ${SMILEY_ASSISTANT_NAME}…`,
+  placeholder = "Message Support…",
 }: Props) {
   const { isDark } = useAppTheme();
   const showToast = useToastStore((s) => s.show);

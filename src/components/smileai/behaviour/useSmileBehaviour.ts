@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getSmileBootstrap } from "@/api/services/smileai";
 import type { SmileBootstrap } from "@/types/smileai";
+
+const BOOTSTRAP_CACHE_KEY = "smileai.bootstrap.cache";
+
+// Last-known bootstrap, kept across mounts (and on disk) so the welcome
+// screen renders the correct on/off variant instantly instead of flashing
+// the AI layout while the fetch is in flight.
+let memoryCache: SmileBootstrap | null = null;
 
 /**
  * Self-contained hook that fetches the admin-controlled chat-behaviour config
@@ -26,17 +34,38 @@ export interface SmileBehaviourController {
 }
 
 export function useSmileBehaviour(enabled = true): SmileBehaviourController {
-  const [bootstrap, setBootstrap] = useState<SmileBootstrap | null>(null);
+  const [bootstrap, setBootstrap] = useState<SmileBootstrap | null>(memoryCache);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const lastSentAtRef = useRef<number>(0);
+  const resolvedFreshRef = useRef(false);
 
   const load = useCallback(() => {
     if (!enabled) return;
     let cancelled = false;
+
+    if (!memoryCache) {
+      void AsyncStorage.getItem(BOOTSTRAP_CACHE_KEY)
+        .then((raw) => {
+          if (cancelled || resolvedFreshRef.current || !raw) return;
+          const parsed = JSON.parse(raw) as SmileBootstrap;
+          if (parsed && typeof parsed === "object") {
+            memoryCache = parsed;
+            setBootstrap((current) => current ?? parsed);
+          }
+        })
+        .catch(() => undefined);
+    }
+
     void getSmileBootstrap()
       .then((res) => {
         if (!cancelled && res?.success && res.data) {
+          resolvedFreshRef.current = true;
+          memoryCache = res.data;
           setBootstrap(res.data);
+          void AsyncStorage.setItem(
+            BOOTSTRAP_CACHE_KEY,
+            JSON.stringify(res.data),
+          ).catch(() => undefined);
         }
       })
       .catch(() => {

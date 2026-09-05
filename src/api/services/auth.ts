@@ -24,23 +24,18 @@ export async function checkPhoneAvailability(phoneNumber: string) {
   return data;
 }
 
-/**
- * Phone-first registration, step 1. Resolves only when the SMS was actually
- * handed off — the caller must not advance to the code screen on failure.
- * Response data carries `resend_cooldown_seconds` for the resend timer.
- */
 export async function requestPhoneVerification(phone_number: string) {
   const { data } = await api.post<
     ApiResponse<{
       resend_cooldown_seconds?: number;
       expires_in_seconds?: number;
       reused_existing_otp?: boolean;
+      already_verified?: boolean;
     }>
   >(`${AUTH}/request-phone-verification`, { phone_number });
   return data;
 }
 
-/** Phone-first registration, step 2: confirm the SMS code. */
 export async function verifyPhoneForRegistration(
   phone_number: string,
   otp: string,
@@ -117,6 +112,47 @@ export async function registerWithProfilePicture(
 
 export async function signIn(payload: SignInPayload) {
   const { data } = await api.post<ApiResponse<AuthResponse>>(`${AUTH}/signin`, payload);
+  return data;
+}
+
+// signin can pause with an email-OTP challenge instead of returning tokens.
+export interface LoginOtpChallenge {
+  requires_device_otp?: boolean;
+  requires_admin_otp?: boolean;
+  challenge_id?: string;
+  email_hint?: string;
+  resend_available_at?: string;
+}
+
+export async function verifyDeviceLoginOtp(challenge_id: string, otp: string) {
+  const { data } = await api.post<ApiResponse<AuthResponse>>(
+    `${AUTH}/verify-device-login-otp`,
+    { challenge_id, otp },
+  );
+  return data;
+}
+
+export async function resendDeviceLoginOtp(challenge_id: string) {
+  const { data } = await api.post<ApiResponse<LoginOtpChallenge>>(
+    `${AUTH}/resend-device-login-otp`,
+    { challenge_id },
+  );
+  return data;
+}
+
+export async function verifyAdminLoginOtp(challenge_id: string, otp: string) {
+  const { data } = await api.post<ApiResponse<AuthResponse>>(
+    `${AUTH}/verify-admin-login-otp`,
+    { challenge_id, otp },
+  );
+  return data;
+}
+
+export async function resendAdminLoginOtp(challenge_id: string) {
+  const { data } = await api.post<ApiResponse<LoginOtpChallenge>>(
+    `${AUTH}/resend-admin-login-otp`,
+    { challenge_id },
+  );
   return data;
 }
 

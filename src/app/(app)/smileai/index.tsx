@@ -253,7 +253,7 @@ export default function SmileLandingScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text className="text-base font-semibold">
-              Welcome to {SMILEY_ASSISTANT_NAME}, your SmiPay assistant
+              Welcome to {SMILEY_ASSISTANT_NAME}
             </Text>
             <Text
               className="mt-1 text-xs text-muted-foreground"

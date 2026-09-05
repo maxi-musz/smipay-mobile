@@ -22,7 +22,7 @@ export function SecurityNotice() {
   return (
     <View
       accessibilityRole="text"
-      accessibilityLabel={`You are chatting with ${SMILEY_ASSISTANT_NAME}, SmiPay's customer support. Fast, helpful answers — your messages are encrypted and securely stored.`}
+      accessibilityLabel={`You are chatting with ${SMILEY_ASSISTANT_NAME}. Fast, helpful answers — your messages are encrypted and securely stored.`}
       style={{
         flexDirection: "row",
         alignItems: "center",
@@ -44,7 +44,7 @@ export function SecurityNotice() {
           color: textColor,
         }}
       >
-        You're chatting with {SMILEY_ASSISTANT_NAME}, SmiPay's customer support — fast, helpful
+        You&apos;re chatting with {SMILEY_ASSISTANT_NAME} — fast, helpful
         answers, encrypted and securely stored.
       </Text>
     </View>

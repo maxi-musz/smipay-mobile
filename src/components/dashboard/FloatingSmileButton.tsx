@@ -152,7 +152,7 @@ export function FloatingSmileButton() {
           }}
           hitSlop={compact ? 8 : 10}
           accessibilityRole="button"
-          accessibilityLabel={`Open ${SMILEY_ASSISTANT_NAME}, your AI assistant`}
+          accessibilityLabel={`Open ${SMILEY_ASSISTANT_NAME}`}
         >
           <Animated.View
             style={[

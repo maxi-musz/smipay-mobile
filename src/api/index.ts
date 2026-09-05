@@ -7,6 +7,10 @@ export {
   register,
   registerWithProfilePicture,
   signIn,
+  verifyDeviceLoginOtp,
+  resendDeviceLoginOtp,
+  verifyAdminLoginOtp,
+  resendAdminLoginOtp,
   forgotPassword,
   verifyPasswordResetOtp,
   resetPassword,
@@ -14,6 +18,7 @@ export {
   logout,
   completeOnboarding,
 } from "./services/auth";
+export type { LoginOtpChallenge } from "./services/auth";
 
 export {
   fetchHomepageDetails,
