@@ -14,7 +14,8 @@
         "EXPO_PUBLIC_DATA_PROVIDER": "vtpass",
         "EXPO_PUBLIC_CABLE_TV_PROVIDER": "vtpass",
         "EXPO_PUBLIC_EDUCATION_PROVIDER": "vtpass",
-        "EXPO_PUBLIC_UTILITY_PROVIDER": "vtpass"
+        "EXPO_PUBLIC_UTILITY_PROVIDER": "vtpass",
+        "EXPO_PUBLIC_REQUEST_SIGNING_SECRET":"c79a5879f3355adbccdef6c9eac1f2edc3496528dfd1304b08442826347b90ce"
       }
     },
     "staging": {
@@ -29,7 +30,8 @@
         "EXPO_PUBLIC_DATA_PROVIDER": "vtpass",
         "EXPO_PUBLIC_CABLE_TV_PROVIDER": "vtpass",
         "EXPO_PUBLIC_EDUCATION_PROVIDER": "vtpass",
-        "EXPO_PUBLIC_UTILITY_PROVIDER": "vtpass"
+        "EXPO_PUBLIC_UTILITY_PROVIDER": "vtpass",
+        "EXPO_PUBLIC_REQUEST_SIGNING_SECRET":"c79a5879f3355adbccdef6c9eac1f2edc3496528dfd1304b08442826347b90ce"
       }
     },
     "production": {
@@ -44,7 +46,8 @@
         "EXPO_PUBLIC_DATA_PROVIDER": "vtpass",
         "EXPO_PUBLIC_CABLE_TV_PROVIDER": "vtpass",
         "EXPO_PUBLIC_EDUCATION_PROVIDER": "vtpass",
-        "EXPO_PUBLIC_UTILITY_PROVIDER": "vtpass"
+        "EXPO_PUBLIC_UTILITY_PROVIDER": "vtpass",
+        "EXPO_PUBLIC_REQUEST_SIGNING_SECRET":"c79a5879f3355adbccdef6c9eac1f2edc3496528dfd1304b08442826347b90ce"
       }
     }
   },

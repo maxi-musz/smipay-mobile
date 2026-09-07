@@ -29,8 +29,13 @@ export async function postMultipart<T>({
   parameters,
 }: MultipartUploadOptions): Promise<T> {
   const uploadFile = await prepareUploadableFile(file);
-  const headers = await buildRequestHeaders();
   const url = `${API_BASE_URL}${path}`;
+  // The native uploader encodes the body, so only method and path are signed.
+  const headers = await buildRequestHeaders({
+    method: "POST",
+    path: new URL(url).pathname,
+    multipart: true,
+  });
 
   if (__DEV__) {
     console.log(`→ UPLOAD POST ${url}`);

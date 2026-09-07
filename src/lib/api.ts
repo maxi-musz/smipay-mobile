@@ -10,24 +10,70 @@ const REQUEST_SIGNING_SECRET =
   process.env.EXPO_PUBLIC_REQUEST_SIGNING_SECRET ?? "";
 
 /**
- * Required on every API call — backend endpoints that use SecurityHeadersGuard
- * (including `POST …/transaction-pin/verify` at checkout) reject requests without it.
+ * Request signing — v1. Must stay byte-identical to
+ * `backend/src/common/request-signing/request-signature.ts`.
  *
- * Uses the **same secret** as the server expects for HMAC of `timestamp.nonce`.
- * Set `EXPO_PUBLIC_REQUEST_SIGNING_SECRET` in `mobile/.env` (typically same value as backend env).
+ * Signs `v1:METHOD:path:timestamp:nonce:sha256(body)`, so a captured signature
+ * is useless on another endpoint or payload.
+ *
+ * `EXPO_PUBLIC_REQUEST_SIGNING_SECRET` must equal the backend's
+ * `REQUEST_SIGNING_SECRET` — different names, same value.
  */
-function computeRequestSignature(timestamp: string, nonce: string): string {
-  if (!REQUEST_SIGNING_SECRET.trim()) {
+const SIGNATURE_VERSION = "v1";
+
+/** Sentinel for multipart bodies neither side can hash. */
+const UNHASHED_BODY = "multipart";
+
+const EMPTY_BODY_HASH = CryptoJS.SHA256("").toString(CryptoJS.enc.Hex);
+
+export type SigningTarget = {
+  method: string;
+  /** Path as the server sees it, including `/api/v1`. */
+  path: string;
+  /** Exact serialised body, or null. */
+  body?: string | null;
+  /** Multipart uploads, whose encoded bytes the client never sees. */
+  multipart?: boolean;
+};
+
+function assertSecret(): string {
+  const secret = REQUEST_SIGNING_SECRET.trim();
+  if (!secret) {
     throw new Error(
-      "Missing EXPO_PUBLIC_REQUEST_SIGNING_SECRET — add it to mobile/.env (must match backend). " +
+      "Missing EXPO_PUBLIC_REQUEST_SIGNING_SECRET — add it to mobile/.env (must match the backend's REQUEST_SIGNING_SECRET). " +
         "Signed requests cannot complete without X-Signature.",
     );
   }
-  const message = `${timestamp}.${nonce}`;
-  return CryptoJS.HmacSHA256(
-    message,
-    REQUEST_SIGNING_SECRET,
-  ).toString(CryptoJS.enc.Hex);
+  return secret;
+}
+
+/** Path without query string or trailing slash, as the server does. */
+function canonicalPath(path: string): string {
+  const withoutQuery = path.split("?")[0] ?? "";
+  const trimmed = withoutQuery.replace(/\/+$/, "");
+  return trimmed.length > 0 ? trimmed : "/";
+}
+
+function bodyHashFor(target: SigningTarget): string {
+  if (target.multipart) return UNHASHED_BODY;
+  if (!target.body) return EMPTY_BODY_HASH;
+  return CryptoJS.SHA256(target.body).toString(CryptoJS.enc.Hex);
+}
+
+function computeRequestSignature(
+  timestamp: string,
+  nonce: string,
+  target: SigningTarget,
+): string {
+  const message = [
+    SIGNATURE_VERSION,
+    target.method.toUpperCase(),
+    canonicalPath(target.path),
+    timestamp,
+    nonce,
+    bodyHashFor(target),
+  ].join(":");
+  return CryptoJS.HmacSHA256(message, assertSecret()).toString(CryptoJS.enc.Hex);
 }
 
 const BASE_URL = __DEV__
@@ -50,8 +96,13 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-/** Auth, signing, device, and location headers shared by axios and native uploads. */
-export async function buildRequestHeaders(): Promise<Record<string, string>> {
+/**
+ * Auth, signing, device and location headers, shared by axios and native
+ * uploads. `target` is required — a v1 signature is bound to the request.
+ */
+export async function buildRequestHeaders(
+  target: SigningTarget,
+): Promise<Record<string, string>> {
   const headers: Record<string, string> = {};
 
   const timestamp = String(Date.now());
@@ -59,7 +110,8 @@ export async function buildRequestHeaders(): Promise<Record<string, string>> {
   headers["X-Timestamp"] = timestamp;
   headers["X-Nonce"] = nonce;
   headers["X-Request-ID"] = nonce;
-  headers["X-Signature"] = computeRequestSignature(timestamp, nonce);
+  headers["X-Signature-Version"] = SIGNATURE_VERSION;
+  headers["X-Signature"] = computeRequestSignature(timestamp, nonce, target);
 
   try {
     const device = await getDeviceMetadata();
@@ -88,12 +140,51 @@ export async function buildRequestHeaders(): Promise<Record<string, string>> {
 
 // ── Request interceptor ──────────────────────────────────────────
 
+/** The path the server will see, so both sides sign the same string. */
+function signedPathFor(url: string | undefined): string {
+  const raw = url ?? "";
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      return new URL(raw).pathname;
+    } catch {
+      return raw;
+    }
+  }
+  return `${API_VERSION}${raw.startsWith("/") ? raw : `/${raw}`}`;
+}
+
+/**
+ * Serialise the body as axios will put it on the wire, so the digest matches
+ * the bytes the server hashes. FormData and streams count as unhashable.
+ */
+function serialisedBodyFor(data: unknown): {
+  body: string | null;
+  multipart: boolean;
+} {
+  if (data == null) return { body: null, multipart: false };
+  if (typeof data === "string") return { body: data, multipart: false };
+  if (typeof FormData !== "undefined" && data instanceof FormData) {
+    return { body: null, multipart: true };
+  }
+  try {
+    return { body: JSON.stringify(data), multipart: false };
+  } catch {
+    return { body: null, multipart: true };
+  }
+}
+
 api.interceptors.request.use(async (config) => {
   if (__DEV__) {
     console.log(`→ ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
   }
 
-  const headers = await buildRequestHeaders();
+  const { body, multipart } = serialisedBodyFor(config.data);
+  const headers = await buildRequestHeaders({
+    method: config.method ?? "get",
+    path: signedPathFor(config.url),
+    body,
+    multipart,
+  });
   Object.assign(config.headers, headers);
 
   return config;
