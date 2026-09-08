@@ -240,14 +240,14 @@ export default function ForgotPasswordScreen() {
       ? "Forgot password?"
       : step === "code"
         ? "Enter reset code"
-        : "Set a new password";
+        : "Set a new login PIN";
 
   const subtitle =
     step === "email"
       ? "Enter your account email and we'll send a reset code."
       : step === "code"
         ? `We sent a 6-digit code to ${email}.`
-        : `Choose a new ${AUTH_PASSWORD_DIGITS}-digit login password.`;
+        : `Choose a new ${AUTH_PASSWORD_DIGITS}-digit login PIN.`;
 
   return (
     <AuthShell
@@ -354,7 +354,7 @@ export default function ForgotPasswordScreen() {
       ) : (
         <View className="mt-9">
           <Text className="text-[13px] font-medium text-muted-foreground">
-            New {AUTH_PASSWORD_DIGITS}-digit password
+            New {AUTH_PASSWORD_DIGITS}-digit login PIN
           </Text>
           <PinDots
             value={newPassword.value}
@@ -370,7 +370,7 @@ export default function ForgotPasswordScreen() {
             </Text>
           ) : (
             <Text className="mt-4 text-sm text-muted-foreground">
-              This replaces the password you use to sign in.
+              This replaces the login PIN you use to sign in.
             </Text>
           )}
 

@@ -234,7 +234,7 @@ export default function SignInScreen() {
 
   async function handleSignIn(value: string = pin.value) {
     if (!value) {
-      setErrors({ password: "Password is required" });
+      setErrors({ password: "Login PIN is required" });
       setShakeKey((k) => k + 1);
       return;
     }
@@ -277,7 +277,7 @@ export default function SignInScreen() {
       pin.clear();
       setShakeKey((k) => k + 1);
       if (e instanceof ApiClientError && e.statusCode === 401) {
-        setErrors({ password: e.message || "Incorrect password. Please try again." });
+        setErrors({ password: e.message || "Incorrect login PIN. Please try again." });
       } else {
         handleApiError(e);
       }
@@ -425,7 +425,7 @@ export default function SignInScreen() {
         step === "identifier"
           ? "Welcome back"
           : step === "password"
-            ? "Enter your password"
+            ? "Enter your login PIN"
             : "Check your email"
       }
       subtitle={
@@ -547,7 +547,7 @@ export default function SignInScreen() {
       ) : step === "password" ? (
         <View className="mt-9">
           <Text className="text-[13px] font-medium text-muted-foreground">
-            {AUTH_PASSWORD_DIGITS}-digit password
+            {AUTH_PASSWORD_DIGITS}-digit login PIN
           </Text>
           <PinDots
             value={pin.value}

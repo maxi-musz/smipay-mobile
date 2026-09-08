@@ -1,4 +1,4 @@
-/** Matches backend `new-auth`: password is exactly 6 digits (0–9). */
+/** Matches backend: login PIN is exactly 6 digits (0–9). */
 export const AUTH_PASSWORD_DIGITS = 6;
 
 /** Email verification & password-reset codes from the API */

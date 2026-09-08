@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler, Pressable, View } from "react-native";
+import { ActivityIndicator, BackHandler, Keyboard, Pressable, View } from "react-native";
 import { Link, router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -31,7 +31,11 @@ import { ApiClientError } from "@/lib/api";
 import { getDeviceId } from "@/lib/device";
 import { formatCountdown } from "@/lib/format-countdown";
 import { setAnalyticsUser } from "@/lib/analytics";
-import { AUTH_OTP_DIGITS } from "@/lib/auth-password";
+import {
+  AUTH_OTP_DIGITS,
+  AUTH_PASSWORD_DIGITS,
+  isAuthPasswordValid,
+} from "@/lib/auth-password";
 import {
   clearBvnRegDraft,
   loadBvnRegDraft,
@@ -45,7 +49,6 @@ const EMAIL_RE = /\S+@\S+\.\S+/;
 
 const OTP_LENGTH = 6;
 const BVN_LENGTH = 11;
-const MIN_PASSWORD = 6;
 const PIN_DIGITS = 4;
 
 type Step = "bvn" | "review" | "otp" | "liveness" | "details";
@@ -88,7 +91,7 @@ export function BvnLivenessSignUp() {
     "unverified" | "code_sent" | "verified"
   >("unverified");
   const [emailCode, setEmailCode] = useState("");
-  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailBusy, setEmailBusy] = useState<"off" | "send" | "confirm">("off");
   const [password, setPassword] = useState("");
   const [pin, setPin] = useState("");
   const [agree, setAgree] = useState(false);
@@ -313,8 +316,8 @@ export function BvnLivenessSignUp() {
     if (!sessionToken || busy) return;
     if (!email.trim()) return flag("Enter your email.");
     if (emailStage !== "verified") return flag("Verify your email first.");
-    if (password.length < MIN_PASSWORD)
-      return flag(`Password must be at least ${MIN_PASSWORD} characters.`);
+    if (!isAuthPasswordValid(password))
+      return flag(`Login PIN must be exactly ${AUTH_PASSWORD_DIGITS} digits.`);
     if (!agree) return flag("Please accept the terms to continue.");
     setBusy(true);
     setError(null);
@@ -348,14 +351,15 @@ export function BvnLivenessSignUp() {
 
   const handleSendEmailCode = useCallback(async () => {
     const trimmed = email.trim().toLowerCase();
-    if (!EMAIL_RE.test(trimmed) || emailBusy || cooldown > 0) return;
-    setEmailBusy(true);
+    if (!EMAIL_RE.test(trimmed) || emailBusy !== "off" || cooldown > 0) return;
+    setEmailBusy("send");
     setError(null);
     try {
       const res = await requestEmailVerification(trimmed);
       if (res.data?.already_verified) {
         setEmailStage("verified");
         persistDraft({ email: trimmed, emailVerified: true });
+        showToast({ variant: "success", title: "Email verified" });
         return;
       }
       setEmailCode("");
@@ -365,31 +369,32 @@ export function BvnLivenessSignUp() {
       showToast({
         variant: "success",
         title: "Code sent",
-        message: `We emailed a code to ${trimmed}.`,
+        message: `Check ${trimmed} for a 6-digit code.`,
       });
     } catch (e) {
       startCooldown(retryAfterSeconds(e));
       handleApiError(e);
     } finally {
-      setEmailBusy(false);
+      setEmailBusy("off");
     }
   }, [email, emailBusy, cooldown, persistDraft, startCooldown, showToast]);
 
   const handleConfirmEmailCode = useCallback(async () => {
-    if (emailCode.length !== AUTH_OTP_DIGITS || emailBusy) return;
-    setEmailBusy(true);
+    if (emailCode.length !== AUTH_OTP_DIGITS || emailBusy !== "off") return;
+    setEmailBusy("confirm");
     setError(null);
     try {
       await verifyEmailForRegistration(email.trim().toLowerCase(), emailCode);
       setEmailStage("verified");
       persistDraft({ email: email.trim().toLowerCase(), emailVerified: true });
+      showToast({ variant: "success", title: "Email verified" });
     } catch (e) {
       setEmailCode("");
       flag(e instanceof ApiClientError ? e.message : "That code didn't work.");
     } finally {
-      setEmailBusy(false);
+      setEmailBusy("off");
     }
-  }, [email, emailCode, emailBusy, persistDraft]);
+  }, [email, emailCode, emailBusy, persistDraft, showToast]);
 
   const handleBack = useCallback(() => {
     if (busy) return;
@@ -461,13 +466,13 @@ export function BvnLivenessSignUp() {
           ? `We sent a ${OTP_LENGTH}-digit code to ${maskedPhone}, the number on your BVN.`
           : step === "liveness"
             ? "One selfie confirms a real person is opening this account."
-            : "Just your email and a password to finish.";
+            : "Just your email and a login PIN to finish.";
 
   const canSubmitBvn = bvn.length === BVN_LENGTH && !busy;
   const canSubmitDetails =
     Boolean(email.trim()) &&
     emailStage === "verified" &&
-    password.length >= MIN_PASSWORD &&
+    isAuthPasswordValid(password) &&
     agree &&
     !busy;
 
@@ -491,6 +496,28 @@ export function BvnLivenessSignUp() {
       onBack={step === "details" ? undefined : handleBack}
       backDisabled={busy}
       showVersion={step === "bvn"}
+      footer={
+        step === "details" ? (
+          <View className="gap-2">
+            {error ? (
+              <Text className="text-sm font-medium text-destructive">{error}</Text>
+            ) : null}
+            <View className="flex-row items-center justify-between">
+              <Text className="flex-1 pr-4 text-sm text-muted-foreground">
+                Create your SmiPay account
+              </Text>
+              <ArrowButton
+                label="Create account"
+                onPress={() => void handleComplete()}
+                disabled={!canSubmitDetails}
+                loading={busy}
+                accessibilityLabel="Create account"
+                testID="bvn-sign-up-submit"
+              />
+            </View>
+          </View>
+        ) : undefined
+      }
       bottom={
         step === "otp" ? (
           <KeypadDock secure title="SmiPay Secure Keypad">
@@ -653,48 +680,47 @@ export function BvnLivenessSignUp() {
           />
         </View>
       ) : (
-        <View className="mt-6 gap-4">
+        <View className="mt-6 gap-5">
           {fullName ? (
-            <View className="flex-row items-center justify-between rounded-xl border border-border bg-muted/40 px-3 py-2.5">
-              <View className="flex-row items-center gap-1.5">
-                <Ionicons
-                  name="checkmark-circle"
-                  size={16}
-                  color={colors.orange[500]}
-                />
-                <Text className="text-xs text-muted-foreground">Verified</Text>
-              </View>
-              <Text className="flex-1 text-right text-sm font-medium" numberOfLines={1}>
-                {fullName}
-              </Text>
-            </View>
+            <Text className="text-sm text-muted-foreground" numberOfLines={1}>
+              Opening as{" "}
+              <Text className="font-medium text-foreground">{fullName}</Text>
+            </Text>
           ) : null}
 
           <View>
-            <View className="flex-row items-end gap-3">
-              <View className="flex-1">
-                <Input
-                  label="Email address"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChangeText={(v) => {
-                    setEmail(v);
-                    if (error) setError(null);
-                    if (emailStage !== "unverified") {
-                      setEmailStage("unverified");
-                      setEmailCode("");
-                    }
-                  }}
-                  editable={emailStage !== "verified"}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  textContentType="emailAddress"
-                  returnKeyType="done"
-                />
-              </View>
+            <Input
+              label="Email address"
+              placeholder="you@example.com"
+              value={email}
+              onChangeText={(v) => {
+                setEmail(v);
+                if (error) setError(null);
+                if (emailStage !== "unverified") {
+                  setEmailStage("unverified");
+                  setEmailCode("");
+                }
+              }}
+              editable={emailStage !== "verified"}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              textContentType="emailAddress"
+              returnKeyType="done"
+              onSubmitEditing={() => void handleSendEmailCode()}
+            />
+            <View className="mt-2 flex-row items-center justify-between gap-3">
+              <Text className="flex-1 text-xs text-muted-foreground">
+                {emailBusy === "send"
+                  ? "Sending your code. This can take a few seconds."
+                  : emailStage === "verified"
+                    ? "This email is verified."
+                    : emailStage === "code_sent"
+                      ? "Enter the 6-digit code we sent."
+                      : "We'll send a code to confirm this address."}
+              </Text>
               {emailStage === "verified" ? (
-                <View className="mb-1 flex-row items-center gap-1 rounded-full bg-muted px-2.5 py-1.5">
+                <View className="flex-row items-center gap-1">
                   <Ionicons
                     name="checkmark-circle"
                     size={15}
@@ -706,127 +732,130 @@ export function BvnLivenessSignUp() {
                 <Pressable
                   onPress={() => void handleSendEmailCode()}
                   disabled={
-                    emailBusy || cooldown > 0 || !EMAIL_RE.test(email.trim())
+                    emailBusy !== "off" || cooldown > 0 || !EMAIL_RE.test(email.trim())
                   }
-                  className={`mb-1 rounded-full px-3.5 py-2 ${
-                    emailBusy || cooldown > 0 || !EMAIL_RE.test(email.trim())
-                      ? "bg-muted"
-                      : "bg-primary"
-                  }`}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    emailStage === "code_sent" ? "Resend email code" : "Send email code"
+                  }
+                  className="min-w-[72px] flex-row items-center justify-center gap-1.5 py-1"
                 >
+                  {emailBusy === "send" ? (
+                    <ActivityIndicator size="small" color={colors.orange[500]} />
+                  ) : null}
                   <Text
                     className={`text-xs font-semibold ${
-                      emailBusy || cooldown > 0 || !EMAIL_RE.test(email.trim())
+                      emailBusy !== "off" || cooldown > 0 || !EMAIL_RE.test(email.trim())
                         ? "text-muted-foreground"
-                        : "text-primary-foreground"
+                        : "text-primary"
                     }`}
                   >
-                    {cooldown > 0
-                      ? formatCountdown(cooldown)
-                      : emailStage === "code_sent"
-                        ? "Resend"
-                        : "Verify"}
+                    {emailBusy === "send"
+                      ? "Sending…"
+                      : cooldown > 0
+                        ? formatCountdown(cooldown)
+                        : emailStage === "code_sent"
+                          ? "Resend"
+                          : "Send code"}
                   </Text>
                 </Pressable>
               )}
             </View>
             {emailStage === "code_sent" ? (
-              <View className="mt-3 flex-row items-end gap-3">
-                <View className="flex-1">
-                  <Input
-                    label="Email code"
-                    placeholder={`${AUTH_OTP_DIGITS}-digit code`}
-                    value={emailCode}
-                    onChangeText={(v) =>
-                      setEmailCode(v.replace(/\D/g, "").slice(0, AUTH_OTP_DIGITS))
-                    }
-                    keyboardType="number-pad"
-                    maxLength={AUTH_OTP_DIGITS}
-                  />
-                </View>
-                <Pressable
-                  onPress={() => void handleConfirmEmailCode()}
-                  disabled={emailCode.length !== AUTH_OTP_DIGITS || emailBusy}
-                  className={`mb-1 rounded-full px-3.5 py-2 ${
-                    emailCode.length !== AUTH_OTP_DIGITS || emailBusy
-                      ? "bg-muted"
-                      : "bg-primary"
-                  }`}
-                >
-                  <Text
-                    className={`text-xs font-semibold ${
-                      emailCode.length !== AUTH_OTP_DIGITS || emailBusy
-                        ? "text-muted-foreground"
-                        : "text-primary-foreground"
-                    }`}
-                  >
-                    Confirm
+              <View className="mt-4">
+                <Input
+                  label="Email code"
+                  placeholder={`${AUTH_OTP_DIGITS}-digit code`}
+                  value={emailCode}
+                  onChangeText={(v) =>
+                    setEmailCode(v.replace(/\D/g, "").slice(0, AUTH_OTP_DIGITS))
+                  }
+                  keyboardType="number-pad"
+                  maxLength={AUTH_OTP_DIGITS}
+                  returnKeyType="done"
+                  onSubmitEditing={() => void handleConfirmEmailCode()}
+                />
+                <View className="mt-2 flex-row items-center justify-between">
+                  <Text className="text-xs text-muted-foreground">
+                    {emailBusy === "confirm" ? "Checking the code…" : "From the email we just sent."}
                   </Text>
-                </Pressable>
+                  <Pressable
+                    onPress={() => void handleConfirmEmailCode()}
+                    disabled={emailCode.length !== AUTH_OTP_DIGITS || emailBusy !== "off"}
+                    accessibilityRole="button"
+                    accessibilityLabel="Confirm email code"
+                    className="min-w-[72px] flex-row items-center justify-center gap-1.5 py-1"
+                  >
+                    {emailBusy === "confirm" ? (
+                      <ActivityIndicator size="small" color={colors.orange[500]} />
+                    ) : null}
+                    <Text
+                      className={`text-xs font-semibold ${
+                        emailCode.length !== AUTH_OTP_DIGITS || emailBusy !== "off"
+                          ? "text-muted-foreground"
+                          : "text-primary"
+                      }`}
+                    >
+                      {emailBusy === "confirm" ? "Checking…" : "Confirm"}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
             ) : null}
           </View>
 
-          <Input
-            label="Password"
-            placeholder={`At least ${MIN_PASSWORD} characters`}
-            value={password}
-            onChangeText={(v) => {
-              setPassword(v);
-              if (error) setError(null);
-            }}
-            secureTextEntry
-            toggleable
-            returnKeyType="next"
-          />
+          {emailStage === "verified" ? (
+            <>
+              <Input
+                label="Login PIN"
+                placeholder={`${AUTH_PASSWORD_DIGITS} digits`}
+                value={password}
+                onChangeText={(v) => {
+                  setPassword(v.replace(/\D/g, "").slice(0, AUTH_PASSWORD_DIGITS));
+                  if (error) setError(null);
+                }}
+                secureTextEntry
+                toggleable
+                keyboardType="number-pad"
+                maxLength={AUTH_PASSWORD_DIGITS}
+                returnKeyType="done"
+                blurOnSubmit
+              />
 
-          <View>
-            <Input
-              label="Transaction PIN (optional)"
-              placeholder={`${PIN_DIGITS} digits`}
-              value={pin}
-              onChangeText={(t) => setPin(t.replace(/\D/g, "").slice(0, PIN_DIGITS))}
-              keyboardType="number-pad"
-              maxLength={PIN_DIGITS}
-              secureTextEntry
-              returnKeyType="done"
-            />
-            <Text className="mt-1.5 text-xs text-muted-foreground">
-              Used to approve payments. You can set this later in Settings.
-            </Text>
-          </View>
+              <View>
+                <Input
+                  label="Transaction PIN (optional)"
+                  placeholder={`${PIN_DIGITS} digits`}
+                  value={pin}
+                  onChangeText={(t) => setPin(t.replace(/\D/g, "").slice(0, PIN_DIGITS))}
+                  keyboardType="number-pad"
+                  maxLength={PIN_DIGITS}
+                  secureTextEntry
+                  toggleable
+                  returnKeyType="done"
+                  blurOnSubmit
+                />
+                <Text className="mt-1.5 text-xs text-muted-foreground">
+                  For payments. You can set this later in Settings.
+                </Text>
+              </View>
 
-          <Pressable
-            className="flex-row items-start gap-3"
-            onPress={() => {
-              setAgree((a) => !a);
-              if (error) setError(null);
-            }}
-          >
-            <Checkbox checked={agree} />
-            <Text className="flex-1 text-sm text-muted-foreground">
-              I agree to the <Text className="text-sm text-primary">Terms of Service</Text> and{" "}
-              <Text className="text-sm text-primary">Privacy Policy</Text>
-            </Text>
-          </Pressable>
-
-          {error ? (
-            <Text className="text-sm font-medium text-destructive">{error}</Text>
+              <Pressable
+                className="flex-row items-start gap-3"
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setAgree((a) => !a);
+                  if (error) setError(null);
+                }}
+              >
+                <Checkbox checked={agree} />
+                <Text className="flex-1 text-sm text-muted-foreground">
+                  I agree to the <Text className="text-sm text-primary">Terms of Service</Text> and{" "}
+                  <Text className="text-sm text-primary">Privacy Policy</Text>
+                </Text>
+              </Pressable>
+            </>
           ) : null}
-
-          <View className="mt-2 flex-row items-center justify-between">
-            <Text className="flex-1 pr-4 text-sm text-muted-foreground">
-              Create your SmiPay account
-            </Text>
-            <ArrowButton
-              label="Create account"
-              onPress={() => void handleComplete()}
-              disabled={!canSubmitDetails}
-              loading={busy}
-              accessibilityLabel="Create account"
-              testID="bvn-sign-up-submit"
-            />
-          </View>
         </View>
       )}
     </AuthShell>

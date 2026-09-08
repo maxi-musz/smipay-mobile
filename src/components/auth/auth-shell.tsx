@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
-import { Image, Pressable, View } from "react-native";
+import { Image, Platform, Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
@@ -9,6 +10,9 @@ import { Text } from "@/components/ui/text";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { useCompactScreen } from "@/hooks/use-compact-screen";
 import { getAppVersionLabel } from "@/lib/app-version";
+
+/** Keeps the focused field above a pinned footer + the system keyboard. */
+const FOOTER_INPUT_CLEARANCE = 96;
 
 export interface AuthShellProps {
   title: string;
@@ -60,6 +64,7 @@ export function AuthShell({
   // On short screens the brand lockup is the cheapest thing to drop — it frees
   // ~50 dp so the field + primary button clear the keypad without scrolling.
   const brand = showBrand && !compact;
+  const liftFooterForKeyboard = Boolean(footer) && !bottom;
 
   return (
     <View testID={testID} className="flex-1 bg-background">
@@ -105,8 +110,12 @@ export function AuthShell({
           paddingHorizontal: 24,
           paddingBottom: compact ? 12 : 24,
         }}
-        keyboardDismissMode="on-drag"
-        bottomOffset={28}
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
+        automaticallyAdjustKeyboardInsets={false}
+        bottomOffset={footer ? FOOTER_INPUT_CLEARANCE : 28}
+        extraKeyboardSpace={Platform.OS === "android" ? 20 : 0}
       >
         {brand ? (
           <Animated.View
@@ -160,7 +169,22 @@ export function AuthShell({
         </Animated.View>
       </KeyboardAwareScrollView>
 
-      {footer ? <View className="px-6 pb-2">{footer}</View> : null}
+      {footer ? (
+        liftFooterForKeyboard ? (
+          <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
+            <View
+              className="border-t border-border bg-background px-6 pt-3"
+              style={{ paddingBottom: Math.max(insets.bottom, 10) }}
+            >
+              {footer}
+            </View>
+          </KeyboardStickyView>
+        ) : (
+          <View className="border-t border-border bg-background px-6 pt-3 pb-2">
+            {footer}
+          </View>
+        )
+      ) : null}
 
       {showVersion && version ? (
         <Text className="pb-2 text-center text-xs text-muted-foreground">
@@ -168,9 +192,10 @@ export function AuthShell({
         </Text>
       ) : null}
 
-      {bottom ?? (
-        <View style={{ height: Math.max(insets.bottom, 8) }} />
-      )}
+      {bottom ??
+        (footer ? null : (
+          <View style={{ height: Math.max(insets.bottom, 8) }} />
+        ))}
     </View>
   );
 }

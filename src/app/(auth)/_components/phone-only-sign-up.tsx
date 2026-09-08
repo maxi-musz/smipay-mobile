@@ -477,6 +477,23 @@ export function PhoneOnlySignUp() {
       title={title}
       subtitle={subtitle}
       showVersion={step === "phone"}
+      footer={
+        step === "profile" ? (
+          <View className="flex-row items-center justify-between">
+            <Text className="flex-1 pr-4 text-sm text-muted-foreground">
+              Create your SmiPay account
+            </Text>
+            <ArrowButton
+              label="Create account"
+              onPress={handleRegister}
+              disabled={!canSubmitProfile}
+              loading={loading}
+              accessibilityLabel="Create account"
+              testID="sign-up-submit"
+            />
+          </View>
+        ) : undefined
+      }
       bottom={
         step === "otp" ? (
           <KeypadDock secure title="SmiPay Secure Keypad">
@@ -816,8 +833,8 @@ export function PhoneOnlySignUp() {
 
           <Input
             ref={passwordRef}
-            label="Login password"
-            placeholder="6-digit login password"
+            label="Login PIN"
+            placeholder="6-digit login PIN"
             value={password}
             onChangeText={(v) => {
               setPassword(v.replace(/\D/g, "").slice(0, AUTH_PASSWORD_DIGITS));
@@ -850,7 +867,7 @@ export function PhoneOnlySignUp() {
               returnKeyType="done"
             />
             <Text className="mt-1.5 text-xs text-muted-foreground">
-              {AUTH_PASSWORD_DIGITS}-digit password to log in ·{" "}
+              {AUTH_PASSWORD_DIGITS}-digit login PIN to sign in ·{" "}
               {TRANSACTION_PIN_DIGITS}-digit PIN to approve payments
             </Text>
           </View>
@@ -916,20 +933,6 @@ export function PhoneOnlySignUp() {
           {errors.terms && (
             <Text className="text-xs text-destructive">{errors.terms}</Text>
           )}
-
-          <View className="mt-2 flex-row items-center justify-between">
-            <Text className="flex-1 pr-4 text-sm text-muted-foreground">
-              Create your SmiPay account
-            </Text>
-            <ArrowButton
-              label="Create account"
-              onPress={handleRegister}
-              disabled={!canSubmitProfile}
-              loading={loading}
-              accessibilityLabel="Create account"
-              testID="sign-up-submit"
-            />
-          </View>
         </View>
       )}
 
