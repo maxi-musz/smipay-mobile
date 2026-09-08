@@ -17,9 +17,9 @@ export async function fetchActiveRegistrationFlow(): Promise<
 export interface StartBvnRegData {
   session_token: string;
   masked_phone: string;
-  expires_in_seconds: number;
   resend_cooldown_seconds: number;
-  next_step: string;
+  otp_pending: boolean;
+  next_step: "review" | "otp";
 }
 
 export async function startBvnRegistration(
@@ -30,6 +30,23 @@ export async function startBvnRegistration(
     bvn,
     device_id: deviceId,
   });
+  return data;
+}
+
+export interface SendBvnRegOtpData {
+  masked_phone: string;
+  expires_in_seconds: number;
+  resend_cooldown_seconds: number;
+  next_step: "otp";
+}
+
+export async function sendBvnRegOtp(
+  sessionToken: string,
+): Promise<ApiResponse<SendBvnRegOtpData>> {
+  const { data } = await api.post<ApiResponse<SendBvnRegOtpData>>(
+    `${BVN}/send-otp`,
+    { session_token: sessionToken },
+  );
   return data;
 }
 

@@ -8,8 +8,8 @@ import { LivenessCheck } from "@/components/liveness";
 <LivenessCheck
   sessionToken={sessionToken}
   bvn={bvn}
-  isDark={isDark}
   fullName={fullName}
+  hideHeading            {/* the host screen renders the title */}
   onPassed={() => setStep("details")}
   onRestart={(msg) => { showToast(msg); setStep("bvn"); }}
 />
@@ -61,8 +61,8 @@ server's own message (already written for users — don't rewrite it here).
 ## Dependencies
 
 `expo-image-picker` only, already in the app with camera permission declared in
-`app.json`. **No new native module, so this ships over-the-air.** Styling is
-plain `StyleSheet` on purpose — no design-system coupling to drift against.
+`app.json`. **No new native module, so this ships over-the-air.** Styling uses
+the design system so it matches the registration steps either side of it.
 
 ## Privacy
 

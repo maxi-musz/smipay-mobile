@@ -131,11 +131,13 @@ export {
 export {
   fetchActiveRegistrationFlow,
   startBvnRegistration,
+  sendBvnRegOtp,
   verifyBvnRegOtp,
   submitBvnLiveness,
   completeBvnRegistration,
   type RegistrationFlow,
   type StartBvnRegData,
+  type SendBvnRegOtpData,
   type VerifyBvnRegData,
   type CompleteBvnRegData,
 } from "./services/registration";
