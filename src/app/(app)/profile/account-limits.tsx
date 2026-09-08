@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 
 import { FullPageLoader } from "@/components/ui/loaders";
+import { BvnVerificationCard } from "@/components/kyc/bvn-verification-card";
 import { Text } from "@/components/ui/text";
 import { useToastStore } from "@/components/ui/toast";
 import { colors } from "@/constants/colors";
@@ -311,6 +312,8 @@ export default function AccountLimitsScreen() {
               color={isDark ? "#94A3B8" : "#9CA3AF"}
             />
           </Pressable>
+
+          <BvnVerificationCard />
 
           <Text className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
             Level benefits

@@ -123,3 +123,19 @@ export {
   verifyPhoneVerificationOtp,
   updatePhoneVerificationNumber,
 } from "./services/kyc-verification";
+export {
+  fetchBvnStatus,
+  requestBvnOtp,
+  verifyBvnOtp,
+} from "./services/bvn-verification";
+export {
+  fetchActiveRegistrationFlow,
+  startBvnRegistration,
+  verifyBvnRegOtp,
+  submitBvnLiveness,
+  completeBvnRegistration,
+  type RegistrationFlow,
+  type StartBvnRegData,
+  type VerifyBvnRegData,
+  type CompleteBvnRegData,
+} from "./services/registration";
