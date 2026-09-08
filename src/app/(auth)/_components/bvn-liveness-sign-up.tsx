@@ -8,6 +8,9 @@ import {
   sendBvnRegOtp,
   verifyBvnRegOtp,
   completeBvnRegistration,
+  requestEmailVerification,
+  verifyEmailForRegistration,
+  type StartBvnRegData,
   type VerifyBvnRegData,
 } from "@/api";
 import { AuthShell } from "@/components/auth/auth-shell";
@@ -28,8 +31,17 @@ import { ApiClientError } from "@/lib/api";
 import { getDeviceId } from "@/lib/device";
 import { formatCountdown } from "@/lib/format-countdown";
 import { setAnalyticsUser } from "@/lib/analytics";
+import { AUTH_OTP_DIGITS } from "@/lib/auth-password";
+import {
+  clearBvnRegDraft,
+  loadBvnRegDraft,
+  saveBvnRegDraft,
+} from "@/lib/bvn-reg-draft";
+import { handleApiError } from "@/lib/errors/error-handler";
 import { useOtpTimings } from "@/features/app-bootstrap";
 import { useAuthStore } from "@/store";
+
+const EMAIL_RE = /\S+@\S+\.\S+/;
 
 const OTP_LENGTH = 6;
 const BVN_LENGTH = 11;
@@ -72,6 +84,11 @@ export function BvnLivenessSignUp() {
   const [identity, setIdentity] = useState<VerifyBvnRegData["identity"] | null>(null);
 
   const [email, setEmail] = useState("");
+  const [emailStage, setEmailStage] = useState<
+    "unverified" | "code_sent" | "verified"
+  >("unverified");
+  const [emailCode, setEmailCode] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
   const [password, setPassword] = useState("");
   const [pin, setPin] = useState("");
   const [agree, setAgree] = useState(false);
@@ -115,11 +132,45 @@ export function BvnLivenessSignUp() {
 
   useEffect(() => clearCooldownTimer, [clearCooldownTimer]);
 
+  const persistDraft = useCallback(
+    (extra?: { email?: string; emailVerified?: boolean }) => {
+      if (!sessionToken || !bvn) return;
+      void saveBvnRegDraft({
+        sessionToken,
+        bvn: bvn.replace(/\D/g, ""),
+        maskedPhone,
+        email: extra?.email ?? email,
+        emailVerified: extra?.emailVerified ?? emailStage === "verified",
+      });
+    },
+    [sessionToken, bvn, maskedPhone, email, emailStage],
+  );
+
   const otp = useNumericInput({
     length: OTP_LENGTH,
     onComplete: (v) => void handleVerify(v),
     onChange: () => error && setError(null),
   });
+
+  const applyStart = useCallback(
+    (data: StartBvnRegData) => {
+      setSessionToken(data.session_token);
+      setMaskedPhone(data.masked_phone);
+      if (data.identity) setIdentity(data.identity);
+      if (data.next_step === "details") {
+        setNeedsLiveness(false);
+        setStep("details");
+      } else if (data.next_step === "liveness") {
+        setNeedsLiveness(true);
+        setStep("liveness");
+      } else if (data.next_step === "otp") {
+        setStep("otp");
+      } else {
+        setStep("review");
+      }
+    },
+    [],
+  );
 
   const handleStart = useCallback(async () => {
     if (busy) return;
@@ -131,14 +182,14 @@ export function BvnLivenessSignUp() {
       const deviceId = await getDeviceId().catch(() => undefined);
       const res = await startBvnRegistration(digits, deviceId ?? undefined);
       if (res.success && res.data) {
-        setSessionToken(res.data.session_token);
-        setMaskedPhone(res.data.masked_phone);
-        if (res.data.otp_pending) {
-          otp.clear();
-          setStep("otp");
-        } else {
-          setStep("review");
-        }
+        applyStart(res.data);
+        void saveBvnRegDraft({
+          sessionToken: res.data.session_token,
+          bvn: digits,
+          maskedPhone: res.data.masked_phone,
+          email,
+          emailVerified: emailStage === "verified",
+        });
       } else {
         flag(res.message || "Could not check that BVN. Try again.");
       }
@@ -149,7 +200,36 @@ export function BvnLivenessSignUp() {
     } finally {
       setBusy(false);
     }
-  }, [bvn, busy, otp]);
+  }, [bvn, busy, applyStart, email, emailStage]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const draft = await loadBvnRegDraft();
+      if (!draft || cancelled) return;
+      setBvn(draft.bvn);
+      setMaskedPhone(draft.maskedPhone);
+      setSessionToken(draft.sessionToken);
+      if (draft.email) setEmail(draft.email);
+      if (draft.emailVerified) setEmailStage("verified");
+      try {
+        const deviceId = await getDeviceId().catch(() => undefined);
+        const res = await startBvnRegistration(draft.bvn, deviceId ?? undefined);
+        if (cancelled || !res.success || !res.data) return;
+        applyStart(res.data);
+        await saveBvnRegDraft({
+          ...draft,
+          sessionToken: res.data.session_token,
+          maskedPhone: res.data.masked_phone,
+        });
+      } catch {
+        /* keep draft; user can tap proceed */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [applyStart]);
 
   const handleSendOtp = useCallback(
     async (isResend = false) => {
@@ -199,6 +279,7 @@ export function BvnLivenessSignUp() {
           const liveness = res.data.next_step === "liveness";
           setNeedsLiveness(liveness);
           setStep(liveness ? "liveness" : "details");
+          persistDraft();
         } else {
           otp.clear();
           flag(res.message || "Invalid or expired code.");
@@ -210,7 +291,7 @@ export function BvnLivenessSignUp() {
         setBusy(false);
       }
     },
-    [sessionToken, busy, otp],
+    [sessionToken, busy, otp, persistDraft],
   );
 
   const restartFromLiveness = useCallback(
@@ -223,6 +304,7 @@ export function BvnLivenessSignUp() {
       otp.clear();
       setError(null);
       setStep("bvn");
+      void clearBvnRegDraft();
     },
     [otp, showToast],
   );
@@ -230,6 +312,7 @@ export function BvnLivenessSignUp() {
   const handleComplete = useCallback(async () => {
     if (!sessionToken || busy) return;
     if (!email.trim()) return flag("Enter your email.");
+    if (emailStage !== "verified") return flag("Verify your email first.");
     if (password.length < MIN_PASSWORD)
       return flag(`Password must be at least ${MIN_PASSWORD} characters.`);
     if (!agree) return flag("Please accept the terms to continue.");
@@ -250,6 +333,7 @@ export function BvnLivenessSignUp() {
         });
         await storeCredentials(email.trim().toLowerCase(), password);
         void setAnalyticsUser(res.data.user.id);
+        await clearBvnRegDraft();
         showToast({ variant: "success", title: "Welcome to SmiPay" });
         router.replace("/(app)/(tabs)");
       } else {
@@ -260,7 +344,52 @@ export function BvnLivenessSignUp() {
     } finally {
       setBusy(false);
     }
-  }, [sessionToken, busy, email, password, pin, agree, login, storeCredentials, showToast]);
+  }, [sessionToken, busy, email, emailStage, password, pin, agree, login, storeCredentials, showToast]);
+
+  const handleSendEmailCode = useCallback(async () => {
+    const trimmed = email.trim().toLowerCase();
+    if (!EMAIL_RE.test(trimmed) || emailBusy || cooldown > 0) return;
+    setEmailBusy(true);
+    setError(null);
+    try {
+      const res = await requestEmailVerification(trimmed);
+      if (res.data?.already_verified) {
+        setEmailStage("verified");
+        persistDraft({ email: trimmed, emailVerified: true });
+        return;
+      }
+      setEmailCode("");
+      setEmailStage("code_sent");
+      startCooldown();
+      persistDraft({ email: trimmed, emailVerified: false });
+      showToast({
+        variant: "success",
+        title: "Code sent",
+        message: `We emailed a code to ${trimmed}.`,
+      });
+    } catch (e) {
+      startCooldown(retryAfterSeconds(e));
+      handleApiError(e);
+    } finally {
+      setEmailBusy(false);
+    }
+  }, [email, emailBusy, cooldown, persistDraft, startCooldown, showToast]);
+
+  const handleConfirmEmailCode = useCallback(async () => {
+    if (emailCode.length !== AUTH_OTP_DIGITS || emailBusy) return;
+    setEmailBusy(true);
+    setError(null);
+    try {
+      await verifyEmailForRegistration(email.trim().toLowerCase(), emailCode);
+      setEmailStage("verified");
+      persistDraft({ email: email.trim().toLowerCase(), emailVerified: true });
+    } catch (e) {
+      setEmailCode("");
+      flag(e instanceof ApiClientError ? e.message : "That code didn't work.");
+    } finally {
+      setEmailBusy(false);
+    }
+  }, [email, emailCode, emailBusy, persistDraft]);
 
   const handleBack = useCallback(() => {
     if (busy) return;
@@ -269,6 +398,7 @@ export function BvnLivenessSignUp() {
       setMaskedPhone("");
       setError(null);
       setStep("bvn");
+      void clearBvnRegDraft();
       return;
     }
     if (step === "otp") {
@@ -335,7 +465,11 @@ export function BvnLivenessSignUp() {
 
   const canSubmitBvn = bvn.length === BVN_LENGTH && !busy;
   const canSubmitDetails =
-    Boolean(email.trim()) && password.length >= MIN_PASSWORD && agree && !busy;
+    Boolean(email.trim()) &&
+    emailStage === "verified" &&
+    password.length >= MIN_PASSWORD &&
+    agree &&
+    !busy;
 
   const resendKey: KeypadKey = {
     type: "action",
@@ -536,20 +670,102 @@ export function BvnLivenessSignUp() {
             </View>
           ) : null}
 
-          <Input
-            label="Email address"
-            placeholder="you@example.com"
-            value={email}
-            onChangeText={(v) => {
-              setEmail(v);
-              if (error) setError(null);
-            }}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-            textContentType="emailAddress"
-            returnKeyType="next"
-          />
+          <View>
+            <View className="flex-row items-end gap-3">
+              <View className="flex-1">
+                <Input
+                  label="Email address"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChangeText={(v) => {
+                    setEmail(v);
+                    if (error) setError(null);
+                    if (emailStage !== "unverified") {
+                      setEmailStage("unverified");
+                      setEmailCode("");
+                    }
+                  }}
+                  editable={emailStage !== "verified"}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  textContentType="emailAddress"
+                  returnKeyType="done"
+                />
+              </View>
+              {emailStage === "verified" ? (
+                <View className="mb-1 flex-row items-center gap-1 rounded-full bg-muted px-2.5 py-1.5">
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={15}
+                    color={colors.orange[500]}
+                  />
+                  <Text className="text-xs font-semibold text-primary">Verified</Text>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={() => void handleSendEmailCode()}
+                  disabled={
+                    emailBusy || cooldown > 0 || !EMAIL_RE.test(email.trim())
+                  }
+                  className={`mb-1 rounded-full px-3.5 py-2 ${
+                    emailBusy || cooldown > 0 || !EMAIL_RE.test(email.trim())
+                      ? "bg-muted"
+                      : "bg-primary"
+                  }`}
+                >
+                  <Text
+                    className={`text-xs font-semibold ${
+                      emailBusy || cooldown > 0 || !EMAIL_RE.test(email.trim())
+                        ? "text-muted-foreground"
+                        : "text-primary-foreground"
+                    }`}
+                  >
+                    {cooldown > 0
+                      ? formatCountdown(cooldown)
+                      : emailStage === "code_sent"
+                        ? "Resend"
+                        : "Verify"}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+            {emailStage === "code_sent" ? (
+              <View className="mt-3 flex-row items-end gap-3">
+                <View className="flex-1">
+                  <Input
+                    label="Email code"
+                    placeholder={`${AUTH_OTP_DIGITS}-digit code`}
+                    value={emailCode}
+                    onChangeText={(v) =>
+                      setEmailCode(v.replace(/\D/g, "").slice(0, AUTH_OTP_DIGITS))
+                    }
+                    keyboardType="number-pad"
+                    maxLength={AUTH_OTP_DIGITS}
+                  />
+                </View>
+                <Pressable
+                  onPress={() => void handleConfirmEmailCode()}
+                  disabled={emailCode.length !== AUTH_OTP_DIGITS || emailBusy}
+                  className={`mb-1 rounded-full px-3.5 py-2 ${
+                    emailCode.length !== AUTH_OTP_DIGITS || emailBusy
+                      ? "bg-muted"
+                      : "bg-primary"
+                  }`}
+                >
+                  <Text
+                    className={`text-xs font-semibold ${
+                      emailCode.length !== AUTH_OTP_DIGITS || emailBusy
+                        ? "text-muted-foreground"
+                        : "text-primary-foreground"
+                    }`}
+                  >
+                    Confirm
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
 
           <Input
             label="Password"

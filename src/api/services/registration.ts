@@ -14,12 +14,21 @@ export async function fetchActiveRegistrationFlow(): Promise<
   return data;
 }
 
+export interface BvnRegIdentity {
+  first_name: string | null;
+  last_name: string | null;
+  middle_name: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
+}
+
 export interface StartBvnRegData {
   session_token: string;
   masked_phone: string;
   resend_cooldown_seconds: number;
   otp_pending: boolean;
-  next_step: "review" | "otp";
+  next_step: "review" | "otp" | "liveness" | "details";
+  identity?: BvnRegIdentity;
 }
 
 export async function startBvnRegistration(
@@ -51,13 +60,7 @@ export async function sendBvnRegOtp(
 }
 
 export interface VerifyBvnRegData {
-  identity: {
-    first_name: string | null;
-    last_name: string | null;
-    middle_name: string | null;
-    date_of_birth: string | null;
-    gender: string | null;
-  };
+  identity: BvnRegIdentity;
   masked_phone: string;
   next_step: "liveness" | "details";
 }

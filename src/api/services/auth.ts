@@ -48,7 +48,10 @@ export async function verifyPhoneForRegistration(
 }
 
 export async function requestEmailVerification(email: string) {
-  const { data } = await api.post<ApiResponse>(`${AUTH}/request-email-verification`, { email });
+  const { data } = await api.post<ApiResponse<{ already_verified?: boolean }>>(
+    `${AUTH}/request-email-verification`,
+    { email },
+  );
   return data;
 }
 

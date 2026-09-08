@@ -62,4 +62,5 @@ export const SECURE_KEYS = {
   USER_PASSWORD: "user_password",
   /** Transient identifier (email or phone) between sign-in steps. Cleared after login or back. */
   SIGN_IN_IDENTIFIER: "sign_in_identifier",
+  BVN_REG_DRAFT: "bvn_reg_draft",
 } as const;
