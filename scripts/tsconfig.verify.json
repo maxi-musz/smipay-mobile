@@ -14,5 +14,5 @@
     },
     "types": ["node"]
   },
-  "include": ["verify-smart-paste.ts"]
+  "include": ["verify-smart-paste.ts", "verify-ng-phone-input.ts"]
 }

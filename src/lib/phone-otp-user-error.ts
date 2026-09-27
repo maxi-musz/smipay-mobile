@@ -1,3 +1,5 @@
+import { readIdentityGuardError } from "./identity-guard-error";
+
 /** Messages safe to show on the phone verification screen (cooldown/rate limit). */
 const USER_SAFE_REQUEST_PATTERNS = [
   /^please wait \d+:\d{2} before requesting/i,
@@ -23,6 +25,10 @@ export function toUserFacingPhoneOtpRequestError(
   err: unknown,
   fallback = PHONE_OTP_SEND_FAILED_MESSAGE,
 ): string {
+  // Guard messages tell the user what to fix, so never replace them with the fallback.
+  const guard = readIdentityGuardError(err);
+  if (guard) return guard.message;
+
   if (err instanceof Object && "data" in err) {
     const data = (err as { data?: { message?: string } }).data;
     const message = data?.message?.trim();

@@ -7,9 +7,9 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  TextInput,
   View,
 } from "react-native";
+import { NgPhoneField } from "@/components/auth/ng-phone-field";
 import { Stack, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
@@ -32,11 +32,12 @@ import { useToastStore } from "@/components/ui/toast";
 import { colors } from "@/constants/colors";
 import { useAppTheme } from "@/hooks/use-app-theme";
 import { ApiClientError } from "@/lib/api";
-import {
-  isValidPhoneIdentifier,
-  sanitizeAuthIdentifier,
-} from "@/lib/auth-identifier";
 import { formatCountdown } from "@/lib/format-countdown";
+import { readIdentityGuardError } from "@/lib/identity-guard-error";
+import {
+  normaliseNgPhoneInput,
+  toNgSubscriberDigits,
+} from "@/lib/ng-phone-input";
 import {
   isUserSafePhoneOtpRequestMessage,
   toUserFacingPhoneOtpRequestError,
@@ -222,7 +223,7 @@ export default function PhoneVerificationScreen() {
 
   function openPhoneEditor() {
     setEditingPhone(true);
-    setNewPhone(registeredPhone);
+    setNewPhone(toNgSubscriberDigits(registeredPhone));
     setError(null);
     resetOtpFlow();
   }
@@ -234,9 +235,9 @@ export default function PhoneVerificationScreen() {
   }
 
   async function handleUpdatePhone() {
-    const trimmed = newPhone.trim();
-    if (!isValidPhoneIdentifier(trimmed)) {
-      setError("Enter a valid phone number (e.g. 08012345678 or +2348012345678).");
+    const normalized = normaliseNgPhoneInput(newPhone);
+    if (!normalized) {
+      setError("Enter a valid Nigerian mobile number after +234 (e.g. 801 234 5678).");
       return;
     }
 
@@ -244,7 +245,7 @@ export default function PhoneVerificationScreen() {
     setUpdatingPhone(true);
     setError(null);
     try {
-      const res = await updatePhoneVerificationNumber(trimmed);
+      const res = await updatePhoneVerificationNumber(normalized);
       showToast({
         variant: "success",
         title: "Phone number updated",
@@ -259,8 +260,6 @@ export default function PhoneVerificationScreen() {
         refreshHomepageSilently(),
       ]);
       if (res.data?.phone_verification?.masked_phone) {
-        const normalized =
-          trimmed.startsWith("+234") ? `0${trimmed.slice(4)}` : trimmed;
         updateAuthUser({ phone_number: normalized });
       }
     } catch (err) {
@@ -299,7 +298,14 @@ export default function PhoneVerificationScreen() {
         message: res.message ?? "Check your phone for the 6-digit code.",
       });
     } catch (err) {
-      setError(applyOtpRequestError(err));
+      const guard = readIdentityGuardError(err);
+      if (guard?.code === "phone_update_required") {
+        // openPhoneEditor clears the error, so set it afterwards.
+        openPhoneEditor();
+        setError(guard.message);
+      } else {
+        setError(applyOtpRequestError(err));
+      }
     } finally {
       setRequesting(false);
     }
@@ -428,21 +434,14 @@ export default function PhoneVerificationScreen() {
 
               {editingPhone ? (
                 <>
-                  <TextInput
+                  <NgPhoneField
                     value={newPhone}
-                    onChangeText={(value) => {
-                      setNewPhone(sanitizeAuthIdentifier(value));
+                    onChangeText={(subscriber) => {
+                      setNewPhone(subscriber);
                       if (error) setError(null);
                     }}
-                    keyboardType="phone-pad"
                     autoFocus
-                    className="mt-8 border-b pb-3 text-lg font-medium text-foreground"
-                    style={{
-                      borderBottomColor: slotActive,
-                      borderBottomWidth: 2,
-                    }}
-                    placeholder="08012345678"
-                    placeholderTextColor={subtleText}
+                    containerClassName="mt-8"
                   />
 
                   {error ? (

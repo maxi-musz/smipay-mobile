@@ -27,6 +27,7 @@ import {
 } from "@/components/keypad";
 import { ArrowButton } from "@/components/ui/arrow-button";
 import { Input } from "@/components/ui/input";
+import { NgPhoneField } from "@/components/auth/ng-phone-field";
 import { Text } from "@/components/ui/text";
 import { useToastStore } from "@/components/ui/toast";
 import { colors } from "@/constants/colors";
@@ -39,6 +40,15 @@ import {
 import { logSignUpComplete, setAnalyticsUser } from "@/lib/analytics";
 import { handleApiError } from "@/lib/errors";
 import { formatCountdown } from "@/lib/format-countdown";
+import {
+  readIdentityGuardError,
+  type IdentityGuardField,
+} from "@/lib/identity-guard-error";
+import {
+  isNgPhoneInputFull,
+  isValidNgPhoneInput,
+  normaliseNgPhoneInput,
+} from "@/lib/ng-phone-input";
 import {
   pickFromCamera,
   pickFromFile,
@@ -56,23 +66,15 @@ const STEPS: Step[] = ["phone", "otp", "profile"];
 const STEP_LABELS = ["Phone", "Verify", "Profile"];
 const EMAIL_RE = /\S+@\S+\.\S+/;
 const TRANSACTION_PIN_DIGITS = 4;
+const INVALID_PHONE_MESSAGE =
+  "Enter a valid Nigerian mobile number (e.g. 08012345678)";
 
-/**
- * Clamp phone input as the user types. Accepts only digits plus a single leading
- * `+`, and enforces length by format:
- *   - local `0XXXXXXXXXX` → max 11 digits
- *   - international `+234XXXXXXXXXX` → max 14 chars (`+234` + 10 digits)
- */
-function sanitizePhone(input: string): string {
-  let v = input.replace(/[^\d+]/g, "");
-  if (v.includes("+")) v = "+" + v.replace(/\+/g, "");
-  return v.startsWith("+") ? v.slice(0, 14) : v.slice(0, 11);
-}
-
-/** Final-format validation for the two accepted Nigerian phone shapes. */
-function isValidPhone(phone: string): boolean {
-  return /^0\d{10}$/.test(phone) || /^\+234\d{10}$/.test(phone);
-}
+const GUARD_FIELD_ERROR_KEY: Partial<Record<IdentityGuardField, string>> = {
+  phone_number: "phone",
+  email: "email",
+  first_name: "firstName",
+  last_name: "lastName",
+};
 
 export function PhoneOnlySignUp() {
   const { isDark } = useAppTheme();
@@ -110,6 +112,10 @@ export function PhoneOnlySignUp() {
   const [registrationPhoto, setRegistrationPhoto] = useState<PickedProfileImage | null>(null);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Retapping a guard-refused request still counts against the per-device rate limit.
+  const [guardRejectedEmailRequest, setGuardRejectedEmailRequest] = useState<
+    string | null
+  >(null);
 
   const lastNameRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
@@ -132,15 +138,52 @@ export function PhoneOnlySignUp() {
       });
   }
 
-  const canSubmitPhone = isValidPhone(phone.trim()) && !loading;
+  function showGuardErrorInline(e: unknown): boolean {
+    const guard = readIdentityGuardError(e);
+    const key = guard?.field ? GUARD_FIELD_ERROR_KEY[guard.field] : undefined;
+    if (!guard || !key) return false;
+
+    if (key === "phone" && step !== "phone") {
+      setVerifiedPhone(null);
+      setStep("phone");
+    }
+    if (key === "email" && emailStage === "verified") {
+      setEmailStage("unverified");
+      setEmailCode("");
+    }
+    setErrors((p) => ({ ...p, [key]: guard.message }));
+    return true;
+  }
+
+  const normalizedPhone = normaliseNgPhoneInput(phone) ?? phone.trim();
+
+  const canSubmitPhone = isValidNgPhoneInput(phone) && !errors.phone && !loading;
+  const phoneError =
+    errors.phone ||
+    (isNgPhoneInputFull(phone) && !isValidNgPhoneInput(phone)
+      ? INVALID_PHONE_MESSAGE
+      : undefined);
   const canSubmitProfile =
     firstName.trim().length > 0 &&
     lastName.trim().length > 0 &&
+    !errors.firstName &&
+    !errors.lastName &&
     emailStage === "verified" &&
     isAuthPasswordValid(password) &&
     transactionPin.length === TRANSACTION_PIN_DIGITS &&
     agreedToTerms &&
     !loading;
+
+  const emailRequestKey = [
+    email.trim().toLowerCase(),
+    firstName.trim(),
+    lastName.trim(),
+  ].join("\n");
+  const emailSendDisabled =
+    emailBusy ||
+    resendCooldown > 0 ||
+    !EMAIL_RE.test(email.trim()) ||
+    emailRequestKey === guardRejectedEmailRequest;
 
   // ── Cooldown ──────────────────────────────────────────────────────
 
@@ -201,27 +244,25 @@ export function PhoneOnlySignUp() {
   }
 
   async function handleSendPhoneOtp() {
-    const trimmed = phone.trim();
-    if (!isValidPhone(trimmed)) {
-      setErrors({
-        phone: "Enter a valid Nigerian mobile number (e.g. 08012345678)",
-      });
+    const normalized = normaliseNgPhoneInput(phone);
+    if (!normalized) {
+      setErrors({ phone: INVALID_PHONE_MESSAGE });
       return;
     }
 
     Keyboard.dismiss();
     setErrors({});
 
-    if (verifiedPhone === trimmed) {
+    if (verifiedPhone === normalized) {
       setStep("profile");
       return;
     }
 
     setLoading(true);
     try {
-      const res = await requestPhoneVerification(trimmed);
+      const res = await requestPhoneVerification(normalized);
       if (res.data?.already_verified) {
-        setVerifiedPhone(trimmed);
+        setVerifiedPhone(normalized);
         setStep("profile");
         return;
       }
@@ -230,6 +271,8 @@ export function PhoneOnlySignUp() {
       setStep("otp");
       startResendCooldown(cooldownFromResponse(res));
     } catch (e) {
+      // Guard refusals send no SMS, so no cooldown.
+      if (showGuardErrorInline(e)) return;
       // Start the cooldown even when the send fails. It used to start only on
       // success, so a failure left the button enabled — users tapped it once a
       // second and generated the request storms we saw in production.
@@ -244,9 +287,9 @@ export function PhoneOnlySignUp() {
     if (resendCooldown > 0 || loading) return;
     setLoading(true);
     try {
-      const res = await requestPhoneVerification(phone.trim());
+      const res = await requestPhoneVerification(normalizedPhone);
       if (res.data?.already_verified) {
-        setVerifiedPhone(phone.trim());
+        setVerifiedPhone(normalizedPhone);
         setStep("profile");
         return;
       }
@@ -258,6 +301,7 @@ export function PhoneOnlySignUp() {
         message: "A new verification code has been sent by SMS.",
       });
     } catch (e) {
+      if (showGuardErrorInline(e)) return;
       startResendCooldown(retryAfterSeconds(e));
       handleApiError(e);
     } finally {
@@ -277,8 +321,8 @@ export function PhoneOnlySignUp() {
     setOtpError("");
     setLoading(true);
     try {
-      await verifyPhoneForRegistration(phone.trim(), value);
-      setVerifiedPhone(phone.trim());
+      await verifyPhoneForRegistration(normalizedPhone, value);
+      setVerifiedPhone(normalizedPhone);
       // The SMS cooldown must not gate the email Verify button on the next step.
       clearResendTimer();
       resendEndsAtRef.current = null;
@@ -287,6 +331,7 @@ export function PhoneOnlySignUp() {
     } catch (e) {
       // Clear so the next attempt starts fresh rather than editing a rejected code.
       otp.clear();
+      if (showGuardErrorInline(e)) return;
       setOtpError(
         e instanceof Error && e.message
           ? e.message
@@ -310,7 +355,10 @@ export function PhoneOnlySignUp() {
     clearError("email");
     setEmailBusy(true);
     try {
-      await requestEmailVerification(trimmed);
+      await requestEmailVerification(trimmed, {
+        first_name: firstName,
+        last_name: lastName,
+      });
       setEmailCode("");
       setEmailStage("code_sent");
       startResendCooldown();
@@ -320,6 +368,10 @@ export function PhoneOnlySignUp() {
         message: `We emailed a verification code to ${trimmed}.`,
       });
     } catch (e) {
+      if (showGuardErrorInline(e)) {
+        setGuardRejectedEmailRequest(emailRequestKey);
+        return;
+      }
       startResendCooldown(retryAfterSeconds(e));
       handleApiError(e);
     } finally {
@@ -383,7 +435,7 @@ export function PhoneOnlySignUp() {
         transaction_pin: transactionPin,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        phone_number: phone.trim(),
+        phone_number: normalizedPhone,
         agree_to_terms: true,
         country: "Nigeria",
         ...(trimmedReferral.length > 0 ? { referral_code: trimmedReferral } : {}),
@@ -412,6 +464,8 @@ export function PhoneOnlySignUp() {
 
       router.replace("/(app)/(tabs)");
     } catch (e) {
+      // Toast too: the refused input may be scrolled out of view.
+      showGuardErrorInline(e);
       handleApiError(e);
     } finally {
       setLoading(false);
@@ -469,7 +523,7 @@ export function PhoneOnlySignUp() {
     step === "phone"
       ? "We'll text a verification code to this number."
       : step === "otp"
-        ? `We sent a 6-digit code by SMS to ${phone}.`
+        ? `We sent a 6-digit code by SMS to ${normalizedPhone}.`
         : "A few more details and you're in.";
 
   return (
@@ -511,24 +565,17 @@ export function PhoneOnlySignUp() {
 
       {step === "phone" ? (
         <View className="mt-8">
-          <Input
+          <NgPhoneField
             label="Phone number"
-            placeholder="08012345678"
-            value={phone}
-            onChangeText={(v) => {
-              setPhone(sanitizePhone(v));
+            value={phone.replace(/^0/, "")}
+            onChangeText={(subscriber) => {
+              setPhone(subscriber ? `0${subscriber}` : "");
               clearError("phone");
             }}
-            error={errors.phone}
-            keyboardType="phone-pad"
-            maxLength={14}
-            autoComplete="tel"
-            textContentType="telephoneNumber"
+            error={phoneError}
             autoFocus
-            returnKeyType="done"
-            onSubmitEditing={canSubmitPhone ? handleSendPhoneOtp : undefined}
           />
-          {!errors.phone ? (
+          {!phoneError ? (
             <Text className="mt-1.5 text-xs text-muted-foreground">
               One account per phone number. Standard SMS rates may apply.
             </Text>
@@ -707,7 +754,7 @@ export function PhoneOnlySignUp() {
               <Text className="text-xs text-muted-foreground">Phone</Text>
             </View>
             <Text className="text-sm font-medium" numberOfLines={1}>
-              {phone.trim()}
+              {normalizedPhone}
             </Text>
           </View>
 
@@ -750,26 +797,16 @@ export function PhoneOnlySignUp() {
               ) : (
                 <Pressable
                   onPress={() => void handleSendEmailCode()}
-                  disabled={
-                    emailBusy ||
-                    resendCooldown > 0 ||
-                    !EMAIL_RE.test(email.trim())
-                  }
+                  disabled={emailSendDisabled}
                   accessibilityRole="button"
                   accessibilityLabel="Verify email"
                   className={`mb-1 rounded-full px-3.5 py-2 ${
-                    emailBusy ||
-                    resendCooldown > 0 ||
-                    !EMAIL_RE.test(email.trim())
-                      ? "bg-muted"
-                      : "bg-primary"
+                    emailSendDisabled ? "bg-muted" : "bg-primary"
                   }`}
                 >
                   <Text
                     className={`text-xs font-semibold ${
-                      emailBusy ||
-                      resendCooldown > 0 ||
-                      !EMAIL_RE.test(email.trim())
+                      emailSendDisabled
                         ? "text-muted-foreground"
                         : "text-primary-foreground"
                     }`}

@@ -47,10 +47,25 @@ export async function verifyPhoneForRegistration(
   return data;
 }
 
-export async function requestEmailVerification(email: string) {
+export interface EmailVerificationNames {
+  first_name?: string;
+  middle_name?: string;
+  last_name?: string;
+}
+
+export async function requestEmailVerification(
+  email: string,
+  names?: EmailVerificationNames,
+) {
+  const body: Record<string, string> = { email };
+  for (const key of ["first_name", "middle_name", "last_name"] as const) {
+    const value = names?.[key]?.trim();
+    if (value) body[key] = value;
+  }
+
   const { data } = await api.post<ApiResponse<{ already_verified?: boolean }>>(
     `${AUTH}/request-email-verification`,
-    { email },
+    body,
   );
   return data;
 }
